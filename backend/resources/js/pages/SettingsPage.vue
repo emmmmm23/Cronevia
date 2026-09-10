@@ -178,8 +178,6 @@ onMounted(() => {
 })
 </script>
 
-</script>
-
 <template>
   <div class="min-h-screen bg-[#f5ebdd]">
 
