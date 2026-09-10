@@ -16,6 +16,8 @@ class TripResource extends JsonResource
             'destination' => $this->destination,
             'slug' => $this->slug,
             'description' => $this->description,
+            'cover_image_path' => $this->cover_image_path,
+            'cover_media_id' => $this->cover_media_id,
             'start_date' => $this->start_date,
             'end_date' => $this->end_date,
             'budget' => $this->budget,
@@ -24,6 +26,7 @@ class TripResource extends JsonResource
             'visibility' => $this->visibility,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+            'media' => MediaResource::collection($this->whenLoaded('media')),
         ];
     }
 }

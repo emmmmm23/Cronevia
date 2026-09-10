@@ -33,6 +33,7 @@ class JournalEntry extends Model
         'longitude',
         'location_source',
         'visibility',
+        'is_archived',
         'entry_date',
     ];
 
@@ -73,5 +74,10 @@ class JournalEntry extends Model
     public function memory(): BelongsTo
     {
         return $this->belongsTo(Memory::class);
+    }
+
+    public function media()
+    {
+        return $this->hasMany(Media::class, 'journal_entry_id');
     }
 }

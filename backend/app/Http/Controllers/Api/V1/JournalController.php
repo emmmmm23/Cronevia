@@ -21,11 +21,22 @@ class JournalController extends Controller
     {
         $query = JournalEntry::query()
             ->where('user_id', $request->user()->id)
+            ->with('media') // Load media relationship
             ->when($request->filled('trip_id'),        fn ($q) => $q->where('trip_id', $request->trip_id))
             ->when($request->filled('trip_day_id'),    fn ($q) => $q->where('trip_day_id', $request->trip_day_id))
             ->when($request->filled('mood'),           fn ($q) => $q->where('mood', $request->mood))
             ->when($request->filled('entry_date_from'), fn ($q) => $q->whereDate('entry_date', '>=', $request->entry_date_from))
             ->when($request->filled('entry_date_to'),   fn ($q) => $q->whereDate('entry_date', '<=', $request->entry_date_to));
+
+        // Filter by archive status (default: show only non-archived)
+        if ($request->query('archived') === 'true') {
+            $query->where('is_archived', true);
+        } elseif ($request->query('archived') === 'all') {
+            // Show all entries regardless of archive status
+        } else {
+            // Default: only non-archived
+            $query->where('is_archived', false);
+        }
 
         $entries = $query
             ->orderByDesc('entry_date')
@@ -90,6 +101,8 @@ class JournalController extends Controller
     public function show(JournalEntry $entry)
     {
         $this->authorize('view', $entry);
+        
+        $entry->load('media');
 
         return new JournalEntryResource($entry);
     }
@@ -122,5 +135,42 @@ class JournalController extends Controller
         $entry->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * PATCH /api/v1/journal/{entry}/archive
+     * 
+     * Archives a journal entry without deleting it.
+     * Archived entries are hidden from default listings but remain accessible.
+     */
+    public function archive(JournalEntry $entry)
+    {
+        $this->authorize('update', $entry);
+        
+        $entry->is_archived = true;
+        $entry->save();
+
+        return response()->json([
+            'message' => 'Journal entry archived successfully.',
+            'data'    => new JournalEntryResource($entry),
+        ]);
+    }
+
+    /**
+     * PATCH /api/v1/journal/{entry}/restore
+     * 
+     * Restores an archived journal entry to active status.
+     */
+    public function restore(JournalEntry $entry)
+    {
+        $this->authorize('update', $entry);
+        
+        $entry->is_archived = false;
+        $entry->save();
+
+        return response()->json([
+            'message' => 'Journal entry restored successfully.',
+            'data'    => new JournalEntryResource($entry),
+        ]);
     }
 }

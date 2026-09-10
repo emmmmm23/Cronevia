@@ -13,9 +13,23 @@ class MemoryController extends Controller
 {
     public function index(Request $request)
     {
-        $memories = Memory::query()
+        $query = Memory::query()
             ->where('user_id', $request->user()->id)
+            ->with('media'); // Load media relationship
+
+        // Filter by archive status (default: show only non-archived)
+        if ($request->query('archived') === 'true') {
+            $query->where('is_archived', true);
+        } elseif ($request->query('archived') === 'all') {
+            // Show all memories regardless of archive status
+        } else {
+            // Default: only non-archived
+            $query->where('is_archived', false);
+        }
+
+        $memories = $query
             ->orderByDesc('memory_date')
+            ->orderByDesc('created_at')
             ->paginate(min((int) $request->query('per_page', 15), 100));
 
         return response()->json([
@@ -43,14 +57,20 @@ class MemoryController extends Controller
             'description' => $validated['description'] ?? null,
             'memory_date' => $validated['memory_date'],
             'visibility' => $validated['visibility'] ?? 'private',
+            'is_archived' => false,
         ]);
 
-        return (new MemoryResource($memory))->response()->setStatusCode(201);
+        return response()->json([
+            'message' => 'Memory created successfully.',
+            'data' => new MemoryResource($memory),
+        ], 201);
     }
 
     public function show(Memory $memory)
     {
         $this->authorize('view', $memory);
+        
+        $memory->load('media');
 
         return new MemoryResource($memory);
     }
@@ -73,5 +93,41 @@ class MemoryController extends Controller
         $memory->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * PATCH /api/v1/memories/{memory}/archive
+     * 
+     * Archives a memory without deleting it.
+     */
+    public function archive(Memory $memory)
+    {
+        $this->authorize('update', $memory);
+        
+        $memory->is_archived = true;
+        $memory->save();
+
+        return response()->json([
+            'message' => 'Memory archived successfully.',
+            'data' => new MemoryResource($memory),
+        ]);
+    }
+
+    /**
+     * PATCH /api/v1/memories/{memory}/restore
+     * 
+     * Restores an archived memory to active status.
+     */
+    public function restore(Memory $memory)
+    {
+        $this->authorize('update', $memory);
+        
+        $memory->is_archived = false;
+        $memory->save();
+
+        return response()->json([
+            'message' => 'Memory restored successfully.',
+            'data' => new MemoryResource($memory),
+        ]);
     }
 }

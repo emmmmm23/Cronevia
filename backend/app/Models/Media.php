@@ -19,6 +19,7 @@ class Media extends Model
         'user_id',
         'memory_id',
         'journal_entry_id',
+        'trip_id',
         'disk',
         'path',
         'type',
@@ -61,5 +62,25 @@ class Media extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function trip(): BelongsTo
+    {
+        return $this->belongsTo(Trip::class);
+    }
+
+    /**
+     * Get the URL for this media file.
+     * In production, this would use Storage::url() or a CDN.
+     */
+    public function getUrlAttribute(): string
+    {
+        $path = $this->path ?? $this->file_path;
+        if (!$path) {
+            return '';
+        }
+        // For local storage, generate a URL
+        // In production, use Storage::url($path) if configured
+        return url('storage/' . $path);
     }
 }

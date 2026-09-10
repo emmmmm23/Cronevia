@@ -29,6 +29,7 @@ class Memory extends Model
         'description',
         'memory_date',
         'visibility',
+        'is_archived',
     ];
 
     protected function casts(): array

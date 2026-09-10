@@ -13,6 +13,18 @@ Route::prefix('v1')->group(function () {
             ->middleware('auth:sanctum');
         Route::get('me', [\App\Http\Controllers\Api\V1\AuthController::class, 'me'])
             ->middleware('auth:sanctum');
+        Route::patch('profile', [\App\Http\Controllers\Api\V1\AuthController::class, 'updateProfile'])
+            ->middleware('auth:sanctum');
+        Route::post('profile/photo', [\App\Http\Controllers\Api\V1\AuthController::class, 'uploadProfilePhoto'])
+            ->middleware('auth:sanctum');
+        Route::delete('profile/photo', [\App\Http\Controllers\Api\V1\AuthController::class, 'deleteProfilePhoto'])
+            ->middleware('auth:sanctum');
+        Route::patch('password', [\App\Http\Controllers\Api\V1\AuthController::class, 'changePassword'])
+            ->middleware('auth:sanctum');
+        Route::patch('email', [\App\Http\Controllers\Api\V1\AuthController::class, 'changeEmail'])
+            ->middleware('auth:sanctum');
+        Route::delete('account', [\App\Http\Controllers\Api\V1\AuthController::class, 'deleteAccount'])
+            ->middleware('auth:sanctum');
     });
 
     // Protected routes
@@ -28,15 +40,24 @@ Route::prefix('v1')->group(function () {
             ->parameters(['itinerary' => 'item']);
         Route::patch('trips/{trip}/days/{day}/itinerary/reorder', [\App\Http\Controllers\Api\V1\ItineraryController::class, 'reorder']);
         Route::post('trips/{trip}/days/{day}/itinerary/{item}/convert', [\App\Http\Controllers\Api\V1\ItineraryController::class, 'convert']);
+        Route::post('trips/{trip}/media', [\App\Http\Controllers\Api\V1\MediaController::class, 'storeForTrip']);
+        Route::delete('trips/{trip}/media/{media}', [\App\Http\Controllers\Api\V1\MediaController::class, 'destroyForTrip']);
+        Route::patch('trips/{trip}/media/{media}/set-cover', [\App\Http\Controllers\Api\V1\MediaController::class, 'setCoverPhoto']);
 
         // Journal
         Route::apiResource('journal', \App\Http\Controllers\Api\V1\JournalController::class)
             ->parameters(['journal' => 'entry']);
+        Route::patch('journal/{entry}/archive', [\App\Http\Controllers\Api\V1\JournalController::class, 'archive']);
+        Route::patch('journal/{entry}/restore', [\App\Http\Controllers\Api\V1\JournalController::class, 'restore']);
+        Route::post('journal/{entry}/media', [\App\Http\Controllers\Api\V1\MediaController::class, 'storeForJournal']);
+        Route::delete('journal/{entry}/media/{media}', [\App\Http\Controllers\Api\V1\MediaController::class, 'destroyForJournal']);
 
         // Memories
         Route::apiResource('memories', \App\Http\Controllers\Api\V1\MemoryController::class);
         Route::post('memories/{memory}/media', [\App\Http\Controllers\Api\V1\MediaController::class, 'store']);
         Route::delete('memories/{memory}/media/{media}', [\App\Http\Controllers\Api\V1\MediaController::class, 'destroy']);
+        Route::patch('memories/{memory}/archive', [\App\Http\Controllers\Api\V1\MemoryController::class, 'archive']);
+        Route::patch('memories/{memory}/restore', [\App\Http\Controllers\Api\V1\MemoryController::class, 'restore']);
 
         // Map
         Route::get('map/pins', [\App\Http\Controllers\Api\V1\MapController::class, 'pins']);
@@ -56,8 +77,9 @@ Route::prefix('v1')->group(function () {
             ->only(['index', 'store', 'show', 'destroy'])
             ->parameters(['future-letters' => 'letter']);
 
-        // On This Day
-        Route::get('on-this-day', [\App\Http\Controllers\Api\V1\OnThisDayController::class, 'index']);
+        // Timeline & On This Day
+        Route::get('timeline', [\App\Http\Controllers\Api\V1\OnThisDayController::class, 'index']);
+        Route::get('on-this-day', [\App\Http\Controllers\Api\V1\OnThisDayController::class, 'onThisDay']);
 
         // Search
         Route::get('search', [\App\Http\Controllers\Api\V1\SearchController::class, 'index']);

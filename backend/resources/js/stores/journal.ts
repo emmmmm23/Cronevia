@@ -86,6 +86,30 @@ export const useJournalStore = defineStore('journal', () => {
     total.value = Math.max(0, total.value - 1)
   }
 
+  /**
+   * Archive an entry.
+   */
+  async function archiveEntry(id: string) {
+    const { data } = await api.patch<{ message: string; data: JournalEntry }>(`/journal/${id}/archive`)
+    const archived = data.data
+    // Remove from current list (will be filtered out)
+    entries.value = entries.value.filter(e => e.id !== id)
+    total.value = Math.max(0, total.value - 1)
+    return archived
+  }
+
+  /**
+   * Restore an archived entry.
+   */
+  async function restoreEntry(id: string) {
+    const { data } = await api.patch<{ message: string; data: JournalEntry }>(`/journal/${id}/restore`)
+    const restored = data.data
+    // Add back to the list if we're viewing non-archived entries
+    entries.value = [restored, ...entries.value]
+    total.value++
+    return restored
+  }
+
   function clearEntries() {
     entries.value = []
     total.value   = 0
@@ -102,6 +126,8 @@ export const useJournalStore = defineStore('journal', () => {
     createEntry,
     updateEntry,
     deleteEntry,
+    archiveEntry,
+    restoreEntry,
     clearEntries,
   }
 })

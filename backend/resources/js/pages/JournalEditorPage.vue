@@ -13,6 +13,9 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute, RouterLink, onBeforeRouteLeave } from 'vue-router'
 import { useJournalStore } from '@/stores/journal'
+import PhotoUpload from '@/components/ui/PhotoUpload.vue'
+import type { Media } from '@/types'
+import api from '@/services/api.service'
 
 const router = useRouter()
 const route  = useRoute()
@@ -50,6 +53,12 @@ const saveError  = ref('')
 const saveSuccess = ref(false)
 const isDirty    = ref(false)
 
+// Photos
+const newPhotos = ref<File[]>([])
+const existingPhotos = ref<Media[]>([])
+const photosToDelete = ref<string[]>([])
+const uploadingPhotos = ref(false)
+
 // ── Load existing entry when editing ─────────────────────────────────────────
 onMounted(async () => {
   if (isEditing && entryId) {
@@ -69,6 +78,7 @@ onMounted(async () => {
       latitude.value  = existing.latitude ?? null
       longitude.value = existing.longitude ?? null
       locationSource.value = existing.location_source ?? null
+      existingPhotos.value = existing.media ?? []
     }
   }
   // Watch for dirty state after loading
@@ -350,11 +360,45 @@ async function handleSave() {
   }
 
   try {
+    let savedEntryId: string
+    
     if (isEditing && entryId) {
       await store.updateEntry(entryId, payload)
+      savedEntryId = entryId
     } else {
-      await store.createEntry(payload as Parameters<typeof store.createEntry>[0])
+      const created = await store.createEntry(payload as Parameters<typeof store.createEntry>[0])
+      savedEntryId = created.id
     }
+    
+    // Handle photo deletions (editing mode only)
+    if (isEditing && photosToDelete.value.length > 0) {
+      for (const photoId of photosToDelete.value) {
+        try {
+          await api.delete(`/journal/${savedEntryId}/media/${photoId}`)
+        } catch (err) {
+          console.error('Failed to delete photo:', err)
+        }
+      }
+    }
+    
+    // Upload new photos
+    if (newPhotos.value.length > 0) {
+      uploadingPhotos.value = true
+      for (const file of newPhotos.value) {
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+          await api.post(`/journal/${savedEntryId}/media`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+        } catch (err) {
+          console.error('Failed to upload photo:', err)
+          // Continue with other photos even if one fails
+        }
+      }
+      uploadingPhotos.value = false
+    }
+    
     saveSuccess.value = true
     isDirty.value     = false
     await router.push({ name: 'journal' })
@@ -372,7 +416,14 @@ async function handleSave() {
     }
   } finally {
     saving.value = false
+    uploadingPhotos.value = false
   }
+}
+
+function handleRemoveExistingPhoto(photoId: string) {
+  photosToDelete.value.push(photoId)
+  existingPhotos.value = existingPhotos.value.filter(p => p.id !== photoId)
+  markDirty()
 }
 
 // Close pickers when clicking outside
@@ -699,6 +750,14 @@ function closePickers() {
           @blur="addTag"
         />
       </div>
+
+      <!-- Photos -->
+      <PhotoUpload
+        v-model="newPhotos"
+        :existing-photos="existingPhotos"
+        :disabled="saving || uploadingPhotos"
+        @remove-existing="handleRemoveExistingPhoto"
+      />
 
       <!-- Save button (bottom of form, mobile-friendly) -->
       <div class="pt-2">

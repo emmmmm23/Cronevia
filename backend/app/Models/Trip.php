@@ -75,4 +75,9 @@ class Trip extends Model
     {
         return $this->morphToMany(Tag::class, 'taggable', 'taggables');
     }
+
+    public function media(): HasMany
+    {
+        return $this->hasMany(Media::class, 'trip_id');
+    }
 }

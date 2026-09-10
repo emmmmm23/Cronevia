@@ -18,6 +18,7 @@ class TripController extends Controller
 
         $trips = Trip::query()
             ->where('user_id', $request->user()->id)
+            ->with('media') // Load media relationship
             ->orderBy('start_date', 'desc')
             ->paginate($perPage);
 
@@ -60,6 +61,8 @@ class TripController extends Controller
     public function show(Trip $trip)
     {
         $this->authorize('view', $trip);
+        
+        $trip->load('media');
 
         return new TripResource($trip);
     }

@@ -96,7 +96,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        // Real stats — counted from the database, never hardcoded
+        // Real stats â€“ counted from the database, never hardcoded
         $journalCount = $user->journalEntries()->count();
         $tripCount    = $user->trips()->count();
         $memoryCount  = $user->memories()->count();
@@ -124,5 +124,219 @@ class AuthController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * Update the authenticated user's profile information.
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:100'],
+            'email' => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+            'timezone' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'locale' => ['sometimes', 'nullable', 'string', 'max:10'],
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'avatar_path' => $user->avatar_path,
+                'timezone' => $user->timezone,
+                'locale' => $user->locale,
+                'role' => $user->role,
+                'status' => $user->status,
+                'created_at' => $user->created_at,
+            ],
+        ]);
+    }
+
+    /**
+     * Upload profile photo for the authenticated user.
+     * Stores in media table and updates user.avatar_path.
+     */
+    public function uploadProfilePhoto(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:10240'], // 10MB max
+        ]);
+
+        $file = $validated['photo'];
+
+        // Security: Verify file is actually an image
+        $mimeType = mime_content_type($file->getRealPath());
+        if (!in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'])) {
+            return response()->json([
+                'message' => 'Invalid file type. Only JPG, PNG, and WEBP images are allowed.',
+            ], 422);
+        }
+
+        // Store the file
+        $path = $file->store('profile-photos', 'public');
+        $url = asset('storage/' . $path);
+
+        // Delete old profile photo if exists
+        if ($user->avatar_path) {
+            $oldPath = str_replace(asset('storage/'), '', $user->avatar_path);
+            if (\Storage::disk('public')->exists($oldPath)) {
+                \Storage::disk('public')->delete($oldPath);
+            }
+        }
+
+        // Update user's avatar_path
+        $user->update(['avatar_path' => $url]);
+
+        return response()->json([
+            'message' => 'Profile photo uploaded successfully.',
+            'data' => [
+                'avatar_path' => $url,
+            ],
+        ]);
+    }
+
+    /**
+     * Remove the authenticated user's profile photo.
+     */
+    public function deleteProfilePhoto(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->avatar_path) {
+            return response()->json([
+                'message' => 'No profile photo to delete.',
+            ], 404);
+        }
+
+        // Delete the file from storage
+        $oldPath = str_replace(asset('storage/'), '', $user->avatar_path);
+        if (\Storage::disk('public')->exists($oldPath)) {
+            \Storage::disk('public')->delete($oldPath);
+        }
+
+        // Clear avatar_path
+        $user->update(['avatar_path' => null]);
+
+        return response()->json([
+            'message' => 'Profile photo deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Change the authenticated user's password.
+     */
+    public function changePassword(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'new_password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+        ]);
+
+        // Verify current password
+        if (!Hash::check($validated['current_password'], $user->password_hash)) {
+            return response()->json([
+                'message' => 'Current password is incorrect.',
+                'errors' => ['current_password' => ['Current password is incorrect.']],
+            ], 422);
+        }
+
+        // Update password
+        $user->update(['password' => $validated['new_password']]);
+
+        return response()->json([
+            'message' => 'Password changed successfully.',
+        ]);
+    }
+
+    /**
+     * Update the authenticated user's email.
+     * Requires password confirmation for security.
+     */
+    public function changeEmail(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['required', 'string'],
+        ]);
+
+        // Verify password
+        if (!Hash::check($validated['password'], $user->password_hash)) {
+            return response()->json([
+                'message' => 'Password is incorrect.',
+                'errors' => ['password' => ['Password is incorrect.']],
+            ], 422);
+        }
+
+        // Update email
+        $user->update(['email' => $validated['email']]);
+
+        return response()->json([
+            'message' => 'Email changed successfully.',
+            'data' => [
+                'email' => $user->email,
+            ],
+        ]);
+    }
+
+    /**
+     * Delete the authenticated user's account.
+     * SECURITY CRITICAL: Requires password confirmation and explicit confirmation text.
+     * Permanently deletes user and all related data through cascade constraints.
+     */
+    public function deleteAccount(Request $request)
+    {
+        $user = $request->user();
+
+        // SECURITY: Never allow Super Admin deletion through this endpoint
+        if ($user->role === 'super_admin') {
+            return response()->json([
+                'message' => 'Super Admin accounts cannot be deleted through this method. Please use console commands.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'string'],
+            'confirmation' => ['required', 'string', 'in:DELETE'],
+        ]);
+
+        // Verify password
+        if (!Hash::check($validated['password'], $user->password_hash)) {
+            return response()->json([
+                'message' => 'Password is incorrect.',
+                'errors' => ['password' => ['Password is incorrect.']],
+            ], 422);
+        }
+
+        // Verify confirmation text
+        if ($validated['confirmation'] !== 'DELETE') {
+            return response()->json([
+                'message' => 'Confirmation text must be "DELETE".',
+                'errors' => ['confirmation' => ['Please type DELETE to confirm.']],
+            ], 422);
+        }
+
+        // Log out the user before deletion
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        // Delete the user (cascades to all related data through foreign key constraints)
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Account deleted successfully.',
+        ])->withoutCookie(config('session.cookie'));
     }
 }

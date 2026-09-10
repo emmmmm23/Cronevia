@@ -36,11 +36,15 @@ class JournalEntryResource extends JsonResource
             // Other
             'weather'            => $this->weather,
             'visibility'         => $this->visibility,
+            'is_archived'        => $this->is_archived ?? false,
             'entry_date'         => $this->entry_date?->toDateString(),
 
             // Timestamps — backend is authoritative
             'created_at'         => $this->created_at?->toIso8601String(),
             'updated_at'         => $this->updated_at?->toIso8601String(),
+            
+            // Media (photos)
+            'media'              => MediaResource::collection($this->whenLoaded('media')),
         ];
     }
 }

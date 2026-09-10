@@ -20,8 +20,10 @@ class MemoryResource extends JsonResource
             'description' => $this->description,
             'memory_date' => $this->memory_date,
             'visibility' => $this->visibility,
+            'is_archived' => $this->is_archived ?? false,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+            'media' => MediaResource::collection($this->whenLoaded('media')),
         ];
     }
 }

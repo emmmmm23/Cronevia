@@ -1,22 +1,74 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute, RouterLink } from 'vue-router'
+import { useTripsStore } from '@/stores/trips'
+import type { TripStatus } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
+const store = useTripsStore()
 
-const title       = ref('')
+const tripId = route.params.id as string | undefined
+const isEditing = !!tripId
+
+const title = ref('')
 const destination = ref('')
-const startDate   = ref('')
-const endDate     = ref('')
+const startDate = ref('')
+const endDate = ref('')
 const description = ref('')
-const status      = ref<'planning' | 'active' | 'completed'>('planning')
+const status = ref<TripStatus>('planning')
 
-const canSave = computed(() => title.value.trim() && startDate.value)
+const saving = ref(false)
+const saveError = ref('')
 
-function handleSave() {
+onMounted(async () => {
+  if (isEditing && tripId) {
+    try {
+      const trip = await store.fetchTrip(tripId)
+      title.value = trip.title
+      destination.value = trip.description ?? '' // Use description as destination for now
+      startDate.value = trip.start_date ?? ''
+      endDate.value = trip.end_date ?? ''
+      description.value = trip.description ?? ''
+      status.value = trip.status
+    } catch (err) {
+      saveError.value = 'Failed to load trip'
+    }
+  }
+})
+
+const canSave = computed(() => title.value.trim() && startDate.value && !saving.value)
+
+async function handleSave() {
   if (!canSave.value) return
-  // In production: POST to /api/v1/trips
-  router.push({ name: 'trips' })
+  saving.value = true
+  saveError.value = ''
+
+  const payload = {
+    title: title.value.trim(),
+    destination: destination.value.trim() || null,
+    description: description.value.trim() || null,
+    start_date: startDate.value,
+    end_date: endDate.value || null,
+    status: status.value,
+    visibility: 'private' as const,
+  }
+
+  try {
+    if (isEditing && tripId) {
+      await store.updateTrip(tripId, payload)
+    } else {
+      const created = await store.createTrip(payload as typeof payload & { title: string; start_date: string })
+      await router.push({ name: 'trips.show', params: { id: created.id } })
+      return
+    }
+    await router.push({ name: 'trips' })
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    saveError.value = e?.response?.data?.message ?? 'Failed to save trip. Please try again.'
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
@@ -28,9 +80,9 @@ function handleSave() {
       <div class="max-w-3xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between gap-4">
         <div>
           <h1 class="text-xl font-bold text-[#2b1a10]" style="font-family:'Playfair Display',Georgia,serif;">
-            Plan a Trip
+            {{ isEditing ? 'Edit Trip' : 'Plan a Trip' }}
           </h1>
-          <p class="text-xs text-[#8a5c2e] mt-0.5">Add a new journey to your archive.</p>
+          <p class="text-xs text-[#8a5c2e] mt-0.5">{{ isEditing ? 'Update your journey details' : 'Add a new journey to your archive' }}</p>
         </div>
         <div class="flex gap-2">
           <RouterLink :to="{ name: 'trips' }" class="px-4 py-2 text-sm font-medium text-[#6b4423] hover:text-[#2b1a10] border border-[#d7c7b3] rounded bg-[#fdfaf5] hover:bg-[#f5ebdd] transition-colors">
@@ -42,14 +94,21 @@ function handleSave() {
             :class="[
               'px-4 py-2 text-sm font-semibold rounded border transition-colors',
               canSave
-                ? 'bg-[#8f1d2c] text-[#fdfaf5] border-[#721520] hover:bg-[#721520]'
+                ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
                 : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-50',
             ]"
             @click="handleSave"
           >
-            Save Trip
+            {{ saving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Save Trip') }}
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Save error -->
+    <div v-if="saveError" class="max-w-3xl mx-auto px-4 sm:px-6 pt-4">
+      <div class="px-4 py-3 bg-[#fdf2f3] border border-[#eeaab5] rounded text-sm text-[#7B0323]">
+        {{ saveError }}
       </div>
     </div>
 

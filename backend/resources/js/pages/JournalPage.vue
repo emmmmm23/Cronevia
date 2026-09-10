@@ -7,6 +7,10 @@ import type { JournalEntry } from '@/types'
 const store  = useJournalStore()
 const search = ref('')
 const activeMood = ref('')
+const viewMode = ref<'active' | 'archived'>('active')
+const confirmDelete = ref<string | null>(null)
+const confirmArchive = ref<string | null>(null)
+const processing = ref(false)
 
 const moods = [
   { key: '',          label: 'All' },
@@ -20,8 +24,20 @@ const moods = [
 ]
 
 onMounted(() => {
-  store.fetchEntries()
+  loadEntries()
 })
+
+async function loadEntries() {
+  const params = viewMode.value === 'archived' ? { archived: 'true' } : {}
+  await store.fetchEntries(params)
+}
+
+async function switchView(mode: 'active' | 'archived') {
+  viewMode.value = mode
+  search.value = ''
+  activeMood.value = ''
+  await loadEntries()
+}
 
 const filtered = computed(() => {
   return store.entries.filter((entry: JournalEntry) => {
@@ -31,10 +47,49 @@ const filtered = computed(() => {
       entry.content.toLowerCase().includes(search.value.toLowerCase())
     const matchesMood =
       !activeMood.value ||
-      entry.mood === activeMood.value
+      entry.mood === activeMood.value ||
+      entry.mood_label?.toLowerCase() === activeMood.value.toLowerCase()
     return matchesSearch && matchesMood
   })
 })
+
+async function handleArchive(entryId: string) {
+  if (processing.value) return
+  processing.value = true
+  try {
+    await store.archiveEntry(entryId)
+    confirmArchive.value = null
+  } catch (err) {
+    console.error('Archive failed:', err)
+  } finally {
+    processing.value = false
+  }
+}
+
+async function handleRestore(entryId: string) {
+  if (processing.value) return
+  processing.value = true
+  try {
+    await store.restoreEntry(entryId)
+  } catch (err) {
+    console.error('Restore failed:', err)
+  } finally {
+    processing.value = false
+  }
+}
+
+async function handleDelete(entryId: string) {
+  if (processing.value) return
+  processing.value = true
+  try {
+    await store.deleteEntry(entryId)
+    confirmDelete.value = null
+  } catch (err) {
+    console.error('Delete failed:', err)
+  } finally {
+    processing.value = false
+  }
+}
 
 function excerpt(content: string, max = 140): string {
   return content.length > max ? content.slice(0, max).trimEnd() + '…' : content
@@ -80,6 +135,34 @@ function formatSaved(isoStr: string): string {
     </div>
 
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+
+      <!-- View mode tabs -->
+      <div class="flex items-center gap-2 mb-6 border-b border-[#e5d4bb] pb-0">
+        <button
+          type="button"
+          :class="[
+            'px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors',
+            viewMode === 'active'
+              ? 'text-[#7B0323] border-[#7B0323]'
+              : 'text-[#a68e73] border-transparent hover:text-[#7B0323]',
+          ]"
+          @click="switchView('active')"
+        >
+          Recent Entries
+        </button>
+        <button
+          type="button"
+          :class="[
+            'px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors',
+            viewMode === 'archived'
+              ? 'text-[#7B0323] border-[#7B0323]'
+              : 'text-[#a68e73] border-transparent hover:text-[#7B0323]',
+          ]"
+          @click="switchView('archived')"
+        >
+          Archive
+        </button>
+      </div>
 
       <!-- Loading state -->
       <div v-if="store.loading" class="flex flex-col gap-4">
@@ -177,18 +260,104 @@ function formatSaved(isoStr: string): string {
                 <p class="text-xs text-[#c4ad94]">
                   Saved {{ formatSaved(entry.updated_at) }}
                 </p>
-                <RouterLink
-                  :to="{ name: 'journal.edit', params: { id: entry.id } }"
-                  class="text-xs font-semibold text-[#7B0323] hover:underline inline-flex items-center gap-1"
-                >
-                  Read Entry
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75" />
-                  </svg>
-                </RouterLink>
+                <div class="flex items-center gap-3">
+                  <RouterLink
+                    :to="{ name: 'journal.edit', params: { id: entry.id } }"
+                    class="text-xs font-semibold text-[#7B0323] hover:underline inline-flex items-center gap-1"
+                  >
+                    {{ viewMode === 'archived' ? 'View Entry' : 'Read Entry' }}
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75" />
+                    </svg>
+                  </RouterLink>
+                  
+                  <!-- Restore button (archived view) -->
+                  <button
+                    v-if="viewMode === 'archived'"
+                    type="button"
+                    :disabled="processing"
+                    class="text-xs font-semibold text-[#8a5c2e] hover:text-[#7B0323] hover:underline disabled:opacity-50"
+                    @click="handleRestore(entry.id)"
+                  >
+                    Restore
+                  </button>
+                  
+                  <!-- Archive button (active view) -->
+                  <button
+                    v-if="viewMode === 'active'"
+                    type="button"
+                    :disabled="processing"
+                    class="text-xs font-semibold text-[#a68e73] hover:text-[#7B0323] hover:underline disabled:opacity-50"
+                    @click="confirmArchive = entry.id"
+                  >
+                    Archive
+                  </button>
+                  
+                  <!-- Delete button -->
+                  <button
+                    type="button"
+                    :disabled="processing"
+                    class="text-xs font-semibold text-[#c4ad94] hover:text-[#7B0323] hover:underline disabled:opacity-50"
+                    @click="confirmDelete = entry.id"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
             <div class="h-0.5 bg-gradient-to-r from-[#7B0323]/20 via-[#7B0323]/40 to-transparent" aria-hidden="true" />
+            
+            <!-- Archive confirmation -->
+            <div v-if="confirmArchive === entry.id" class="bg-[#fdf2f3] border-t border-[#eeaab5] px-6 py-4">
+              <p class="text-sm text-[#7B0323] mb-3">
+                <strong>Archive this entry?</strong><br>
+                It will be moved to your Archive and won't appear in your recent entries.
+              </p>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  :disabled="processing"
+                  class="px-4 py-2 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] rounded border border-[#5a0019] hover:bg-[#5a0019] disabled:opacity-50 transition-colors"
+                  @click="handleArchive(entry.id)"
+                >
+                  Archive Entry
+                </button>
+                <button
+                  type="button"
+                  :disabled="processing"
+                  class="px-4 py-2 text-sm font-semibold text-[#8a5c2e] hover:text-[#7B0323] disabled:opacity-50"
+                  @click="confirmArchive = null"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            
+            <!-- Delete confirmation -->
+            <div v-if="confirmDelete === entry.id" class="bg-[#fdf2f3] border-t border-[#eeaab5] px-6 py-4">
+              <p class="text-sm text-[#7B0323] mb-3">
+                <strong>Delete this journal entry?</strong><br>
+                This entry will be permanently removed. This action cannot be undone.
+              </p>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  :disabled="processing"
+                  class="px-4 py-2 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] rounded border border-[#5a0019] hover:bg-[#5a0019] disabled:opacity-50 transition-colors"
+                  @click="handleDelete(entry.id)"
+                >
+                  Delete Entry
+                </button>
+                <button
+                  type="button"
+                  :disabled="processing"
+                  class="px-4 py-2 text-sm font-semibold text-[#8a5c2e] hover:text-[#7B0323] disabled:opacity-50"
+                  @click="confirmDelete = null"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </article>
         </div>
 
@@ -196,14 +365,18 @@ function formatSaved(isoStr: string): string {
         <div v-else-if="store.entries.length === 0 && !search && !activeMood" class="text-center py-20">
           <div class="w-16 h-16 mx-auto mb-5 rounded border border-[#d7c7b3] bg-[#fdfaf5] flex items-center justify-center text-[#c4ad94]">
             <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+              <path v-if="viewMode === 'active'" stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+              <path v-else stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
             </svg>
           </div>
           <h3 class="text-lg font-bold text-[#2b1a10] mb-2" style="font-family:'Playfair Display',serif;">
-            Your journal is still empty.
+            {{ viewMode === 'active' ? 'Your journal is still empty.' : 'Your archive is empty.' }}
           </h3>
-          <p class="text-sm text-[#8a5c2e] mb-6">Every story starts with a first page.</p>
+          <p class="text-sm text-[#8a5c2e] mb-6">
+            {{ viewMode === 'active' ? 'Every story starts with a first page.' : 'Archived entries will appear here.' }}
+          </p>
           <RouterLink
+            v-if="viewMode === 'active'"
             :to="{ name: 'journal.create' }"
             class="inline-flex items-center gap-2 bg-[#7B0323] text-[#fdfaf5] text-sm font-semibold px-6 py-3 rounded border border-[#5a0019] hover:bg-[#5a0019] transition-colors"
           >
