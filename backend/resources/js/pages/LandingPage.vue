@@ -53,18 +53,7 @@ const isAuthenticated = computed(() => auth.isAuthenticated)
 
           <!-- CTA buttons -->
           <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <template v-if="isAuthenticated">
-              <RouterLink
-                :to="{ name: 'home' }"
-                class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#7B0323] text-[#fdfaf5] font-semibold text-base px-8 py-3 rounded border border-[#5a0019] hover:bg-[#5a0019] transition-colors shadow-sm"
-              >
-                Open My Journal
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75" />
-                </svg>
-              </RouterLink>
-            </template>
-            <template v-else>
+            <template v-if="!isAuthenticated">
               <RouterLink
                 :to="{ name: 'register' }"
                 class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#7B0323] text-[#fdfaf5] font-semibold text-base px-8 py-3 rounded border border-[#5a0019] hover:bg-[#5a0019] transition-colors shadow-sm"
@@ -186,13 +175,6 @@ const isAuthenticated = computed(() => auth.isAuthenticated)
             class="inline-flex items-center gap-2 bg-[#fdfaf5] text-[#7B0323] font-semibold text-base px-8 py-3 rounded hover:bg-[#efe2cf] transition-colors border border-white/30"
           >
             Create Free Account
-          </RouterLink>
-          <RouterLink
-            v-else
-            :to="{ name: 'home' }"
-            class="inline-flex items-center gap-2 bg-[#fdfaf5] text-[#7B0323] font-semibold text-base px-8 py-3 rounded hover:bg-[#efe2cf] transition-colors border border-white/30"
-          >
-            Go to My Journal
           </RouterLink>
         </div>
       </section>

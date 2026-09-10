@@ -28,9 +28,20 @@ async function handleSubmit() {
   try {
     await auth.login(email.value, password.value)
 
-    // Redirect to intended page or home
+    // Redirect to intended page, or role-based default home
     const redirect = route.value.query.redirect as string | undefined
-    await router.push(redirect && redirect.startsWith('/') ? redirect : { name: 'home' })
+    let destination: string | { name: string } = { name: 'home' }
+
+    if (redirect && redirect.startsWith('/')) {
+      // User was redirected from a protected route — go back there
+      destination = redirect
+    } else if (auth.user?.role === 'super_admin') {
+      // Super admin users go to admin dashboard by default
+      destination = { name: 'admin-dashboard' }
+    }
+    // Normal users go to home (default)
+
+    await router.push(destination)
 
   } catch (err: unknown) {
     const e = err as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } }

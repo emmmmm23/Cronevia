@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\JournalEntry;
+use App\Models\User;
 use App\Models\Location;
 use App\Models\Memory;
 use App\Models\Person;
@@ -15,6 +16,7 @@ use App\Policies\JournalEntryPolicy;
 use App\Policies\LocationPolicy;
 use App\Policies\MemoryPolicy;
 use App\Policies\PersonPolicy;
+use App\Policies\SuperAdminPolicy;
 use App\Policies\TagPolicy;
 use App\Policies\TimeCapsulePolicy;
 use App\Policies\TripPolicy;
@@ -44,5 +46,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Person::class, PersonPolicy::class);
         Gate::policy(TimeCapsule::class, TimeCapsulePolicy::class);
         Gate::policy(FutureLetter::class, FutureLetterPolicy::class);
+        Gate::policy(User::class, SuperAdminPolicy::class);
     }
 }
+

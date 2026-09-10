@@ -5,6 +5,8 @@ export interface User {
   avatar_path: string | null
   timezone: string | null
   locale: string | null
+  role: 'user' | 'super_admin'
+  status: 'active' | 'suspended'
   created_at: string
   stats?: {
     journal_entries: number

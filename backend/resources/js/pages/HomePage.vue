@@ -2,25 +2,29 @@
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useJournalStore } from '@/stores/journal'
-import type { JournalEntry } from '@/types'
+import { useDashboardStore } from '@/stores/dashboard'
 
-const auth    = useAuthStore()
-const journal = useJournalStore()
+const auth = useAuthStore()
+const dashboard = useDashboardStore()
 
-const user      = computed(() => auth.user)
+const user = computed(() => auth.user)
 const firstName = computed(() => user.value?.name?.split(' ')[0] ?? 'there')
 
 const hour = new Date().getHours()
 const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
-// Real data from API
-onMounted(() => {
-  journal.fetchEntries({ per_page: 3 })
+// Fetch dashboard data on mount
+onMounted(async () => {
+  // Only fetch dashboard data if user is authenticated
+  // This prevents fetching private data when user is logged out
+  if (auth.isAuthenticated) {
+    await dashboard.fetchDashboardData()
+  }
 })
 
-const recentEntries = computed(() => journal.entries.slice(0, 3))
-const hasEntries    = computed(() => recentEntries.value.length > 0)
+const isEmpty = computed(() => dashboard.isEmpty)
+const isLoading = computed(() => dashboard.loading)
+const hasError = computed(() => !!dashboard.error)
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
@@ -30,6 +34,7 @@ function formatDate(dateStr: string): string {
 function excerpt(content: string, max = 100): string {
   return content.length > max ? content.slice(0, max).trimEnd() + '…' : content
 }
+
 </script>
 
 <template>
@@ -79,7 +84,7 @@ function excerpt(content: string, max = 100): string {
           </div>
 
           <!-- Loading -->
-          <div v-if="journal.loading" class="flex flex-col gap-3">
+          <div v-if="isLoading" class="flex flex-col gap-3">
             <div v-for="i in 2" :key="i" class="bg-[#fdfaf5] border border-[#e5d4bb] rounded-sm p-4 animate-pulse">
               <div class="h-3 bg-[#e5d4bb] rounded w-28 mb-2" />
               <div class="h-4 bg-[#e5d4bb] rounded w-3/4 mb-2" />
@@ -87,10 +92,18 @@ function excerpt(content: string, max = 100): string {
             </div>
           </div>
 
+          <!-- Error state -->
+          <div v-else-if="hasError" class="bg-[#fdfaf5] border border-[#d7c7b3] rounded-sm px-5 py-8 text-center">
+            <p class="text-sm font-medium text-[#2b1a10] mb-1" style="font-family:'Playfair Display',serif;">
+              Unable to load dashboard
+            </p>
+            <p class="text-xs text-[#8a5c2e]">{{ dashboard.error }}</p>
+          </div>
+
           <!-- Entries -->
-          <div v-else-if="hasEntries" class="flex flex-col gap-3">
+          <div v-else-if="!isEmpty && dashboard.recentJournals.length > 0" class="flex flex-col gap-3">
             <RouterLink
-              v-for="entry in recentEntries"
+              v-for="entry in dashboard.recentJournals"
               :key="entry.id"
               :to="{ name: 'journal.edit', params: { id: entry.id } }"
               class="bg-[#fdfaf5] border border-[#d7c7b3] rounded-sm px-5 py-4 hover:border-[#c4ad94] hover:shadow-sm transition-all group"
@@ -165,25 +178,25 @@ function excerpt(content: string, max = 100): string {
             <div class="flex items-center justify-between px-4 py-3">
               <span class="text-sm text-[#6b4423]">Journal Entries</span>
               <span class="text-sm font-bold text-[#7B0323]" style="font-family:'Playfair Display',serif;">
-                {{ user?.stats?.journal_entries ?? 0 }}
+                {{ dashboard.journalCount }}
               </span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
               <span class="text-sm text-[#6b4423]">Trips</span>
               <span class="text-sm font-bold text-[#7B0323]" style="font-family:'Playfair Display',serif;">
-                {{ user?.stats?.trips ?? 0 }}
+                {{ dashboard.tripCount }}
               </span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
               <span class="text-sm text-[#6b4423]">Memories</span>
               <span class="text-sm font-bold text-[#7B0323]" style="font-family:'Playfair Display',serif;">
-                {{ user?.stats?.memories ?? 0 }}
+                {{ dashboard.memoryCount }}
               </span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
               <span class="text-sm text-[#6b4423]">Places</span>
               <span class="text-sm font-bold text-[#7B0323]" style="font-family:'Playfair Display',serif;">
-                {{ user?.stats?.places ?? 0 }}
+                {{ dashboard.placeCount }}
               </span>
             </div>
           </div>

@@ -1,5 +1,7 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosError } from 'axios'
+import { useAuthStore } from '../stores/auth'
+import { useRouter } from 'vue-router'
 
 const sharedConfig = {
   withCredentials: true,
@@ -14,6 +16,7 @@ const sharedConfig = {
  * The main API instance used by all feature code.
  * Its response interceptor redirects to /login on 401 — but ONLY
  * after the initial session probe has already run (see auth store).
+ * Handles 403 with role-based redirection.
  */
 const api: AxiosInstance = axios.create({
   baseURL: '/api/v1',
@@ -26,17 +29,36 @@ api.interceptors.response.use(
     const status = error.response?.status
 
     if (status === 401) {
-      // Only hard-redirect when the user was previously authenticated and the
+      // Session expired or user no longer authenticated
+      const authStore = useAuthStore()
+      authStore.user = null
+      // isAuthenticated is a computed property derived from user, so no need to set it directly
+
+      // Only redirect when the user was previously authenticated and the
       // session expired mid-use. The initial session probe (initialize()) uses
       // the silent instance below so it never triggers this branch.
       if (
         !window.location.pathname.startsWith('/login') &&
         !window.location.pathname.startsWith('/register')
       ) {
-        window.location.href = '/login'
+        const router = useRouter()
+        router.push({
+          name: 'login',
+          query: { redirect: window.location.pathname },
+        })
       }
     } else if (status === 403) {
-      console.error('[API] 403 Forbidden:', error.config?.url)
+      // Permission denied — redirect based on role
+      const authStore = useAuthStore()
+      const router = useRouter()
+
+      if (authStore.user?.role === 'super_admin') {
+        // Super admin trying to access user route — redirect to admin dashboard
+        router.push({ name: 'admin-dashboard' })
+      } else {
+        // Normal user trying to access admin route — redirect to home
+        router.push({ name: 'home' })
+      }
     } else if (status !== undefined && status >= 500) {
       console.error(`[API] ${status} Server Error:`, error.config?.url, error.message)
     }

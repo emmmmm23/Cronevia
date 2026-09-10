@@ -27,6 +27,7 @@ class User extends Authenticatable
         'timezone',
         'locale',
         'status',
+        'role',
     ];
 
     /**
@@ -99,5 +100,77 @@ class User extends Authenticatable
     public function people(): HasMany
     {
         return $this->hasMany(Person::class);
+    }
+
+    /**
+     * Check if the user is a Super Admin.
+     *
+     * @return bool
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    /**
+     * Check if the user is a normal user.
+     *
+     * @return bool
+     */
+    public function isNormalUser(): bool
+    {
+        return $this->role === 'user';
+    }
+
+    /**
+     * Check if the user is active.
+     *
+     * @return bool
+     */
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    /**
+     * Scope to get only Super Admins.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeSuperAdmins($query)
+    {
+        return $query->where('role', 'super_admin');
+    }
+
+    /**
+     * Scope to get only normal users.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeNormalUsers($query)
+    {
+        return $query->where('role', 'user');
+    }
+
+    /**
+     * Get the count of Super Admin accounts.
+     *
+     * @return int
+     */
+    public static function superAdminCount(): int
+    {
+        return static::where('role', 'super_admin')->count();
+    }
+
+    /**
+     * Get the first/only Super Admin account.
+     *
+     * @return \App\Models\User|null
+     */
+    public static function getSuperAdmin(): ?User
+    {
+        return static::where('role', 'super_admin')->first();
     }
 }

@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import CrnLogo from '@/components/ui/CrnLogo.vue'
+import LogoLink from '@/components/ui/LogoLink.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -10,28 +10,47 @@ const mobileMenuOpen = ref(false)
 
 const isAuthenticated = computed(() => auth.isAuthenticated)
 const user = computed(() => auth.user)
+const isSuperAdmin = computed(() => auth.user?.role === 'super_admin')
+const isNormalUser = computed(() => auth.user?.role === 'user')
 
 async function handleLogout() {
   mobileMenuOpen.value = false
   await auth.logout()
-  router.push({ name: 'login' })
+  router.replace('/')
 }
 
 function closeMobileMenu() {
   mobileMenuOpen.value = false
 }
 
+// Navigation links based on authentication state
+const adminLinks = [
+  { label: 'Dashboard', to: { name: 'admin-dashboard' } },
+  { label: 'Users', to: { name: 'admin-users' } },
+  { label: 'Audit Logs', to: { name: 'admin-audit-logs' } },
+  { label: 'System Health', to: { name: 'admin-system-health' } },
+]
+
+const userLinks = [
+  { label: 'Home', to: { name: 'home' } },
+  { label: 'Journal', to: { name: 'journal' } },
+  { label: 'Trips', to: { name: 'trips' } },
+  { label: 'Memories', to: { name: 'memories' } },
+  { label: 'Timeline', to: { name: 'onthisday' } },
+]
+
 const guestLinks = [
   { label: 'Login', to: { name: 'login' } },
   { label: 'Create Account', to: { name: 'register' } },
 ]
 
-const authLinks = [
-  { label: 'Journal', to: { name: 'journal' }, icon: 'journal' },
-  { label: 'Trips', to: { name: 'trips' }, icon: 'trips' },
-  { label: 'Memories', to: { name: 'memories' }, icon: 'memories' },
-  { label: 'Timeline', to: { name: 'onthisday' }, icon: 'timeline' },
-]
+// Determine which nav links to show
+const navLinks = computed(() => {
+  if (isSuperAdmin.value) return adminLinks
+  if (isNormalUser.value) return userLinks
+  return guestLinks
+})
+
 </script>
 
 <template>
@@ -41,16 +60,14 @@ const authLinks = [
       <div class="flex items-center justify-between h-16">
 
         <!-- Logo -->
-        <RouterLink to="/" class="flex items-center shrink-0 group opacity-95 group-hover:opacity-100 transition-opacity" @click="closeMobileMenu">
-          <CrnLogo size="md" variant="light" />
-        </RouterLink>
+        <LogoLink @click="closeMobileMenu" />
 
         <!-- Desktop navigation -->
         <nav class="hidden md:flex items-center gap-1" aria-label="Main navigation">
-          <!-- Authenticated links -->
+          <!-- Authenticated links (user or admin) -->
           <template v-if="isAuthenticated">
             <RouterLink
-              v-for="link in authLinks"
+              v-for="link in navLinks"
               :key="link.label"
               :to="link.to"
               class="px-3.5 py-2 text-sm font-medium text-[#fdfaf5]/85 rounded transition-all duration-150 hover:text-[#fdfaf5] hover:bg-white/10"
@@ -89,16 +106,12 @@ const authLinks = [
 
           <template v-else>
             <RouterLink
-              :to="{ name: 'login' }"
+              v-for="link in guestLinks"
+              :key="link.label"
+              :to="link.to"
               class="px-4 py-2 text-sm font-semibold text-[#fdfaf5]/85 hover:text-[#fdfaf5] hover:bg-white/10 rounded transition-all duration-150"
             >
-              Sign In
-            </RouterLink>
-            <RouterLink
-              :to="{ name: 'register' }"
-              class="px-4 py-2 text-sm font-semibold bg-[#fdfaf5] text-[#7B0323] rounded hover:bg-white transition-all duration-150 border border-white/30"
-            >
-              Create Account
+              {{ link.label }}
             </RouterLink>
           </template>
         </div>
@@ -140,7 +153,7 @@ const authLinks = [
         <nav class="px-4 py-3 flex flex-col gap-0.5" aria-label="Mobile navigation">
           <template v-if="isAuthenticated">
             <RouterLink
-              v-for="link in authLinks"
+              v-for="link in navLinks"
               :key="link.label"
               :to="link.to"
               class="px-3 py-2.5 text-sm font-medium text-[#fdfaf5]/85 rounded hover:text-[#fdfaf5] hover:bg-white/10 transition-all"
@@ -175,18 +188,13 @@ const authLinks = [
 
           <template v-else>
             <RouterLink
-              :to="{ name: 'login' }"
+              v-for="link in guestLinks"
+              :key="link.label"
+              :to="link.to"
               class="px-3 py-2.5 text-sm font-medium text-[#fdfaf5]/85 rounded hover:text-[#fdfaf5] hover:bg-white/10 transition-all"
               @click="closeMobileMenu"
             >
-              Sign In
-            </RouterLink>
-            <RouterLink
-              :to="{ name: 'register' }"
-              class="px-3 py-2.5 text-sm font-semibold text-[#fdfaf5] rounded hover:bg-white/10 transition-all"
-              @click="closeMobileMenu"
-            >
-              Create Account
+              {{ link.label }}
             </RouterLink>
           </template>
         </nav>

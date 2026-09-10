@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Support\Facades\Route;
 
@@ -6,7 +6,7 @@ Route::prefix('v1')->group(function () {
     // Auth routes (public)
     Route::prefix('auth')->group(function () {
         Route::post('register', [\App\Http\Controllers\Api\V1\AuthController::class, 'register'])
-            ->middleware('throttle:5,1');
+            ->middleware('throttle:30,1');
         Route::post('login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login'])
             ->middleware('throttle:5,1');
         Route::post('logout', [\App\Http\Controllers\Api\V1\AuthController::class, 'logout'])
@@ -17,6 +17,9 @@ Route::prefix('v1')->group(function () {
 
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
+        // Dashboard
+        Route::get('dashboard', [\App\Http\Controllers\Api\V1\DashboardController::class, 'index']);
+
         // Trips
         Route::apiResource('trips', \App\Http\Controllers\Api\V1\TripController::class);
         Route::post('trips/{trip}/days', [\App\Http\Controllers\Api\V1\TripDayController::class, 'store']);
@@ -68,4 +71,33 @@ Route::prefix('v1')->group(function () {
         // People
         Route::apiResource('people', \App\Http\Controllers\Api\V1\PersonController::class);
     });
+
+    // SUPER ADMIN ROUTES - Protected by EnsureSuperAdmin middleware
+    // ============================================================
+    // SECURITY: All routes require authentication + super_admin role
+    Route::middleware(['auth:sanctum', 'super_admin'])->prefix('admin')->group(function () {
+        // Dashboard
+        Route::get('dashboard', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'dashboard']);
+
+        // User Management
+        Route::get('users', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'listUsers']);
+        Route::get('users/{user}', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'showUser']);
+        Route::post('users/{user}/suspend', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'suspendUser']);
+        Route::post('users/{user}/reactivate', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'reactivateUser']);
+        Route::delete('users/{user}', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'deleteUser']);
+
+        // Database Management
+        Route::get('database/status', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'databaseStatus']);
+
+        // System Health
+        Route::get('system/health', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'systemHealth']);
+
+        // Security
+        Route::get('security/status', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'securityStatus']);
+
+        // Audit Logs
+        Route::get('audit-logs', [\App\Http\Controllers\Api\V1\SuperAdminController::class, 'auditLogs']);
+    });
 });
+
+

@@ -20,10 +20,14 @@ class AuthController extends Controller
             'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
         ]);
 
+        // SECURITY CRITICAL: Always assign role = 'user' for normal registration.
+        // Super Admin provisioning is server-side only via Artisan command.
+        // The 'role' field from the request is NEVER accepted.
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password'],
+            'role' => 'user',  // Explicitly set to 'user', cannot be overridden by frontend
             'status' => 'active',
         ]);
 
@@ -38,6 +42,7 @@ class AuthController extends Controller
                 'avatar_path' => $user->avatar_path,
                 'timezone' => $user->timezone,
                 'locale' => $user->locale,
+                'role' => $user->role,  // Include role in response for frontend awareness
                 'status' => $user->status,
                 'created_at' => $user->created_at,
             ],
@@ -82,14 +87,16 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()->json(['message' => 'Logged out.']);
+        // Explicitly clear the session cookie to ensure logout is complete
+        return response()->json(['message' => 'Logged out.'])
+            ->withoutCookie(config('session.cookie'));
     }
 
     public function me(Request $request)
     {
         $user = $request->user();
 
-        // Real stats â€” counted from the database, never hardcoded
+        // Real stats — counted from the database, never hardcoded
         $journalCount = $user->journalEntries()->count();
         $tripCount    = $user->trips()->count();
         $memoryCount  = $user->memories()->count();
@@ -106,6 +113,8 @@ class AuthController extends Controller
                 'avatar_path' => $user->avatar_path,
                 'timezone'   => $user->timezone,
                 'locale'     => $user->locale,
+                'role'       => $user->role,  // Include role for frontend authorization checks
+                'status'     => $user->status,
                 'created_at' => $user->created_at,
                 'stats'      => [
                     'journal_entries' => $journalCount,

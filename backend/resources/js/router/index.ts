@@ -136,6 +136,47 @@ const routes: RouteRecordRaw[] = [
   },
 
   // ----------------------------------------------------------------
+  // SUPER ADMIN ROUTES — require super_admin role
+  // ================================================================
+
+  {
+    path: '/super-admin/dashboard',
+    name: 'admin-dashboard',
+    component: () => import('../layouts/AppLayout.vue'),
+    meta: { requiresAuth: true, requiresRole: 'super_admin' },
+    children: [
+      { path: '', component: () => import('../pages/SuperAdmin/DashboardPage.vue') },
+    ],
+  },
+  {
+    path: '/super-admin/users',
+    name: 'admin-users',
+    component: () => import('../layouts/AppLayout.vue'),
+    meta: { requiresAuth: true, requiresRole: 'super_admin' },
+    children: [
+      { path: '', component: () => import('../pages/SuperAdmin/UsersPage.vue') },
+    ],
+  },
+  {
+    path: '/super-admin/audit-logs',
+    name: 'admin-audit-logs',
+    component: () => import('../layouts/AppLayout.vue'),
+    meta: { requiresAuth: true, requiresRole: 'super_admin' },
+    children: [
+      { path: '', component: () => import('../pages/SuperAdmin/AuditLogsPage.vue') },
+    ],
+  },
+  {
+    path: '/super-admin/system-health',
+    name: 'admin-system-health',
+    component: () => import('../layouts/AppLayout.vue'),
+    meta: { requiresAuth: true, requiresRole: 'super_admin' },
+    children: [
+      { path: '', component: () => import('../pages/SuperAdmin/SystemHealthPage.vue') },
+    ],
+  },
+
+  // ----------------------------------------------------------------
   // CATCH-ALL — redirect guests to landing, authenticated to home
   // ----------------------------------------------------------------
   { path: '/:pathMatch(.*)*', name: 'not-found', redirect: '/' },
@@ -166,8 +207,28 @@ router.beforeEach(async (to) => {
 
   // Redirect authenticated users away from guest-only pages (login / register)
   if (to.meta.guestOnly && auth.isAuthenticated) {
+    // Redirect based on role to appropriate home
+    if (auth.user?.role === 'super_admin') {
+      return { name: 'admin-dashboard' }
+    }
     return { name: 'home' }
+  }
+
+
+
+  // Role-based route protection
+  if (to.meta.requiresRole && auth.isAuthenticated) {
+    if (auth.user?.role !== to.meta.requiresRole) {
+      // User doesn't have required role
+      if (auth.user?.role === 'super_admin') {
+        // Super admin trying to access user route → go to admin dashboard
+        return { name: 'admin-dashboard' }
+      }
+      // Normal user trying to access admin route → go to home
+      return { name: 'home' }
+    }
   }
 })
 
 export default router
+

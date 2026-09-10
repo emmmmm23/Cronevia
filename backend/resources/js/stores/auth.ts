@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api, { silentApi, getCsrfCookie } from '../services/api.service'
+import { useDashboardStore } from './dashboard'
 import type { User } from '../types'
 
 /**
@@ -111,6 +112,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * Logout — invalidates the Laravel session server-side.
+   *
+   * Preconditions:
+   *   - User is authenticated (isAuthenticated is true)
+   *
+   * Postconditions:
+   *   - POST /api/v1/auth/logout called to invalidate session server-side
+   *   - user set to null (guest state)
+   *   - isAuthenticated becomes false
+   *   - dashboard.resetDashboardData() called to clear private data
+   *   - Next user cannot see previous user's dashboard data
    */
   async function logout(): Promise<void> {
     loading.value = true
@@ -118,6 +129,11 @@ export const useAuthStore = defineStore('auth', () => {
       await api.post('/auth/logout')
     } finally {
       user.value = null
+      
+      // Clear dashboard data immediately to prevent exposure to next user
+      const dashboard = useDashboardStore()
+      dashboard.resetDashboardData()
+      
       loading.value = false
     }
   }

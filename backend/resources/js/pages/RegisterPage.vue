@@ -27,7 +27,9 @@ async function handleSubmit() {
 
   try {
     await auth.register(name.value, email.value, password.value, passwordConfirmation.value)
-    await router.push({ name: 'home' })
+    // Redirect based on role — newly registered users should be normal users, but check just in case
+    const destination = auth.user?.role === 'super_admin' ? { name: 'admin-dashboard' } : { name: 'home' }
+    await router.push(destination)
 
   } catch (err: unknown) {
     const e = err as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } }
