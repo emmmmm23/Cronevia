@@ -2,6 +2,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+// Extend route meta type
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    guest?: boolean
+    requiresAdmin?: boolean
+  }
+}
+
 const routes: RouteRecordRaw[] = [
   // Auth pages
   {
@@ -14,6 +23,18 @@ const routes: RouteRecordRaw[] = [
     path: '/register',
     name: 'register',
     component: () => import('@/pages/RegisterPage.vue'),
+    meta: { guest: true },
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/pages/ForgotPasswordPage.vue'),
+    meta: { guest: true },
+  },
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/pages/ResetPasswordPage.vue'),
     meta: { guest: true },
   },
 
@@ -118,6 +139,13 @@ const routes: RouteRecordRaw[] = [
         name: 'settings',
         component: () => import('@/pages/SettingsPage.vue'),
       },
+      // Super Admin routes
+      {
+        path: 'admin',
+        name: 'admin',
+        component: () => import('@/pages/AdminDashboardPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true },
+      },
     ],
   },
 
@@ -139,17 +167,45 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  // Try to fetch current user if not loaded yet
+  // Initialize auth state on first navigation
   if (!auth.initialized) {
     await auth.initialize()
   }
 
+  // Protected routes - require authentication
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
+  // Guest routes - redirect authenticated users away
   if (to.meta.guest && auth.isAuthenticated) {
     return { name: 'home' }
+  }
+
+  // Admin routes - require super_admin role
+  if (to.meta.requiresAdmin) {
+    if (!auth.isAuthenticated) {
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
+    if (!auth.isSuperAdmin) {
+      // Redirect non-admin users to home
+      return { name: 'home' }
+    }
+  }
+
+  // Check account status for authenticated users
+  if (auth.isAuthenticated && !auth.isAccountActive) {
+    // Account is suspended or inactive
+    if (to.name !== 'login') {
+      await auth.logout()
+      return { 
+        name: 'login', 
+        query: { 
+          error: 'account_suspended',
+          message: 'Your account has been suspended. Please contact support.' 
+        } 
+      }
+    }
   }
 })
 

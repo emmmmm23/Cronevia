@@ -1,11 +1,24 @@
+// User from Supabase Auth + Profile
 export interface User {
   id: string
-  name: string
   email: string
-  avatar_path: string | null
-  timezone: string | null
-  locale: string | null
-  created_at: string
+  // Profile data
+  profile?: {
+    full_name: string
+    username: string | null
+    avatar_url: string | null
+    bio: string | null
+    timezone: string
+    locale: string
+    role: 'user' | 'super_admin'
+    account_status: 'active' | 'inactive' | 'suspended'
+  }
+  // Legacy fields for compatibility
+  name?: string
+  avatar_path?: string | null
+  timezone?: string | null
+  locale?: string | null
+  created_at?: string
 }
 
 export type TripStatus = 'planning' | 'active' | 'completed' | 'archived'

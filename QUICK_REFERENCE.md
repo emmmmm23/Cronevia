@@ -1,392 +1,252 @@
-# Authentication-Based Home Routing - Quick Reference
+# 🚀 CRONEVIA Quick Reference
 
-## User Flows at a Glance
+## Your Supabase Project
 
-### 🟢 GUEST USER
-```
-1. Opens app → sees / (Landing)
-2. Sees: "Login" and "Create Account" buttons in navbar
-3. Logo links to: /
-4. Tries to access /home → redirected to /login?redirect=/home
+**Project ID**: `lrgxrfyzakehsnifypmd`  
+**Region**: `ap-northeast-1` (Tokyo)  
+**URL**: `https://lrgxrfyzakehsnifypmd.supabase.co`  
+**Dashboard**: https://app.supabase.com/project/lrgxrfyzakehsnifypmd
+
+---
+
+## 📁 Important Files
+
+### Database
+- `database/supabase_schema.sql` - Run this first
+- `database/supabase_rls_policies.sql` - Run this second
+
+### Frontend Config
+- `frontend/.env` - Add your anon key here
+- `frontend/src/lib/supabase.ts` - Supabase client
+- `frontend/src/stores/auth.ts` - Authentication logic
+
+### Documentation
+- `SETUP_INSTRUCTIONS.md` - Start here! ⭐
+- `SUPABASE_MIGRATION_QUICKSTART.md` - 30-min setup
+- `AUTHENTICATION_TESTING_CHECKLIST.md` - Testing guide
+- `AUTHENTICATION_MIGRATION_COMPLETE.md` - Full summary
+
+---
+
+## ⚡ Quick Commands
+
+### Start Development
+```bash
+cd frontend
+npm run dev
+# Opens http://localhost:5173
 ```
 
-### 🔵 NORMAL USER
-```
-1. Registers or logs in → redirected to /home
-2. Sees: Home, Journal, Trips, Memories, Timeline in navbar
-3. Logo links to: /home
-4. Sees: Dashboard with stats + recent entries (real MySQL data)
-5. Clicks avatar → UserMenu (Profile, Settings, Sign Out)
-6. Logs out → redirected to /
+### Install Dependencies (if needed)
+```bash
+cd frontend
+npm install
 ```
 
-### 🔴 SUPER ADMIN
-```
-1. Logs in → redirected to /super-admin/dashboard
-2. Sees: Dashboard, Users, Audit Logs, System Health in navbar
-3. Logo links to: /super-admin/dashboard
-4. Can access: /super-admin/* routes only
-5. Tries to access /home → redirected to /super-admin/dashboard
-6. Logs out → redirected to /
+### Build for Production
+```bash
+cd frontend
+npm run build
 ```
 
 ---
 
-## API Endpoints
+## 🔑 Get Your Anon Key
 
-### Authentication
-| Method | Endpoint | Purpose | Auth Required |
-|--------|----------|---------|---|
-| GET | `/api/v1/auth/me` | Get current user | Yes |
-| POST | `/api/v1/auth/login` | Login | No |
-| POST | `/api/v1/auth/register` | Register | No |
-| POST | `/api/v1/auth/logout` | Logout | Yes |
+1. Go to: https://app.supabase.com/project/lrgxrfyzakehsnifypmd/settings/api
+2. Copy the **anon/public** key
+3. Add to `frontend/.env`:
+   ```env
+   VITE_SUPABASE_ANON_KEY=eyJhbG...
+   ```
 
-### Dashboard
-| Method | Endpoint | Purpose | Auth Required | Data |
-|--------|----------|---------|---|---|
-| GET | `/api/v1/dashboard` | Get dashboard data | Yes | counts + recents |
+---
 
-**Response**:
-```json
-{
-  "journal_count": 5,
-  "trip_count": 2,
-  "memory_count": 12,
-  "place_count": 8,
-  "recent_journals": [...],
-  "recent_trips": [...],
-  "on_this_day": [...]
-}
+## 📊 Run Database Scripts
+
+### In Supabase SQL Editor:
+
+**Step 1 - Schema:**
+```sql
+-- Copy contents of database/supabase_schema.sql
+-- Paste and run
+```
+
+**Step 2 - RLS Policies:**
+```sql
+-- Copy contents of database/supabase_rls_policies.sql
+-- Paste and run
+```
+
+**Step 3 - Create Super Admin:**
+```sql
+SELECT promote_to_super_admin('your-email@example.com');
 ```
 
 ---
 
-## Router Routes
+## ✅ Verify Setup
 
-### Public Routes
-- `/` - Landing page (LandingPage.vue)
-- `/login` - Login (LoginPage.vue)
-- `/register` - Register (RegisterPage.vue)
-
-### Authenticated Routes (User)
-- `/home` - Dashboard (HomePage.vue)
-- `/journal` - Journal list
-- `/trips` - Trips list
-- `/memories` - Memories
-- `/map` - Map view
-- `/search` - Search
-- `/profile` - Profile
-- `/settings` - Settings
-- `/on-this-day` - Timeline
-
-### Admin Routes (Super Admin Only)
-- `/super-admin/dashboard` - Admin overview
-- `/super-admin/users` - User management
-- `/super-admin/audit-logs` - Audit logs
-- `/super-admin/system-health` - System health
-
----
-
-## Store Actions
-
-### useAuthStore
-```typescript
-// Initialize auth state (called on app startup)
-await auth.initialize()
-
-// Login
-await auth.login(email, password)
-
-// Register
-await auth.register(name, email, password, passwordConfirmation)
-
-// Logout
-auth.logout()
+### Check Tables Created:
+```sql
+SELECT COUNT(*) FROM information_schema.tables 
+WHERE table_schema = 'public';
+-- Should return 17+
 ```
 
-**State**:
-```typescript
-auth.isAuthenticated  // boolean
-auth.user            // { id, name, email, role, status }
-auth.loading         // boolean
-auth.initialized     // boolean
-auth.error           // string | null
+### Check RLS Enabled:
+```sql
+SELECT tablename, rowsecurity 
+FROM pg_tables 
+WHERE schemaname = 'public' 
+AND tablename = 'profiles';
+-- rowsecurity should be true
 ```
 
-### useDashboardStore
-```typescript
-// Fetch dashboard data
-await dashboard.fetchDashboardData()
-```
-
-**State**:
-```typescript
-dashboard.journalCount    // number
-dashboard.tripCount       // number
-dashboard.memoryCount     // number
-dashboard.placeCount      // number
-dashboard.recentJournals  // array
-dashboard.recentTrips     // array
-dashboard.onThisDay       // array
-dashboard.loading         // boolean
-dashboard.error           // string | null
-dashboard.isEmpty         // computed boolean
+### Check Super Admin:
+```sql
+SELECT u.email, p.role 
+FROM auth.users u
+JOIN profiles p ON p.user_id = u.id
+WHERE p.role = 'super_admin';
+-- Should show your admin email
 ```
 
 ---
 
-## Route Guards
+## 🧪 Quick Tests
 
-### Meta Tags
-```typescript
-// Require authentication
-meta: { requiresAuth: true }
+### Test Registration:
+1. Visit: http://localhost:5173/register
+2. Register: `test@example.com` / `Test1234!`
+3. Should auto-login ✅
 
-// Guest only (redirect if authenticated)
-meta: { guestOnly: true }
+### Test Login:
+1. Visit: http://localhost:5173/login
+2. Login with test account
+3. Should redirect to home ✅
 
-// Require specific role
-meta: { requiresRole: 'super_admin' }
-```
+### Test Protected Routes:
+1. Logout
+2. Try: http://localhost:5173/journal
+3. Should redirect to login ✅
 
-### Guard Logic
-```
-1. If requiresAuth && !authenticated → /login?redirect=<route>
-2. If guestOnly && authenticated → /home or /super-admin/dashboard (by role)
-3. If requiresRole && role mismatch → /home or /super-admin/dashboard (by role)
-4. If landing page && authenticated → /home or /super-admin/dashboard (by role)
-```
-
----
-
-## Interceptors
-
-### 401 (Unauthorized)
-```
-→ Clear auth state
-→ Redirect to /login?redirect=<current-route>
-```
-
-### 403 (Forbidden)
-```
-→ If role='super_admin':  /super-admin/dashboard
-→ If role='user':         /home
-```
-
-### All Requests
-```
-→ withCredentials: true (sends session cookie)
-```
+### Test Admin:
+1. Login as admin
+2. Visit: http://localhost:5173/admin
+3. Should see admin dashboard ✅
 
 ---
 
-## Components
+## 🎨 Design Colors
 
-### LogoLink
-```vue
-<LogoLink />
-```
-- Routes based on auth state
-- Guest: `/`
-- User: `/home`
-- Admin: `/super-admin/dashboard`
-
-### UserMenu
-```vue
-<UserMenu @logout="handleLogout" />
-```
-- Shows avatar + name
-- Links: Profile, Settings, Admin Dashboard (if admin), Sign Out
-
-### AppNavbar
-```vue
-- Guest: Login, Create Account
-- User: Home, Journal, Trips, Memories, Timeline, UserMenu
-- Admin: Dashboard, Users, Audit Logs, System Health, UserMenu
-```
+Cronevia vintage aesthetic:
+- **Background**: `#FFF8F0` (Cream)
+- **Primary**: `#8B4513` (Saddle Brown)
+- **Accent**: `#C41E3A` (Crimson Red)
+- **Border**: `#D4A574` (Tan)
 
 ---
 
-## Data Flow
+## 📋 Routes
 
-```
-App.vue (onMounted)
-  ↓
-auth.initialize() called once
-  ↓
-GET /api/v1/auth/me (withCredentials=true)
-  ↓
-Response: { user: { id, name, email, role, status } }
-  ↓
-auth.isAuthenticated = true/false
-auth.initialized = true
-  ↓
-Router.beforeEach runs (checks initialized flag)
-  ↓
-Routes rendered with correct layout
-  ↓
-HomePage.vue calls dashboard.fetchDashboardData()
-  ↓
-GET /api/v1/dashboard
-  ↓
-Dashboard stats + recent items displayed
-```
-
----
-
-## Common URLs During Testing
-
-| Flow | URL | Component | Notes |
-|------|-----|-----------|-------|
-| Guest landing | `/` | LandingPage | "Login" button visible |
-| Guest login | `/login` | LoginPage | No redirect param yet |
-| Guest protected | `/home` | → `/login?redirect=/home` | Automatic redirect |
-| New user after register | `/home` | HomePage | Empty state |
-| User with data | `/home` | HomePage | Shows stats + recents |
-| User navigates | `/journal` | JournalPage | AppNavbar shows Journal highlighted |
-| User logs out | `/` | LandingPage | Navbar shows "Login" again |
-| Admin login | `/login` | LoginPage | Same as user |
-| Admin after login | `/super-admin/dashboard` | DashboardPage | NOT /home |
-| Admin page | `/super-admin/users` | UsersPage | AppNavbar shows Users highlighted |
-
----
-
-## Debugging Checklist
-
-**Auth not working?**
-1. Check browser DevTools → Application → Cookies (session cookie present?)
-2. Check Network tab → see GET /api/v1/auth/me call?
-3. Check Console for errors in auth.initialize()
-4. Check backend: is Sanctum middleware enabled?
-
-**Redirect not working?**
-1. Check router.beforeEach guards
-2. Check route meta tags (requiresAuth, guestOnly, requiresRole)
-3. Check auth.isAuthenticated state
-4. Check auth.user.role value
-
-**Dashboard not loading?**
-1. Check GET /api/v1/dashboard call
-2. Check dashboard store state (loading, error)
-3. Check HomePage.vue mounted hook calls fetchDashboardData()
-4. Check DashboardController returns correct data
-
-**Logo routing broken?**
-1. Check LogoLink.vue computed logoRoute
-2. Check auth.isAuthenticated
-3. Check auth.user.role
-4. Check router.push() in LogoLink
-
-**Interceptor issues?**
-1. Check api.service.ts response interceptor
-2. Check withCredentials: true is set
-3. Check 401/403 handling redirects
-4. Check circular redirect loop (e.g., 401 on /login)
-
----
-
-## Production Checklist
-
-- [ ] HTTPS enabled (withCredentials requires secure context)
-- [ ] Session cookies: Secure=true, HttpOnly=true, SameSite=lax
-- [ ] CSRF tokens validated
-- [ ] Rate limiting on login (prevent brute force)
-- [ ] Session timeout configured
-- [ ] Error messages don't leak sensitive info
-- [ ] Audit logging enabled
-- [ ] Monitoring/alerting set up
-- [ ] Backup strategy verified
-- [ ] Load balancing configured (sticky sessions if needed)
-
----
-
-## Quick Command Reference
+### Supabase CLI Commands (If Using CLI)
 
 ```bash
-# Start app
-npm run dev
+# Link to your project
+supabase link --project-ref lrgxrfyzakehsnifypmd
 
-# Run backend
-php artisan serve
+# Create new migration
+supabase migration new migration_name
 
-# Create super admin (backend)
-php artisan cronevia:create-super-admin
+# Apply migrations to remote
+supabase db push
 
-# Clear auth cache
-php artisan cache:clear
+# Pull remote schema
+supabase db pull
 
-# View session config
-cat config/session.php
+# List all migrations
+supabase migration list
 
-# View Sanctum config
-cat config/sanctum.php
+# Check remote tables
+supabase db remote ls
 ```
 
----
-
-## Files to Know
-
-### Core Auth
-- `backend/resources/js/stores/auth.ts` - Auth state
-- `backend/resources/js/stores/dashboard.ts` - Dashboard state
-- `backend/resources/js/services/api.service.ts` - HTTP client + interceptors
-- `backend/resources/js/router/index.ts` - Routes + guards
-
-### UI
-- `backend/resources/js/components/layout/AppNavbar.vue` - Navigation
-- `backend/resources/js/components/layout/UserMenu.vue` - User dropdown
-- `backend/resources/js/components/ui/LogoLink.vue` - Logo routing
-- `backend/resources/js/pages/HomePage.vue` - User dashboard
-
-### Admin Pages
-- `backend/resources/js/pages/SuperAdmin/DashboardPage.vue`
-- `backend/resources/js/pages/SuperAdmin/UsersPage.vue`
-- `backend/resources/js/pages/SuperAdmin/AuditLogsPage.vue`
-- `backend/resources/js/pages/SuperAdmin/SystemHealthPage.vue`
-
-### Backend
-- `backend/app/Http/Controllers/Api/V1/AuthController.php` - Auth logic
-- `backend/app/Http/Controllers/Api/V1/DashboardController.php` - Dashboard data
-- `backend/routes/api.php` - API routes
+**Using CLI?** See: `CLI_QUICK_START.md` or `SUPABASE_CLI_GUIDE.md`
 
 ---
 
-## Emergency Procedures
+## 📋 Routes
 
-### User Can't Login
-1. Check user exists in DB
-2. Check password is correct (use tinker: `User::where('email', 'test@example.com')->first()`)
-3. Check user.status != 'suspended'
-4. Check backend is running
-5. Check session table exists: `php artisan migrate`
+### Public
+- `/` - Landing page
+- `/login` - Login page
+- `/register` - Registration page
+- `/forgot-password` - Password reset request
+- `/reset-password` - Reset password form
 
-### User Stuck in Login Loop
-1. Clear browser cookies (Cmd+Shift+Delete)
-2. Clear server session: `php artisan cache:clear`
-3. Check for circular redirects in console
-4. Check api.service.ts interceptor logic
+### Protected (Require Login)
+- `/journal` - Journal entries
+- `/trips` - Travel trips
+- `/memories` - Memories
+- `/profile` - User profile
+- `/settings` - Settings
 
-### Admin Can't Access Admin Pages
-1. Verify user.role = 'super_admin' in DB
-2. Check router guard: `meta.requiresRole = 'super_admin'`
-3. Check auth.user.role is set correctly
-4. Clear auth cache: `php artisan cache:clear`
-
-### Dashboard Shows Wrong User's Data
-1. Check DashboardController filters by auth()->user()->id
-2. Check SQL query includes WHERE user_id = ?
-3. Check multiple users aren't sharing same session
-4. Check browser cookies are isolated per user
+### Admin Only
+- `/admin` - Admin dashboard
 
 ---
 
-## Contact / Support
+## 🔒 Security Checklist
 
-For issues:
-1. Check QUICK_REFERENCE.md (this file)
-2. Check AUTH_HOME_ROUTING_E2E_TEST.md (test plan)
-3. Check IMPLEMENTATION_SUMMARY.md (detailed docs)
-4. Check Laravel & Vue documentation
-5. Check browser console for errors
-6. Check server logs: `tail -f storage/logs/laravel.log`
+- ✅ RLS enabled on all tables
+- ✅ Users can only see their own data
+- ✅ Cannot self-promote to admin
+- ✅ anon key in frontend (safe)
+- ❌ service_role key NOT in frontend
+
+---
+
+## 🐛 Common Issues
+
+**"Missing environment variables"**
+→ Add anon key to `frontend/.env`
+
+**Tables not found**
+→ Run `supabase_schema.sql` in SQL Editor
+
+**Cannot login**
+→ Check browser console
+→ Verify `.env` settings
+
+**Profile not created**
+→ Re-run schema SQL (includes trigger)
+
+**Admin access denied**
+→ Run promote_to_super_admin query
+
+---
+
+## 📞 Support Resources
+
+- **Supabase Docs**: https://supabase.com/docs
+- **Vue 3 Docs**: https://vuejs.org/
+- **Tailwind CSS**: https://tailwindcss.com/
+
+---
+
+## 🎯 Next Steps
+
+1. ✅ Get anon key from Supabase
+2. ✅ Update `frontend/.env`
+3. ✅ Run database scripts
+4. ✅ Create super admin
+5. ✅ Test authentication
+6. ✅ Follow full testing checklist
+7. ✅ Ready for Phase 2!
+
+---
+
+**Status**: ✅ Ready for setup  
+**Time to complete**: ~15 minutes  
+**Next**: Follow `SETUP_INSTRUCTIONS.md`
