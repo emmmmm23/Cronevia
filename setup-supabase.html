@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronevia Supabase Setup Helper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .step {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .step.completed {
+            border-left-color: #10b981;
+            background: #ecfdf5;
+        }
+        
+        .step h2 {
+            color: #1f2937;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .step p {
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: #10b981;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .code-box {
+            background: #1f2937;
+            color: #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 15px 0;
+            position: relative;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #374151;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .copy-btn:hover {
+            background: #4b5563;
+        }
+        
+        .copy-btn.copied {
+            background: #10b981;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .alert-info {
+            background: #dbeafe;
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            border: 1px solid #10b981;
+            color: #065f46;
+        }
+        
+        .alert-warning {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+        }
+        
+        .progress {
+            background: #e5e7eb;
+            height: 8px;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .checkmark {
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Cronevia Supabase Setup</h1>
+            <p>Your automated database setup assistant</p>
+            <div class="progress">
+                <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <!-- Step 1 -->
+            <div class="step" id="step1">
+                <h2>Step 1: Open Supabase SQL Editor</h2>
+                <p>Click the button below to open your Supabase SQL Editor in a new tab.</p>
+                <div class="alert alert-info">
+                    <strong>📋 What this does:</strong> Opens the SQL Editor where you'll run the database setup scripts.
+                </div>
+                <a href="https://app.supabase.com/project/lrgxrfyzakehsnifypmd/sql/new" target="_blank" class="btn" onclick="markStepComplete(1)">
+                    Open SQL Editor →
+                </a>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="step" id="step2">
+                <h2>Step 2: Copy Database Schema</h2>
+                <p>Click the button below to copy the database schema to your clipboard. Then paste it into the SQL Editor and click "Run".</p>
+                
+                <div class="alert alert-warning">
+                    <strong>⚠️ Important:</strong> Make sure you copied the ENTIRE schema. The SQL Editor should show hundreds of lines.
+                </div>
+                
+                <button class="btn" onclick="copySchema()">
+                    📋 Copy Schema SQL
+                </button>
+                <button class="btn btn-secondary" onclick="showSchemaPreview()">
+                    👀 Preview
+                </button>
+                <button class="btn btn-success" onclick="markStepComplete(2)">
+                    ✅ I've Run It
+                </button>
+                
+                <div id="schemaPreview" style="display: none;">
+                    <div class="code-box">
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            Click "Copy Schema SQL" to load...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="step" id="step3">
+                <h2>Step 3: Copy RLS Policies</h2>
+                <p>In the SQL Editor, click "New query", then copy the RLS policies below and run them.</p>
+                
+                <div class="alert alert-info">
+                    <strong>🔒 What this does:</strong> Enables Row Level Security to protect your user data.
+                </div>
+                
+                <button class="btn" onclick="copyRLS()">
+                    📋 Copy RLS SQL
+                </button>
+                <button class="btn btn-secondary" onclick="showRLSPreview()">
+                    👀 Preview
+                </button>
+                <button class="btn btn-success" onclick="markStepComplete(3)">
+                    ✅ I've Run It
+                </button>
+                
+                <div id="rlsPreview" style="display: none;">
+                    <div class="code-box">
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            Click "Copy RLS SQL" to load...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="step" id="step4">
+                <h2>Step 4: Verify Tables Created</h2>
+                <p>Go to the Table Editor to confirm your tables were created successfully.</p>
+                
+                <div class="alert alert-success">
+                    <strong>✅ Expected result:</strong> You should see 17 tables including: profiles, user_settings, journal_entries, trips, memories, etc.
+                </div>
+                
+                <a href="https://app.supabase.com/project/lrgxrfyzakehsnifypmd/editor" target="_blank" class="btn">
+                    Open Table Editor →
+                </a>
+                <button class="btn btn-success" onclick="markStepComplete(4)">
+                    ✅ Tables Look Good
+                </button>
+            </div>
+
+            <!-- Step 5 -->
+            <div class="step" id="step5">
+                <h2>Step 5: Get Your Anon Key</h2>
+                <p>Copy your Supabase anon key and add it to your frontend/.env file.</p>
+                
+                <div class="alert alert-warning">
+                    <strong>⚠️ Important:</strong> Copy the "anon" or "public" key, NOT the service_role key!
+                </div>
+                
+                <a href="https://app.supabase.com/project/lrgxrfyzakehsnifypmd/settings/api" target="_blank" class="btn">
+                    Get Anon Key →
+                </a>
+                
+                <div class="code-box" style="margin-top: 15px;">
+                    <button class="copy-btn" onclick="copyToClipboard('VITE_SUPABASE_URL=https://lrgxrfyzakehsnifypmd.supabase.co\nVITE_SUPABASE_ANON_KEY=your-anon-key-here', this)">Copy</button>
+# Add these to frontend/.env:
+VITE_SUPABASE_URL=https://lrgxrfyzakehsnifypmd.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+                </div>
+                
+                <button class="btn btn-success" onclick="markStepComplete(5)">
+                    ✅ Added to .env
+                </button>
+            </div>
+
+            <!-- Completion -->
+            <div class="step" id="completion" style="display: none; background: #d1fae5; border-left-color: #10b981;">
+                <h2>🎉 Setup Complete!</h2>
+                <p>Your Supabase database is ready! Next steps:</p>
+                <ol style="margin-left: 20px; color: #065f46;">
+                    <li style="margin: 10px 0;">Test locally: <code style="background: white; padding: 4px 8px; border-radius: 4px;">cd frontend && npm run dev</code></li>
+                    <li style="margin: 10px 0;">Deploy to Vercel (see IMMEDIATE_ACTION_PLAN.md)</li>
+                    <li style="margin: 10px 0;">Test registration and login</li>
+                </ol>
+                
+                <div style="margin-top: 20px;">
+                    <a href="file:///C:/Users/Juan%20Miguel/Cronevia/IMMEDIATE_ACTION_PLAN.md" class="btn btn-success">
+                        Next: Deploy to Vercel →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let completedSteps = 0;
+        const totalSteps = 5;
+
+        function updateProgress() {
+            const percentage = (completedSteps / totalSteps) * 100;
+            document.getElementById('progressBar').style.width = percentage + '%';
+            
+            if (completedSteps === totalSteps) {
+                document.getElementById('completion').style.display = 'block';
+                document.getElementById('completion').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function markStepComplete(stepNumber) {
+            const step = document.getElementById('step' + stepNumber);
+            if (!step.classList.contains('completed')) {
+                step.classList.add('completed');
+                completedSteps++;
+                updateProgress();
+                
+                // Auto-scroll to next step
+                const nextStep = document.getElementById('step' + (stepNumber + 1));
+                if (nextStep) {
+                    setTimeout(() => {
+                        nextStep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 300);
+                }
+            }
+        }
+
+        async function copySchema() {
+            try {
+                const response = await fetch('../database/supabase_schema.sql');
+                const text = await response.text();
+                await navigator.clipboard.writeText(text);
+                alert('✅ Schema SQL copied to clipboard!\n\nNow:\n1. Go to Supabase SQL Editor\n2. Paste (Ctrl+V)\n3. Click "Run"');
+            } catch (error) {
+                alert('❌ Could not load schema file. Please copy manually from:\ndatabase/supabase_schema.sql');
+            }
+        }
+
+        async function copyRLS() {
+            try {
+                const response = await fetch('../database/supabase_rls_policies.sql');
+                const text = await response.text();
+                await navigator.clipboard.writeText(text);
+                alert('✅ RLS Policies copied to clipboard!\n\nNow:\n1. Click "New query" in SQL Editor\n2. Paste (Ctrl+V)\n3. Click "Run"');
+            } catch (error) {
+                alert('❌ Could not load RLS file. Please copy manually from:\ndatabase/supabase_rls_policies.sql');
+            }
+        }
+
+        async function showSchemaPreview() {
+            const preview = document.getElementById('schemaPreview');
+            if (preview.style.display === 'none') {
+                preview.style.display = 'block';
+                const codeBox = preview.querySelector('.code-box div');
+                codeBox.innerHTML = 'Loading schema preview...';
+                
+                try {
+                    const response = await fetch('../database/supabase_schema.sql');
+                    const text = await response.text();
+                    codeBox.innerHTML = text.substring(0, 2000).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '\n\n... (showing first 2000 characters)';
+                } catch (error) {
+                    codeBox.innerHTML = 'Could not load file. Please check that database/supabase_schema.sql exists.';
+                }
+            } else {
+                preview.style.display = 'none';
+            }
+        }
+
+        async function showRLSPreview() {
+            const preview = document.getElementById('rlsPreview');
+            if (preview.style.display === 'none') {
+                preview.style.display = 'block';
+                const codeBox = preview.querySelector('.code-box div');
+                codeBox.innerHTML = 'Loading RLS preview...';
+                
+                try {
+                    const response = await fetch('../database/supabase_rls_policies.sql');
+                    const text = await response.text();
+                    codeBox.innerHTML = text.substring(0, 2000).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '\n\n... (showing first 2000 characters)';
+                } catch (error) {
+                    codeBox.innerHTML = 'Could not load file. Please check that database/supabase_rls_policies.sql exists.';
+                }
+            } else {
+                preview.style.display = 'none';
+            }
+        }
+
+        async function copyToClipboard(text, button) {
+            await navigator.clipboard.writeText(text);
+            const originalText = button.textContent;
+            button.textContent = '✅ Copied!';
+            button.classList.add('copied');
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.classList.remove('copied');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+node_modules
+dist
+.env*
+scripts
+src/**/*.test.ts
+src/**/*.spec.ts
+*.md

@@ -35,7 +35,6 @@ const routes: RouteRecordRaw[] = [
     path: '/reset-password',
     name: 'reset-password',
     component: () => import('@/pages/ResetPasswordPage.vue'),
-    meta: { guest: true },
   },
 
   // App pages (require auth)
@@ -142,9 +141,50 @@ const routes: RouteRecordRaw[] = [
       // Super Admin routes
       {
         path: 'admin',
-        name: 'admin',
-        component: () => import('@/pages/AdminDashboardPage.vue'),
+        component: () => import('@/layouts/AdminLayout.vue'),
         meta: { requiresAuth: true, requiresAdmin: true },
+        children: [
+          {
+            path: '',
+            name: 'admin.dashboard',
+            component: () => import('@/pages/admin/AdminDashboardPage.vue'),
+          },
+          {
+            path: 'users',
+            name: 'admin.users',
+            component: () => import('@/pages/admin/AdminUsersPage.vue'),
+          },
+          {
+            path: 'users/:id',
+            name: 'admin.users.show',
+            component: () => import('@/pages/admin/AdminUserDetailPage.vue'),
+          },
+          {
+            path: 'activity',
+            name: 'admin.activity',
+            component: () => import('@/pages/admin/AdminActivityPage.vue'),
+          },
+          {
+            path: 'settings',
+            name: 'admin.settings',
+            component: () => import('@/pages/admin/AdminSettingsPage.vue'),
+          },
+          {
+            path: 'system',
+            name: 'admin.system',
+            component: () => import('@/pages/admin/AdminSystemPage.vue'),
+          },
+          {
+            path: 'profile',
+            name: 'admin.profile',
+            component: () => import('@/pages/admin/AdminProfilePage.vue'),
+          },
+          {
+            path: 'security',
+            name: 'admin.security',
+            component: () => import('@/pages/admin/AdminSecurityPage.vue'),
+          },
+        ],
       },
     ],
   },
@@ -194,7 +234,7 @@ router.beforeEach(async (to) => {
   }
 
   // Check account status for authenticated users
-  if (auth.isAuthenticated && !auth.isAccountActive) {
+  if (auth.isAuthenticated && auth.profile && !auth.isAccountActive) {
     // Account is suspended or inactive
     if (to.name !== 'login') {
       await auth.logout()

@@ -27,9 +27,11 @@ export interface Trip {
   id: string
   user_id: string
   title: string
+  destination?: string | null
   slug: string
   description: string | null
   cover_image_path: string | null
+  cover_media_id: string | null
   start_date: string | null
   end_date: string | null
   status: TripStatus
@@ -37,6 +39,7 @@ export interface Trip {
   country_codes: string | null
   created_at: string
   updated_at: string
+  media?: Media[]
 }
 
 export interface TripDay {
@@ -81,6 +84,7 @@ export interface ItineraryItem {
 export type Mood = 'happy' | 'excited' | 'peaceful' | 'nostalgic' | 'sad' | 'anxious' | 'neutral'
 
 export interface JournalEntry {
+  tags?: string[]
   id: string
   user_id: string
   trip_id: string | null
@@ -88,11 +92,20 @@ export interface JournalEntry {
   itinerary_item_id: string | null
   title: string
   content: string
-  mood: Mood | null
+  mood: string | null
+  mood_emoji: string | null
+  mood_label: string | null
+  location_name: string | null
+  latitude: number | null
+  longitude: number | null
+  location_source: 'geolocation' | 'search' | 'manual' | null
+  weather: string | null
   visibility: 'private' | 'shared' | 'public'
+  is_archived: boolean
   entry_date: string
   created_at: string
   updated_at: string
+  media?: Media[]
 }
 
 export interface Media {
@@ -119,6 +132,7 @@ export interface Memory {
   description: string | null
   memory_date: string
   visibility: 'private' | 'shared' | 'public'
+  is_archived: boolean
   media?: Media[]
   journal_entry?: JournalEntry | null
   created_at: string

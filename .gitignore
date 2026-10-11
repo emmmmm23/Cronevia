@@ -32,3 +32,10 @@ frontend/.env.local
 
 # SQLite dev database — use MySQL in production
 backend/database/database.sqlite
+
+# Generated SQL review bundle
+supabase/apply-existing-project.sql
+
+# Local Vercel project links
+.vercel/
+frontend/.vercel/

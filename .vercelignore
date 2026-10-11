@@ -1,0 +1,17 @@
+.git
+.kiro
+.kilo
+.vscode
+backend
+database
+supabase
+frontend/node_modules
+frontend/dist
+frontend/.env*
+frontend/scripts
+frontend/src/**/*.test.ts
+frontend/src/**/*.spec.ts
+*.md
+*.bat
+/*.html
+*.txt

@@ -8,7 +8,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
-import type { User as SupabaseUser, AuthError } from '@supabase/supabase-js'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { useJournalStore } from './journal'
+import { useTripsStore } from './trips'
+import { useMemoriesStore } from './memories'
+import { useDashboardStore } from './dashboard'
 import type { User } from '@/types'
 import type { Database } from '@/types/database.types'
 
@@ -35,16 +39,16 @@ export const useAuthStore = defineStore('auth', () => {
         username: profile.value.username,
         avatar_url: profile.value.avatar_url,
         bio: profile.value.bio,
-        timezone: profile.value.timezone,
-        locale: profile.value.locale,
+        timezone: profile.value.timezone ?? 'UTC',
+        locale: profile.value.locale ?? 'en',
         role: profile.value.role,
         account_status: profile.value.account_status,
       },
       // Legacy compatibility
       name: profile.value.full_name,
       avatar_path: profile.value.avatar_url,
-      timezone: profile.value.timezone,
-      locale: profile.value.locale,
+      timezone: profile.value.timezone ?? 'UTC',
+      locale: profile.value.locale ?? 'en',
       created_at: profile.value.created_at,
     }
   })
@@ -78,15 +82,15 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       // Listen for auth state changes
-      supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth state changed:', event)
+      supabase.auth.onAuthStateChange((_event, session) => {
         
         if (session?.user) {
           supabaseUser.value = session.user
-          await fetchProfile()
+          setTimeout(() => { void fetchProfile() }, 0)
         } else {
           supabaseUser.value = null
           profile.value = null
+          clearFeatureState()
         }
       })
     } catch (error) {
@@ -121,7 +125,7 @@ export const useAuthStore = defineStore('auth', () => {
         return
       }
 
-      profile.value = data
+      if (supabaseUser.value?.id === data.user_id) profile.value = data
     } catch (error) {
       console.error('Profile fetch exception:', error)
       profile.value = null
@@ -209,12 +213,17 @@ export const useAuthStore = defineStore('auth', () => {
       supabaseUser.value = data.user
       await fetchProfile()
 
+      if (!profile.value) {
+        await logout()
+        return { success: false, error: 'Your profile could not be loaded. Please try again.' }
+      }
       // Check account status
       if (profile.value?.account_status !== 'active') {
+        const accountStatus = profile.value.account_status
         await logout()
         return { 
           success: false, 
-          error: `Your account is ${profile.value?.account_status}. Please contact support.` 
+          error: `Your account is ${accountStatus}. Please contact support.`
         }
       }
 
@@ -230,6 +239,13 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * Logout current user
    */
+  function clearFeatureState() {
+    useJournalStore().clearEntries()
+    useTripsStore().clearTrips()
+    useMemoriesStore().clearMemories()
+    useDashboardStore().resetDashboardData()
+  }
+
   async function logout(): Promise<void> {
     try {
       loading.value = true
@@ -240,6 +256,7 @@ export const useAuthStore = defineStore('auth', () => {
         console.error('Logout error:', error)
       }
 
+      clearFeatureState()
       // Clear state regardless of error
       supabaseUser.value = null
       profile.value = null
