@@ -39,11 +39,19 @@ Once the automated assistant says "Setup Complete":
    npm run dev
    ```
 
-2. **Deploy to Vercel**:
-   - Open `IMMEDIATE_ACTION_PLAN.md`
-   - Change Root Directory to `frontend`
-   - Add environment variables
-   - Deploy
+2. **Deploy to Vercel** (✅ FIXED):
+   
+   **Option A - Automated Script**:
+   ```powershell
+   .\deploy-to-vercel.ps1
+   ```
+   
+   **Option B - Manual**:
+   ```powershell
+   vercel --prod
+   ```
+   
+   See `VERCEL_DEPLOYMENT_FIXED.md` for complete guide!
 
 ---
 
