@@ -184,3 +184,104 @@ onBeforeUnmount(() => {
   -ms-user-select: none;
 }
 </style>
+
+<style>
+/* Moveable handle styling (unscoped to affect dynamically created elements) */
+.moveable-control-box {
+  --moveable-color: #7B0323;
+  position: fixed;
+  width: 0;
+  height: 0;
+  left: 0;
+  top: 0;
+  z-index: 3000;
+}
+
+.moveable-line {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  background: var(--moveable-color);
+  transform-origin: 0 0;
+}
+
+.moveable-control {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--moveable-color);
+  margin-top: -6px;
+  margin-left: -6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 3000;
+  cursor: pointer;
+}
+
+.moveable-direction {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--moveable-color);
+  margin-top: -6px;
+  margin-left: -6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 3000;
+  cursor: pointer;
+}
+
+.moveable-rotation {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--moveable-color);
+  margin-top: -10px;
+  margin-left: -10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 3000;
+  cursor: pointer;
+}
+
+.moveable-rotation::before {
+  content: '⟲';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Resize cursor styles */
+.moveable-direction.moveable-n,
+.moveable-direction.moveable-s {
+  cursor: ns-resize;
+}
+
+.moveable-direction.moveable-w,
+.moveable-direction.moveable-e {
+  cursor: ew-resize;
+}
+
+.moveable-direction.moveable-nw,
+.moveable-direction.moveable-se {
+  cursor: nwse-resize;
+}
+
+.moveable-direction.moveable-ne,
+.moveable-direction.moveable-sw {
+  cursor: nesw-resize;
+}
+
+/* Selection outline */
+.moveable-line.moveable-direction {
+  background: var(--moveable-color);
+  opacity: 0.8;
+}
+</style>

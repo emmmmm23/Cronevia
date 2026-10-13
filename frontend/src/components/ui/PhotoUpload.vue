@@ -164,7 +164,7 @@ function handleDragLeave() {
       <div
         v-for="photo in existingPhotos"
         :key="photo.id"
-        class="relative aspect-square bg-[#f5ebdd] border border-[#d7c7b3] rounded overflow-hidden group"
+        class="photo-preview relative aspect-square bg-[#f5ebdd] border border-[#d7c7b3] rounded overflow-hidden group"
       >
         <img
           :src="`/storage/${photo.file_path}`"
@@ -190,7 +190,7 @@ function handleDragLeave() {
       <div
         v-for="(preview, idx) in previews"
         :key="idx"
-        class="relative aspect-square bg-[#f5ebdd] border border-[#d7c7b3] rounded overflow-hidden group"
+        class="photo-preview relative aspect-square bg-[#f5ebdd] border border-[#d7c7b3] rounded overflow-hidden group"
       >
         <img
           :src="preview.url"
