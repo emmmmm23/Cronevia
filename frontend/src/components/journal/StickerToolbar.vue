@@ -72,8 +72,14 @@ function handleRedo() {
       type="button"
       :disabled="!canUndo"
       :aria-label="canUndo ? 'Undo' : 'Nothing to undo'"
-      class="toolbar-btn"
-      :class="{ 'toolbar-btn-disabled': !canUndo }"
+      :class="[
+        'flex items-center justify-center w-8 h-8 rounded transition-colors',
+        'text-[#7B0323] bg-transparent',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+        canUndo 
+          ? 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]' 
+          : 'text-[#c4ad94] cursor-not-allowed opacity-50'
+      ]"
       @click="handleUndo"
     >
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -86,8 +92,14 @@ function handleRedo() {
       type="button"
       :disabled="!canRedo"
       :aria-label="canRedo ? 'Redo' : 'Nothing to redo'"
-      class="toolbar-btn"
-      :class="{ 'toolbar-btn-disabled': !canRedo }"
+      :class="[
+        'flex items-center justify-center w-8 h-8 rounded transition-colors',
+        'text-[#7B0323] bg-transparent',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+        canRedo 
+          ? 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]' 
+          : 'text-[#c4ad94] cursor-not-allowed opacity-50'
+      ]"
       @click="handleRedo"
     >
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -103,8 +115,14 @@ function handleRedo() {
       type="button"
       :disabled="disabled"
       aria-label="Duplicate sticker"
-      class="toolbar-btn"
-      :class="{ 'toolbar-btn-disabled': disabled }"
+      :class="[
+        'flex items-center justify-center w-8 h-8 rounded transition-colors',
+        'text-[#7B0323] bg-transparent',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+        disabled
+          ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+          : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+      ]"
       @click="handleDuplicate"
     >
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -117,8 +135,14 @@ function handleRedo() {
       type="button"
       :disabled="disabled"
       aria-label="Delete sticker"
-      class="toolbar-btn toolbar-btn-danger"
-      :class="{ 'toolbar-btn-disabled': disabled }"
+      :class="[
+        'flex items-center justify-center w-8 h-8 rounded transition-colors',
+        'text-[#7B0323] bg-transparent',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+        disabled
+          ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+          : 'hover:bg-[#fdf2f3] hover:text-[#5a0019] active:bg-[#efe2cf]'
+      ]"
       @click="handleDelete"
     >
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -136,8 +160,14 @@ function handleRedo() {
         :disabled="disabled"
         aria-label="Bring to front"
         title="Bring to front"
-        class="toolbar-btn"
-        :class="{ 'toolbar-btn-disabled': disabled }"
+        :class="[
+          'flex items-center justify-center w-8 h-8 rounded transition-colors',
+          'text-[#7B0323] bg-transparent',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+          disabled
+            ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+            : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+        ]"
         @click="handleToFront"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -150,8 +180,14 @@ function handleRedo() {
         :disabled="disabled"
         aria-label="Bring forward"
         title="Bring forward"
-        class="toolbar-btn"
-        :class="{ 'toolbar-btn-disabled': disabled }"
+        :class="[
+          'flex items-center justify-center w-8 h-8 rounded transition-colors',
+          'text-[#7B0323] bg-transparent',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+          disabled
+            ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+            : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+        ]"
         @click="handleBringForward"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -164,8 +200,14 @@ function handleRedo() {
         :disabled="disabled"
         aria-label="Send backward"
         title="Send backward"
-        class="toolbar-btn"
-        :class="{ 'toolbar-btn-disabled': disabled }"
+        :class="[
+          'flex items-center justify-center w-8 h-8 rounded transition-colors',
+          'text-[#7B0323] bg-transparent',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+          disabled
+            ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+            : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+        ]"
         @click="handleSendBackward"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -178,8 +220,14 @@ function handleRedo() {
         :disabled="disabled"
         aria-label="Send to back"
         title="Send to back"
-        class="toolbar-btn"
-        :class="{ 'toolbar-btn-disabled': disabled }"
+        :class="[
+          'flex items-center justify-center w-8 h-8 rounded transition-colors',
+          'text-[#7B0323] bg-transparent',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+          disabled
+            ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+            : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+        ]"
         @click="handleToBack"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -198,8 +246,14 @@ function handleRedo() {
         :disabled="disabled"
         aria-label="Rotate left 15 degrees"
         title="Rotate -15°"
-        class="toolbar-btn"
-        :class="{ 'toolbar-btn-disabled': disabled }"
+        :class="[
+          'flex items-center justify-center w-8 h-8 rounded transition-colors',
+          'text-[#7B0323] bg-transparent',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+          disabled
+            ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+            : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+        ]"
         @click="handleRotate(-15)"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -212,8 +266,14 @@ function handleRedo() {
         :disabled="disabled"
         aria-label="Rotate right 15 degrees"
         title="Rotate +15°"
-        class="toolbar-btn"
-        :class="{ 'toolbar-btn-disabled': disabled }"
+        :class="[
+          'flex items-center justify-center w-8 h-8 rounded transition-colors',
+          'text-[#7B0323] bg-transparent',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323]',
+          disabled
+            ? 'text-[#c4ad94] cursor-not-allowed opacity-50'
+            : 'hover:bg-[#fdfaf5] active:bg-[#efe2cf]'
+        ]"
         @click="handleRotate(15)"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -225,19 +285,5 @@ function handleRedo() {
 </template>
 
 <style scoped>
-.toolbar-btn {
-  @apply flex items-center justify-center w-8 h-8 rounded transition-colors;
-  @apply text-[#7B0323] bg-transparent hover:bg-[#fdfaf5] active:bg-[#efe2cf];
-  @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7B0323];
-}
-
-.toolbar-btn-disabled {
-  @apply text-[#c4ad94] cursor-not-allowed;
-  @apply hover:bg-transparent active:bg-transparent;
-  opacity: 0.5;
-}
-
-.toolbar-btn-danger:not(.toolbar-btn-disabled):hover {
-  @apply bg-[#fdf2f3] text-[#5a0019];
-}
+/* No custom styles needed - all styles are inline Tailwind classes */
 </style>

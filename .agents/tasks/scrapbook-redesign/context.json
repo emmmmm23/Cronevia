@@ -1,0 +1,28 @@
+{
+  "project_type": "Vue 3 + TypeScript SPA with Supabase backend",
+  "language": "TypeScript, Vue 3 Composition API",
+  "build_system": "Vite 5.4.21, npm workspaces",
+  "test_framework": "vitest (manual browser testing for visual verification)",
+  "build_command": "cd frontend && npm run build",
+  "test_command": "cd frontend && npm run dev, then manual browser testing at http://127.0.0.1:5173",
+  "verification_instructions": "Run npm run build to ensure no TypeScript errors, then npm run dev and manually inspect the journal editor page at /journal/new and /journal/:id routes. Visual verification is required for this UI-heavy feature. Check browser console for runtime errors.",
+  "snapshot_or_generated_files": "None that require checking in",
+  "environment_constraints": "Frontend is a standalone Vite app. Backend is Supabase (already deployed with sticker tables). No Laravel server needed for this feature. All changes are frontend-only.",
+  "contribution_requirements": "Build must complete without TypeScript errors. No new dependencies needed (moveable@0.53.0 already installed). Follow existing Vue 3 Composition API patterns. Match existing color scheme: burgundy #7B0323, cream #F5F1E8, denim #2C4054, tan #d7c7b3.",
+  "key_patterns": "Components use <script setup lang='ts'> with TypeScript. Props via defineProps<Props>(). Emits via defineEmits<{...}>(). Composables in src/composables/. Services in src/services/. Supabase client in src/lib/supabase.ts. Colors follow vintage journal aesthetic. Form inputs use aria-labels and semantic HTML.",
+  "relevant_files": [
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\pages\\JournalEditorPage.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\index.html",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\StickerEditor.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\StickerTray.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\StickerCanvas.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\StickerToolbar.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\StickerPlacement.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\composables\\useStickerEditor.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\composables\\useStickerAssets.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\services\\sticker.service.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\types\\sticker.types.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\public\\stickers-builtin\\"
+  ],
+  "directory_structure": "frontend/src/pages/ contains page components, frontend/src/components/journal/ contains journal-specific components including all 5 sticker components, frontend/src/composables/ contains reactive state management, frontend/src/services/ contains Supabase API wrappers, frontend/public/stickers-builtin/ contains 12 SVG built-in stickers"
+}

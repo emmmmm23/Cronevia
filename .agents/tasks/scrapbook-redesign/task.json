@@ -1,0 +1,10 @@
+{
+  "task_id": "scrapbook-redesign",
+  "task_description": "Complete scrapbook visual redesign and sticker system integration for Cronevia journal editor",
+  "status": "pending",
+  "feature_order": [
+    "FEAT-001",
+    "FEAT-002"
+  ],
+  "blocked_reason": null
+}

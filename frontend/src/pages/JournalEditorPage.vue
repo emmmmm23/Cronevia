@@ -13,13 +13,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute, RouterLink, onBeforeRouteLeave } from 'vue-router'
 import { useJournalStore } from '@/stores/journal'
+import { useAuthStore } from '@/stores/auth'
 import PhotoUpload from '@/components/ui/PhotoUpload.vue'
+import StickerEditor from '@/components/journal/StickerEditor.vue'
 import type { Media } from '@/types'
 import api from '@/services/api.service'
 
 const router = useRouter()
 const route  = useRoute()
 const store  = useJournalStore()
+const authStore = useAuthStore()
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 const entryId  = route.params.id as string | undefined
@@ -59,6 +62,10 @@ const existingPhotos = ref<Media[]>([])
 const photosToDelete = ref<string[]>([])
 const uploadingPhotos = ref(false)
 
+// Stickers
+const stickersDirty = ref(false)
+const stickerEditorRef = ref<InstanceType<typeof StickerEditor> | null>(null)
+
 // ── Load existing entry when editing ─────────────────────────────────────────
 onMounted(async () => {
   if (isEditing && entryId) {
@@ -90,7 +97,7 @@ onMounted(async () => {
 
 // ── Unsaved changes guard ─────────────────────────────────────────────────────
 onBeforeRouteLeave((_to, _from, next) => {
-  if (isDirty.value && !saveSuccess.value) {
+  if ((isDirty.value || stickersDirty.value) && !saveSuccess.value) {
     const confirmed = window.confirm(
       'You have unsaved changes. Leave without saving?'
     )
@@ -388,8 +395,18 @@ async function handleSave() {
     }
     uploadingPhotos.value = false
 
+    // Save sticker placements
+    try {
+      await stickerEditorRef.value?.savePlacements()
+    } catch (stickerErr) {
+      console.error('Failed to save sticker placements:', stickerErr)
+      // Don't fail the whole save if stickers fail - user can retry
+      saveError.value = 'Entry saved, but sticker placements failed to save. Please try saving again.'
+    }
+
     saveSuccess.value = true
     isDirty.value     = false
+    stickersDirty.value = false
     await router.push({ name: 'journal' })
   } catch (err: unknown) {
     const e = err as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } }
@@ -419,6 +436,14 @@ function handleRemoveExistingPhoto(photoId: string) {
 function closePickers() {
   showMoodPicker.value     = false
   showLocationPicker.value = false
+}
+
+// ── Sticker handlers ───────────────────────────────────────────────────────────
+function handleStickerDirtyChange(dirty: boolean) {
+  stickersDirty.value = dirty
+  if (dirty) {
+    markDirty()
+  }
 }
 </script>
 
@@ -747,6 +772,18 @@ function closePickers() {
           />
         </div>
 
+        <!-- Sticker Editor -->
+        <div class="mt-6">
+          <StickerEditor
+            ref="stickerEditorRef"
+            :entry-id="savedEntryId || null"
+            :view-mode="false"
+            :user-id="authStore.user?.id"
+            @dirty-change="handleStickerDirtyChange"
+            @placements-change="markDirty"
+          />
+        </div>
+
         <!-- Save button -->
         <div class="mt-6">
           <button
@@ -932,6 +969,18 @@ function closePickers() {
             :existing-photos="existingPhotos"
             :disabled="saving || uploadingPhotos"
             @remove-existing="handleRemoveExistingPhoto"
+          />
+        </div>
+
+        <!-- Sticker Editor -->
+        <div class="mb-6">
+          <StickerEditor
+            ref="stickerEditorRef"
+            :entry-id="savedEntryId || null"
+            :view-mode="false"
+            :user-id="authStore.user?.id"
+            @dirty-change="handleStickerDirtyChange"
+            @placements-change="markDirty"
           />
         </div>
 
