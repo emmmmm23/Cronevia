@@ -236,3 +236,17 @@ export interface SearchResults {
   journal_entries: JournalEntry[]
   memories: Memory[]
 }
+
+// Sticker types
+export type {
+  StickerAsset,
+  StickerPlacement,
+  StickerInstance,
+  StickerSurface,
+  StickerLayout,
+  StickerCategory,
+  StickerWithAsset,
+  StickerUploadValidation,
+  StickerTransform,
+  StickerHistoryEntry
+} from './sticker.types'
