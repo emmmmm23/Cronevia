@@ -24,33 +24,38 @@ export async function requireUser() {
 }
 
 /**
- * Fetch built-in sticker assets (user_id IS NULL)
- * Returns assets with signed URLs from stickers-builtin bucket
+ * Fetch built-in sticker assets from public directory
+ * Returns assets with local URLs (no Supabase required)
  */
 export async function fetchBuiltinAssets(): Promise<Array<StickerAsset & { url: string }>> {
-  const rows = check(
-    await supabase
-      .from('sticker_assets')
-      .select('*')
-      .is('user_id', null)
-      .order('category', { ascending: true })
-      .order('created_at', { ascending: true })
-  ) || []
+  // Built-in stickers are in public/stickers-builtin/ and available immediately
+  const builtinStickers = [
+    { path: 'heart-01.svg', category: 'hearts', name: 'Heart 1' },
+    { path: 'heart-02.svg', category: 'hearts', name: 'Heart 2' },
+    { path: 'star-01.svg', category: 'stars', name: 'Star 1' },
+    { path: 'star-02.svg', category: 'stars', name: 'Star 2' },
+    { path: 'flower-01.svg', category: 'flowers', name: 'Flower 1' },
+    { path: 'flower-02.svg', category: 'flowers', name: 'Flower 2' },
+    { path: 'tape-01.svg', category: 'tape', name: 'Washi Tape 1' },
+    { path: 'tape-02.svg', category: 'tape', name: 'Washi Tape 2' },
+    { path: 'leaf-01.svg', category: 'leaves', name: 'Leaf 1' },
+    { path: 'stamp-travel-01.svg', category: 'travel', name: 'Travel Stamp' },
+    { path: 'doodle-abstract-01.svg', category: 'doodles', name: 'Doodle 1' },
+    { path: 'doodle-abstract-02.svg', category: 'doodles', name: 'Doodle 2' },
+  ]
 
-  // Generate signed URLs for each builtin asset
-  return Promise.all(
-    rows.map(async (row) => {
-      const signed = check(
-        await supabase.storage
-          .from('stickers-builtin')
-          .createSignedUrl(row.storage_path, 3600)
-      )
-      return {
-        ...row,
-        url: signed.signedUrl
-      }
-    })
-  )
+  return builtinStickers.map((sticker) => ({
+    id: `builtin-${sticker.path}`,
+    user_id: null,
+    storage_path: sticker.path,
+    mime_type: 'image/svg+xml',
+    width: 100,
+    height: 100,
+    category: sticker.category,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    url: `/stickers-builtin/${sticker.path}`
+  }))
 }
 
 /**
@@ -270,6 +275,7 @@ export async function deleteAsset(assetId: string): Promise<void> {
 
 /**
  * Fetch sticker placements for a journal entry
+ * Returns placements with asset information joined
  */
 export async function fetchPlacements(entryId: string): Promise<StickerPlacement[]> {
   const user = await requireUser()
@@ -287,17 +293,42 @@ export async function fetchPlacements(entryId: string): Promise<StickerPlacement
   const placements = check(
     await supabase
       .from('journal_sticker_placements')
-      .select('*')
+      .select(`
+        *,
+        sticker_asset:sticker_assets (
+          id,
+          user_id,
+          storage_path,
+          mime_type,
+          category
+        )
+      `)
       .eq('journal_entry_id', entryId)
       .order('z_index', { ascending: true })
   ) || []
 
-  return placements
+  // For built-in stickers, convert asset ID to our client-side format
+  return placements.map((p: any) => {
+    const placement = { ...p }
+    
+    // If the asset is built-in (user_id is null), use our client-side ID format
+    if (p.sticker_asset && p.sticker_asset.user_id === null) {
+      placement.sticker_asset_id = `builtin-${p.sticker_asset.storage_path}`
+    }
+    
+    // Remove the joined asset data from the placement object
+    delete placement.sticker_asset
+    
+    return placement as StickerPlacement
+  })
 }
 
 /**
  * Save sticker placements for a journal entry
  * Replaces all existing placements atomically
+ * 
+ * For built-in stickers (IDs starting with "builtin-"), we store the path directly
+ * For custom stickers, we reference the database ID
  */
 export async function savePlacements(entryId: string, placements: StickerPlacement[]): Promise<void> {
   const user = await requireUser()
@@ -321,20 +352,74 @@ export async function savePlacements(entryId: string, placements: StickerPlaceme
   )
 
   // Insert new placements if any
+  // For built-in stickers, we need to ensure they exist in the database or handle them specially
   if (placements.length > 0) {
-    check(
-      await supabase
-        .from('journal_sticker_placements')
-        .insert(placements.map(p => ({
+    // For built-in placements, we'll create entries in sticker_assets if they don't exist
+    // This ensures referential integrity
+    const builtinPlacements = placements.filter(p => p.sticker_asset_id.startsWith('builtin-'))
+
+    for (const bp of builtinPlacements) {
+      const storagePath = bp.sticker_asset_id.replace('builtin-', '')
+      
+      // Check if this builtin sticker exists in database
+      const existing = await supabase
+        .from('sticker_assets')
+        .select('id')
+        .is('user_id', null)
+        .eq('storage_path', storagePath)
+        .maybeSingle()
+
+      if (!existing.data) {
+        // Insert it
+        const category = storagePath.split('-')[0] // e.g., 'heart' from 'heart-01.svg'
+        await supabase
+          .from('sticker_assets')
+          .insert({
+            user_id: null,
+            storage_path: storagePath,
+            mime_type: 'image/svg+xml',
+            width: 100,
+            height: 100,
+            category: category
+          })
+      }
+    }
+
+    // Now get the actual database IDs for built-in stickers
+    const placementsToInsert = await Promise.all(
+      placements.map(async (p) => {
+        let assetId = p.sticker_asset_id
+
+        if (assetId.startsWith('builtin-')) {
+          const storagePath = assetId.replace('builtin-', '')
+          const asset = check(
+            await supabase
+              .from('sticker_assets')
+              .select('id')
+              .is('user_id', null)
+              .eq('storage_path', storagePath)
+              .single()
+          )
+          assetId = asset.id
+        }
+
+        return {
           id: p.id,
           journal_entry_id: entryId,
-          sticker_asset_id: p.sticker_asset_id,
+          sticker_asset_id: assetId,
           x: p.x,
           y: p.y,
           width: p.width,
           rotation: p.rotation,
           z_index: p.z_index
-        })))
+        }
+      })
+    )
+
+    check(
+      await supabase
+        .from('journal_sticker_placements')
+        .insert(placementsToInsert)
     )
   }
 }
