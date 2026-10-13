@@ -217,6 +217,7 @@ function selectMood(emoji: string, label: string) {
 function clearMood() {
   moodEmoji.value = ''
   moodLabel.value = ''
+  markDirty()
 }
 
 // ── Location ──────────────────────────────────────────────────────────────────
@@ -422,12 +423,12 @@ function closePickers() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5ebdd]" @click.self="closePickers">
+  <div class="min-h-screen bg-[#2C4054] graph-paper" @click.self="closePickers">
 
     <!-- Header -->
-    <div class="bg-[#fdfaf5] border-b border-[#e5d4bb] sticky top-0 z-10">
-      <div class="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-        <RouterLink :to="{ name: 'journal' }" class="inline-flex items-center gap-1.5 text-sm text-[#8a5c2e] hover:text-[#7B0323] transition-colors" :class="{ 'pointer-events-none opacity-50': saving }">
+    <div class="bg-[#3a4f61] border-b border-[#1a2634] sticky top-0 z-10">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+        <RouterLink :to="{ name: 'journal' }" class="inline-flex items-center gap-1.5 text-sm text-[#d7c7b3] hover:text-[#F5F1E8] transition-colors" :class="{ 'pointer-events-none opacity-50': saving }">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
           </svg>
@@ -436,17 +437,17 @@ function closePickers() {
 
         <div class="flex items-center gap-2">
           <!-- Save error inline -->
-          <p v-if="saveError" role="alert" class="text-xs text-[#7B0323] max-w-xs text-right">{{ saveError }}</p>
+          <p v-if="saveError" role="alert" class="text-xs text-red-300 max-w-xs text-right">{{ saveError }}</p>
 
           <button
             type="button"
             :disabled="!canSave"
             :aria-busy="saving"
             :class="[
-              'inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded border transition-all',
+              'inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded border transition-all shadow-md',
               canSave
-                ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
-                : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-60',
+                ? 'bg-[#7B0323] text-[#F5F1E8] border-[#5a0019] hover:bg-[#5a0019] shadow-[#5a0019]/30'
+                : 'bg-[#d7c7b3] text-[#F5F1E8] border-[#d7c7b3] cursor-not-allowed opacity-60',
             ]"
             @click="handleSave"
           >
@@ -460,170 +461,185 @@ function closePickers() {
       </div>
     </div>
 
-    <!-- Form -->
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-6">
+    <!-- Desktop Two-Page Spread -->
+    <div class="hidden md:grid md:grid-cols-2 gap-0 max-w-6xl mx-auto px-4 py-8">
+      <!-- Left Page -->
+      <div class="notebook-page notebook-page-left min-h-[800px] p-8">
+        <!-- Hero text -->
+        <div class="mb-6">
+          <p class="text-xs font-semibold uppercase tracking-widest text-[#8a5c2e] mb-1">
+            {{ isEditing ? 'Edit entry' : 'New entry' }}
+          </p>
+          <p class="text-sm text-[#6b4423]">Write something worth remembering.</p>
+        </div>
 
-      <!-- Hero text -->
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-widest text-[#8a5c2e] mb-1">
-          {{ isEditing ? 'Edit entry' : 'New entry' }}
-        </p>
-        <p class="text-sm text-[#6b4423]">Write something worth remembering.</p>
-      </div>
-
-      <!-- Title -->
-      <div>
-        <label for="entry-title" class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-          Title <span class="text-[#7B0323]" aria-label="required">*</span>
-        </label>
-        <input
-          id="entry-title"
-          v-model="title"
-          type="text"
-          placeholder="What should you call this memory?"
-          autocomplete="off"
-          class="w-full px-3 py-3 bg-[#fdfaf5] border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
-          style="font-family:'Playfair Display',Georgia,serif; font-size:1.1rem;"
-          @input="markDirty"
-        />
-      </div>
-
-      <!-- Date + Mood row -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        <!-- Date -->
-        <div>
-          <label for="entry-date" class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-            Date <span class="text-[#7B0323]" aria-label="required">*</span>
-          </label>
+        <!-- Title (handwritten font) -->
+        <div class="mb-6">
+          <label for="entry-title-desktop" class="sr-only">Title</label>
           <input
-            id="entry-date"
-            v-model="date"
-            type="date"
-            class="w-full px-3 py-2.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded text-sm text-[#2b1a10] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
-            @change="markDirty"
+            id="entry-title-desktop"
+            v-model="title"
+            type="text"
+            placeholder="What should you call this memory?"
+            autocomplete="off"
+            class="w-full px-0 py-2 bg-transparent border-b-2 border-[#d7c7b3] text-[#2b1a10] placeholder:text-[#a68e73]/50 focus:outline-none focus:border-[#7B0323] transition handwritten-title"
+            @input="markDirty"
           />
         </div>
 
-        <!-- Mood -->
-        <div class="relative">
-          <p class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-            How are you feeling?
-          </p>
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            :aria-expanded="showMoodPicker"
-            aria-label="Select mood"
-            class="w-full flex items-center gap-2 px-3 py-2.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded text-sm text-left transition hover:border-[#7B0323]"
-            @click.stop="showMoodPicker = !showMoodPicker; showLocationPicker = false"
-          >
-            <span v-if="moodEmoji" class="text-xl leading-none" aria-hidden="true">{{ moodEmoji }}</span>
-            <span :class="moodLabel ? 'text-[#2b1a10]' : 'text-[#a68e73]'">
-              {{ moodLabel || 'Select mood' }}
-            </span>
+        <!-- Metadata badges -->
+        <div class="flex flex-wrap items-center gap-2 mb-6">
+          <!-- Date badge -->
+          <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded-full text-xs">
+            <svg class="w-3.5 h-3.5 text-[#7B0323]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            <input
+              v-model="date"
+              type="date"
+              class="bg-transparent border-none text-xs text-[#2b1a10] p-0 focus:outline-none"
+              @change="markDirty"
+            />
+          </div>
+
+          <!-- Mood badge -->
+          <div v-if="moodEmoji" class="inline-flex items-center gap-0">
             <button
-              v-if="moodEmoji"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] border-r-0 rounded-l-full text-xs hover:border-[#7B0323] transition"
+              @click.stop="showMoodPicker = !showMoodPicker; showLocationPicker = false"
+            >
+              <span class="text-base leading-none" aria-hidden="true">{{ moodEmoji }}</span>
+              <span class="text-[#2b1a10]">{{ moodLabel }}</span>
+            </button>
+            <button
               type="button"
               aria-label="Clear mood"
-              class="ml-auto text-[#c4ad94] hover:text-[#7B0323]"
+              class="px-2 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded-r-full text-[#c4ad94] hover:text-[#7B0323] hover:border-[#7B0323] transition"
               @click.stop="clearMood"
             >
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+          <button
+            v-else
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded-full text-xs text-[#a68e73] hover:border-[#7B0323] hover:text-[#7B0323] transition"
+            @click.stop="showMoodPicker = !showMoodPicker; showLocationPicker = false"
+          >
+            <span>😊 Add mood</span>
           </button>
 
-          <!-- Mood picker popover -->
-          <div
-            v-if="showMoodPicker"
-            role="dialog"
-            aria-label="Mood selector"
-            class="absolute z-30 top-full left-0 mt-1 w-full sm:w-96 bg-[#fdfaf5] border border-[#d7c7b3] rounded shadow-lg max-h-72 overflow-y-auto"
-            @click.stop
+          <!-- Location badge -->
+          <div v-if="locationName" class="inline-flex items-center gap-0">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] border-r-0 rounded-l-full text-xs hover:border-[#7B0323] transition"
+              @click.stop="showLocationPicker = !showLocationPicker; showMoodPicker = false"
+            >
+              <svg class="w-3.5 h-3.5 text-[#7B0323]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+              </svg>
+              <span class="text-[#2b1a10] truncate max-w-[150px]">{{ locationName }}</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Clear location"
+              class="px-2 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded-r-full text-[#c4ad94] hover:text-[#7B0323] hover:border-[#7B0323] transition"
+              @click.stop="clearLocation"
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <button
+            v-else
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded-full text-xs text-[#a68e73] hover:border-[#7B0323] hover:text-[#7B0323] transition"
+            @click.stop="showLocationPicker = !showLocationPicker; showMoodPicker = false"
           >
-            <div class="px-3 py-2 border-b border-[#efe2cf] flex items-center justify-between">
-              <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423]">How are you feeling?</p>
-              <button type="button" aria-label="Close mood picker" class="text-[#a68e73] hover:text-[#2b1a10]" @click="showMoodPicker = false">
+            <span>📍 Add location</span>
+          </button>
+        </div>
+
+        <!-- Content (serif font) -->
+        <div>
+          <label for="entry-content-desktop" class="sr-only">Your story</label>
+          <textarea
+            id="entry-content-desktop"
+            v-model="content"
+            rows="14"
+            placeholder="Start writing…"
+            aria-describedby="content-counter-desktop"
+            class="w-full px-0 py-2 bg-transparent border-none text-[#2b1a10] text-base placeholder:text-[#a68e73]/50 focus:outline-none resize-none serif-content"
+            style="min-height: 300px;"
+            @input="markDirty"
+          />
+          <p id="content-counter-desktop" class="text-xs text-right mt-1" :class="content.length > 9000 ? 'text-[#7B0323]' : 'text-[#a68e73]'">
+            {{ content.length.toLocaleString() }} / 10,000
+          </p>
+        </div>
+
+        <!-- Mood picker popover (desktop left page) -->
+        <div
+          v-if="showMoodPicker"
+          role="dialog"
+          aria-label="Mood selector"
+          class="fixed z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-[#fdfaf5] border border-[#d7c7b3] rounded shadow-2xl max-h-[80vh] overflow-y-auto"
+          @click.stop
+        >
+          <div class="px-4 py-3 border-b border-[#efe2cf] flex items-center justify-between sticky top-0 bg-[#fdfaf5]">
+            <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423]">How are you feeling?</p>
+            <button type="button" aria-label="Close mood picker" class="text-[#a68e73] hover:text-[#2b1a10]" @click="showMoodPicker = false">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="p-4 flex flex-col gap-3">
+            <div v-for="cat in moodCategories" :key="cat.name">
+              <p class="text-xs font-semibold uppercase tracking-wider text-[#a68e73] mb-1.5">{{ cat.name }}</p>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  v-for="m in cat.moods"
+                  :key="m.emoji"
+                  type="button"
+                  :aria-label="`${m.label} mood`"
+                  :aria-pressed="moodEmoji === m.emoji"
+                  :class="[
+                    'text-2xl w-10 h-10 flex items-center justify-center rounded transition hover:bg-[#f5ebdd]',
+                    moodEmoji === m.emoji ? 'bg-[#f5ebdd] ring-2 ring-[#7B0323]' : '',
+                  ]"
+                  @click="selectMood(m.emoji, m.label)"
+                >
+                  {{ m.emoji }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location picker popover (desktop left page) -->
+        <div
+          v-if="showLocationPicker"
+          role="dialog"
+          aria-label="Location picker"
+          class="fixed z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-[#fdfaf5] border border-[#d7c7b3] rounded shadow-2xl"
+          @click.stop
+        >
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423]">Add your location</p>
+              <button type="button" aria-label="Close location picker" class="text-[#a68e73] hover:text-[#2b1a10]" @click="showLocationPicker = false">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div class="p-3 flex flex-col gap-3">
-              <div v-for="cat in moodCategories" :key="cat.name">
-                <p class="text-xs font-semibold uppercase tracking-wider text-[#a68e73] mb-1.5">{{ cat.name }}</p>
-                <div class="flex flex-wrap gap-1">
-                  <button
-                    v-for="m in cat.moods"
-                    :key="m.emoji"
-                    type="button"
-                    :aria-label="`${m.label} mood`"
-                    :aria-pressed="moodEmoji === m.emoji"
-                    :class="[
-                      'text-2xl w-10 h-10 flex items-center justify-center rounded transition hover:bg-[#f5ebdd]',
-                      moodEmoji === m.emoji ? 'bg-[#f5ebdd] ring-2 ring-[#7B0323]' : '',
-                    ]"
-                    @click="selectMood(m.emoji, m.label)"
-                  >
-                    {{ m.emoji }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Location -->
-      <div class="relative">
-        <p class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-          Where were you? <span class="normal-case font-normal text-[#a68e73]">(optional)</span>
-        </p>
-
-        <!-- Location selected -->
-        <div v-if="locationName" class="flex items-center gap-2 px-3 py-2.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded text-sm text-[#2b1a10]">
-          <svg class="w-4 h-4 text-[#7B0323] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
-          </svg>
-          <span class="flex-1 truncate">{{ locationName }}</span>
-          <button type="button" aria-label="Change location" class="text-xs font-medium text-[#7B0323] hover:underline shrink-0" @click.stop="showLocationPicker = true">
-            Change
-          </button>
-          <button type="button" aria-label="Remove location" class="text-[#c4ad94] hover:text-[#7B0323]" @click="clearLocation">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Add location button -->
-        <button
-          v-else
-          type="button"
-          aria-label="Add location"
-          class="w-full flex items-center gap-2 px-3 py-2.5 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded text-sm text-[#a68e73] hover:border-[#7B0323] hover:text-[#7B0323] transition"
-          @click.stop="showLocationPicker = !showLocationPicker; showMoodPicker = false"
-        >
-          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
-          </svg>
-          📍 Add Location
-        </button>
-
-        <!-- Location picker popover -->
-        <div
-          v-if="showLocationPicker"
-          role="dialog"
-          aria-label="Location picker"
-          class="absolute z-30 top-full left-0 mt-1 w-full bg-[#fdfaf5] border border-[#d7c7b3] rounded shadow-lg"
-          @click.stop
-        >
-          <div class="px-4 py-3">
-            <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-3">Add your location</p>
 
             <!-- Error -->
             <p v-if="locationError" role="alert" class="text-xs text-[#7B0323] mb-3 bg-[#fdf2f3] border border-[#eeaab5] px-3 py-2 rounded">
@@ -648,7 +664,7 @@ function closePickers() {
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
               </svg>
             </button>
-            <p class="text-xs text-[#a68e73] mb-3">Cronevia uses your location only to save where this memory happened. Permission is requested only when you choose this option.</p>
+            <p class="text-xs text-[#a68e73] mb-3">Cronevia uses your location only to save where this memory happened.</p>
 
             <!-- Search location -->
             <div class="flex gap-2 mb-2">
@@ -688,87 +704,464 @@ function closePickers() {
         </div>
       </div>
 
-      <!-- Content -->
-      <div>
-        <label for="entry-content" class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-          Your story <span class="text-[#7B0323]" aria-label="required">*</span>
-        </label>
-        <textarea
-          id="entry-content"
-          v-model="content"
-          rows="14"
-          placeholder="Start writing…"
-          aria-describedby="content-counter"
-          class="w-full px-4 py-3.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded text-[#2b1a10] text-sm leading-relaxed placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition resize-y"
-          style="min-height: 260px; line-height: 1.8;"
-          @input="markDirty"
-        />
-        <p id="content-counter" class="text-xs text-right mt-1" :class="content.length > 9000 ? 'text-[#7B0323]' : 'text-[#a68e73]'">
-          {{ content.length.toLocaleString() }} / 10,000
-        </p>
-      </div>
+      <!-- Right Page -->
+      <div class="notebook-page notebook-page-right min-h-[800px] p-8">
+        <!-- Tags -->
+        <div class="mb-6">
+          <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-2">
+            Tags <span class="normal-case font-normal text-[#a68e73]">(optional)</span>
+          </p>
+          <div class="flex flex-wrap gap-2 mb-2" role="list" aria-label="Selected tags">
+            <span
+              v-for="tag in tags"
+              :key="tag"
+              role="listitem"
+              class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-[#f5ebdd] border border-[#d7c7b3] rounded text-[#8a5c2e] font-medium"
+            >
+              {{ tag }}
+              <button type="button" :aria-label="`Remove tag ${tag}`" class="text-[#c4ad94] hover:text-[#7B0323]" @click="removeTag(tag)">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          </div>
+          <input
+            v-model="tagInput"
+            type="text"
+            placeholder="Add a tag, press Enter…"
+            aria-label="Add tag"
+            class="max-w-xs px-3 py-2 text-sm bg-[#fdfaf5] border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
+            @keydown="handleTagKeydown"
+            @blur="addTag"
+          />
+        </div>
 
-      <!-- Tags -->
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-2">
-          Tags <span class="normal-case font-normal text-[#a68e73]">(optional)</span>
-        </p>
-        <div class="flex flex-wrap gap-2 mb-2" role="list" aria-label="Selected tags">
-          <span
-            v-for="tag in tags"
-            :key="tag"
-            role="listitem"
-            class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-[#f5ebdd] border border-[#d7c7b3] rounded text-[#8a5c2e] font-medium"
+        <!-- Photos with Polaroid styling -->
+        <div class="polaroid-container">
+          <PhotoUpload
+            v-model="newPhotos"
+            :existing-photos="existingPhotos"
+            :disabled="saving || uploadingPhotos"
+            @remove-existing="handleRemoveExistingPhoto"
+          />
+        </div>
+
+        <!-- Save button -->
+        <div class="mt-6">
+          <button
+            type="button"
+            :disabled="!canSave"
+            :aria-busy="saving"
+            :class="[
+              'w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-8 py-3.5 rounded border transition-all',
+              canSave
+                ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
+                : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-60',
+            ]"
+            @click="handleSave"
           >
-            {{ tag }}
-            <button type="button" :aria-label="`Remove tag ${tag}`" class="text-[#c4ad94] hover:text-[#7B0323]" @click="removeTag(tag)">
+            <svg v-if="saving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            {{ saving ? 'Saving…' : (isEditing ? 'Save Changes' : 'Save Entry') }}
+          </button>
+          <p v-if="saveError" role="alert" class="mt-2 text-xs text-[#7B0323] text-center">{{ saveError }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Single-Page Layout -->
+    <div class="md:hidden max-w-3xl mx-auto px-4 py-8">
+      <div class="notebook-page min-h-[600px] p-6 rounded-lg shadow-2xl">
+        <!-- Hero text -->
+        <div class="mb-6">
+          <p class="text-xs font-semibold uppercase tracking-widest text-[#8a5c2e] mb-1">
+            {{ isEditing ? 'Edit entry' : 'New entry' }}
+          </p>
+          <p class="text-sm text-[#6b4423]">Write something worth remembering.</p>
+        </div>
+
+        <!-- Title (handwritten font) -->
+        <div class="mb-6">
+          <label for="entry-title-mobile" class="sr-only">Title</label>
+          <input
+            id="entry-title-mobile"
+            v-model="title"
+            type="text"
+            placeholder="What should you call this memory?"
+            autocomplete="off"
+            class="w-full px-0 py-2 bg-transparent border-b-2 border-[#d7c7b3] text-[#2b1a10] placeholder:text-[#a68e73]/50 focus:outline-none focus:border-[#7B0323] transition handwritten-title"
+            @input="markDirty"
+          />
+        </div>
+
+        <!-- Metadata badges -->
+        <div class="flex flex-wrap items-center gap-2 mb-6">
+          <!-- Date badge -->
+          <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded-full text-xs">
+            <svg class="w-3.5 h-3.5 text-[#7B0323]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            <input
+              v-model="date"
+              type="date"
+              class="bg-transparent border-none text-xs text-[#2b1a10] p-0 focus:outline-none"
+              @change="markDirty"
+            />
+          </div>
+
+          <!-- Mood badge -->
+          <div v-if="moodEmoji" class="inline-flex items-center gap-0">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] border-r-0 rounded-l-full text-xs hover:border-[#7B0323] transition"
+              @click.stop="showMoodPicker = !showMoodPicker; showLocationPicker = false"
+            >
+              <span class="text-base leading-none" aria-hidden="true">{{ moodEmoji }}</span>
+              <span class="text-[#2b1a10]">{{ moodLabel }}</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Clear mood"
+              class="px-2 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded-r-full text-[#c4ad94] hover:text-[#7B0323] hover:border-[#7B0323] transition"
+              @click.stop="clearMood"
+            >
               <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
-          </span>
+          </div>
+          <button
+            v-else
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded-full text-xs text-[#a68e73] hover:border-[#7B0323] hover:text-[#7B0323] transition"
+            @click.stop="showMoodPicker = !showMoodPicker; showLocationPicker = false"
+          >
+            <span>😊 Add mood</span>
+          </button>
+
+          <!-- Location badge -->
+          <div v-if="locationName" class="inline-flex items-center gap-0">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] border-r-0 rounded-l-full text-xs hover:border-[#7B0323] transition"
+              @click.stop="showLocationPicker = !showLocationPicker; showMoodPicker = false"
+            >
+              <svg class="w-3.5 h-3.5 text-[#7B0323]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+              </svg>
+              <span class="text-[#2b1a10] truncate max-w-[120px]">{{ locationName }}</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Clear location"
+              class="px-2 py-1.5 bg-[#fdfaf5] border border-[#d7c7b3] rounded-r-full text-[#c4ad94] hover:text-[#7B0323] hover:border-[#7B0323] transition"
+              @click.stop="clearLocation"
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <button
+            v-else
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded-full text-xs text-[#a68e73] hover:border-[#7B0323] hover:text-[#7B0323] transition"
+            @click.stop="showLocationPicker = !showLocationPicker; showMoodPicker = false"
+          >
+            <span>📍 Add location</span>
+          </button>
         </div>
-        <input
-          v-model="tagInput"
-          type="text"
-          placeholder="Add a tag, press Enter…"
-          aria-label="Add tag"
-          class="max-w-xs px-3 py-2 text-sm bg-[#fdfaf5] border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
-          @keydown="handleTagKeydown"
-          @blur="addTag"
-        />
-      </div>
 
-      <!-- Photos -->
-      <PhotoUpload
-        v-model="newPhotos"
-        :existing-photos="existingPhotos"
-        :disabled="saving || uploadingPhotos"
-        @remove-existing="handleRemoveExistingPhoto"
-      />
+        <!-- Content (serif font) -->
+        <div class="mb-6">
+          <label for="entry-content-mobile" class="sr-only">Your story</label>
+          <textarea
+            id="entry-content-mobile"
+            v-model="content"
+            rows="12"
+            placeholder="Start writing…"
+            aria-describedby="content-counter-mobile"
+            class="w-full px-0 py-2 bg-transparent border-none text-[#2b1a10] text-base placeholder:text-[#a68e73]/50 focus:outline-none resize-none serif-content"
+            style="min-height: 300px;"
+            @input="markDirty"
+          />
+          <p id="content-counter-mobile" class="text-xs text-right mt-1" :class="content.length > 9000 ? 'text-[#7B0323]' : 'text-[#a68e73]'">
+            {{ content.length.toLocaleString() }} / 10,000
+          </p>
+        </div>
 
-      <!-- Save button (bottom of form, mobile-friendly) -->
-      <div class="pt-2">
-        <button
-          type="button"
-          :disabled="!canSave"
-          :aria-busy="saving"
-          :class="[
-            'w-full sm:w-auto inline-flex items-center justify-center gap-2 text-sm font-semibold px-8 py-3.5 rounded border transition-all',
-            canSave
-              ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
-              : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-60',
-          ]"
-          @click="handleSave"
+        <!-- Tags -->
+        <div class="mb-6">
+          <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-2">
+            Tags <span class="normal-case font-normal text-[#a68e73]">(optional)</span>
+          </p>
+          <div class="flex flex-wrap gap-2 mb-2" role="list" aria-label="Selected tags">
+            <span
+              v-for="tag in tags"
+              :key="tag"
+              role="listitem"
+              class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-[#f5ebdd] border border-[#d7c7b3] rounded text-[#8a5c2e] font-medium"
+            >
+              {{ tag }}
+              <button type="button" :aria-label="`Remove tag ${tag}`" class="text-[#c4ad94] hover:text-[#7B0323]" @click="removeTag(tag)">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          </div>
+          <input
+            v-model="tagInput"
+            type="text"
+            placeholder="Add a tag, press Enter…"
+            aria-label="Add tag"
+            class="w-full px-3 py-2 text-sm bg-[#fdfaf5] border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
+            @keydown="handleTagKeydown"
+            @blur="addTag"
+          />
+        </div>
+
+        <!-- Photos with Polaroid styling -->
+        <div class="polaroid-container mb-6">
+          <PhotoUpload
+            v-model="newPhotos"
+            :existing-photos="existingPhotos"
+            :disabled="saving || uploadingPhotos"
+            @remove-existing="handleRemoveExistingPhoto"
+          />
+        </div>
+
+        <!-- Save button -->
+        <div>
+          <button
+            type="button"
+            :disabled="!canSave"
+            :aria-busy="saving"
+            :class="[
+              'w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-8 py-3.5 rounded border transition-all',
+              canSave
+                ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
+                : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-60',
+            ]"
+            @click="handleSave"
+          >
+            <svg v-if="saving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            {{ saving ? 'Saving…' : (isEditing ? 'Save Changes' : 'Save Entry') }}
+          </button>
+          <p v-if="saveError" role="alert" class="mt-2 text-xs text-[#7B0323] text-center">{{ saveError }}</p>
+        </div>
+
+        <!-- Mood picker popover (mobile) -->
+        <div
+          v-if="showMoodPicker"
+          role="dialog"
+          aria-label="Mood selector"
+          class="fixed z-30 inset-x-4 top-1/2 -translate-y-1/2 bg-[#fdfaf5] border border-[#d7c7b3] rounded shadow-2xl max-h-[80vh] overflow-y-auto"
+          @click.stop
         >
-          <svg v-if="saving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
-          {{ saving ? 'Saving…' : (isEditing ? 'Save Changes' : 'Save Entry') }}
-        </button>
-        <p v-if="saveError" role="alert" class="mt-2 text-xs text-[#7B0323]">{{ saveError }}</p>
+          <div class="px-4 py-3 border-b border-[#efe2cf] flex items-center justify-between sticky top-0 bg-[#fdfaf5]">
+            <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423]">How are you feeling?</p>
+            <button type="button" aria-label="Close mood picker" class="text-[#a68e73] hover:text-[#2b1a10]" @click="showMoodPicker = false">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="p-4 flex flex-col gap-3">
+            <div v-for="cat in moodCategories" :key="cat.name">
+              <p class="text-xs font-semibold uppercase tracking-wider text-[#a68e73] mb-1.5">{{ cat.name }}</p>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  v-for="m in cat.moods"
+                  :key="m.emoji"
+                  type="button"
+                  :aria-label="`${m.label} mood`"
+                  :aria-pressed="moodEmoji === m.emoji"
+                  :class="[
+                    'text-2xl w-10 h-10 flex items-center justify-center rounded transition hover:bg-[#f5ebdd]',
+                    moodEmoji === m.emoji ? 'bg-[#f5ebdd] ring-2 ring-[#7B0323]' : '',
+                  ]"
+                  @click="selectMood(m.emoji, m.label)"
+                >
+                  {{ m.emoji }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location picker popover (mobile) -->
+        <div
+          v-if="showLocationPicker"
+          role="dialog"
+          aria-label="Location picker"
+          class="fixed z-30 inset-x-4 top-1/2 -translate-y-1/2 bg-[#fdfaf5] border border-[#d7c7b3] rounded shadow-2xl max-h-[80vh] overflow-y-auto"
+          @click.stop
+        >
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-xs font-semibold uppercase tracking-wider text-[#6b4423]">Add your location</p>
+              <button type="button" aria-label="Close location picker" class="text-[#a68e73] hover:text-[#2b1a10]" @click="showLocationPicker = false">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Error -->
+            <p v-if="locationError" role="alert" class="text-xs text-[#7B0323] mb-3 bg-[#fdf2f3] border border-[#eeaab5] px-3 py-2 rounded">
+              {{ locationError }}
+            </p>
+
+            <!-- Use my location -->
+            <button
+              type="button"
+              :disabled="locationLoading"
+              class="w-full flex items-center gap-2 px-4 py-3 bg-[#f5ebdd] border border-[#d7c7b3] rounded text-sm font-medium text-[#2b1a10] hover:border-[#7B0323] hover:text-[#7B0323] transition mb-2 disabled:opacity-50"
+              @click="requestGeolocation"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+              </svg>
+              <span v-if="locationLoading">Getting your location…</span>
+              <span v-else>Use My Current Location</span>
+              <svg v-if="locationLoading" class="w-4 h-4 animate-spin ml-auto" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            </button>
+            <p class="text-xs text-[#a68e73] mb-3">Cronevia uses your location only to save where this memory happened.</p>
+
+            <!-- Search location -->
+            <div class="flex gap-2 mb-2">
+              <input
+                v-model="manualLocationInput"
+                type="text"
+                placeholder="Search for a place…"
+                aria-label="Search location"
+                class="flex-1 px-3 py-2.5 text-sm bg-[#fdfaf5] border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
+                @keydown.enter="searchLocation"
+              />
+              <button
+                type="button"
+                :disabled="locationLoading || !manualLocationInput.trim()"
+                class="px-4 py-2.5 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] border border-[#5a0019] rounded hover:bg-[#5a0019] transition disabled:opacity-50"
+                @click="searchLocation"
+              >
+                Search
+              </button>
+            </div>
+            <button
+              type="button"
+              class="text-xs text-[#8a5c2e] hover:text-[#7B0323] hover:underline"
+              @click="setManualLocation"
+            >
+              Or just type a location name →
+            </button>
+
+            <button
+              type="button"
+              class="w-full mt-3 text-center text-xs text-[#a68e73] hover:text-[#2b1a10] py-2"
+              @click="showLocationPicker = false; locationError = ''"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Graph paper background */
+.graph-paper {
+  background-image: 
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.3) 0px, rgba(255,255,255,0.3) 1px, transparent 1px, transparent 20px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.3) 0px, rgba(255,255,255,0.3) 1px, transparent 1px, transparent 20px);
+  background-size: 20px 20px;
+}
+
+/* Notebook page styling */
+.notebook-page {
+  background: #F5F1E8;
+  position: relative;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.05);
+}
+
+/* Notebook page binding shadows */
+.notebook-page-left {
+  box-shadow: 
+    inset 0 0 30px rgba(0,0,0,0.05),
+    inset -4px 0 8px rgba(0,0,0,0.1);
+}
+
+.notebook-page-right {
+  box-shadow: 
+    inset 0 0 30px rgba(0,0,0,0.05),
+    inset 4px 0 8px rgba(0,0,0,0.1);
+}
+
+/* Pastel corner decoration (sparkle) */
+.notebook-page::after {
+  content: '✦';
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 1.5rem;
+  color: rgba(255,182,193,0.4);
+  pointer-events: none;
+}
+
+/* Handwritten title font */
+.handwritten-title {
+  font-family: 'Indie Flower', 'Patrick Hand', cursive;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+/* Serif content font */
+.serif-content {
+  font-family: 'Crimson Text', 'Merriweather', Georgia, serif;
+  line-height: 1.8;
+}
+
+/* Polaroid photo frame styling */
+.polaroid-container :deep(.photo-preview) {
+  background: white;
+  padding: 12px 12px 48px 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  display: inline-block;
+  position: relative;
+  margin: 8px;
+}
+
+.polaroid-container :deep(.photo-preview:nth-child(odd)) {
+  transform: rotate(-2deg);
+}
+
+.polaroid-container :deep(.photo-preview:nth-child(even)) {
+  transform: rotate(2deg);
+}
+
+/* Washi tape decoration */
+.polaroid-container :deep(.photo-preview::before) {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 20%;
+  width: 60%;
+  height: 20px;
+  background: linear-gradient(135deg, rgba(255,182,193,0.7) 0%, rgba(255,192,203,0.8) 100%);
+  opacity: 0.8;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+</style>
