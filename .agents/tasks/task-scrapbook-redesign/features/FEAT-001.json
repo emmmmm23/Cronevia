@@ -1,0 +1,22 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix broken photo previews in PhotoUpload.vue. Currently prepends '/storage/' to photo.file_path which is already a full Supabase signed URL, breaking the image src. Change line 109 to use photo.file_path directly without the prefix. This is a critical bug affecting all photo displays.",
+  "status": "pending",
+  "steps": [
+    "Read c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\ui\\PhotoUpload.vue lines 100-120 to locate the broken img src attribute",
+    "Change line 109 from `:src=\"\\`/storage/${photo.file_path}\\`\"` to `:src=\"photo.file_path\"` — the file_path already contains the full signed HTTPS URL from Supabase createSignedUrl",
+    "Verify no other locations in PhotoUpload.vue incorrectly prefix the signed URL",
+    "Save the file"
+  ],
+  "acceptance_criteria": [
+    "Line 109 reads :src=\"photo.file_path\" without any path prefix",
+    "Photo previews display correctly when viewing an existing journal entry with uploaded photos"
+  ],
+  "verification": [
+    "Run `npm run build` from frontend/ — TypeScript compilation succeeds",
+    "Start `npm run dev` and navigate to /journal/:id for an entry with photos; photos should display instead of showing broken image placeholders"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

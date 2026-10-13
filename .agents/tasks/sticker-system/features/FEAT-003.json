@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "UI components for sticker editing. Implements StickerPlacement.vue (single sticker renderer), StickerCanvas.vue (Moveable integration), StickerToolbar.vue (contextual controls), StickerTray.vue (library + upload UI), and StickerEditor.vue (top-level orchestrator with Decorate mode toggle and keyboard shortcuts). This feature provides the complete editing interface. Depends on FEAT-001 (types) and FEAT-002 (composables).",
+  "status": "pending",
+  "steps": [
+    "Create frontend/src/components/journal/ directory",
+    "Create frontend/src/components/journal/StickerPlacement.vue — renders single sticker with CSS transforms from normalized coords, props (placement, canvasWidth, canvasHeight, isSelected, viewMode), emits click to select, selection outline 2px dashed burgundy #7B0323 when selected and not viewMode",
+    "Create frontend/src/components/journal/StickerCanvas.vue — orchestrates all placements + Moveable component, props (placements, selectedId, viewMode, canvasEl), renders StickerPlacement for each, Moveable bound to selected element with draggable/resizable/rotatable/keepRatio/bounds config, emits update:placement on drag/resize/rotate, save-snapshot on dragEnd/resizeEnd/rotateEnd, select/deselect on clicks",
+    "Create frontend/src/components/journal/StickerToolbar.vue — contextual toolbar with icon buttons (Duplicate, Delete, Bring Forward/Back, To Front/Back, Rotate ±15°, Undo, Redo), props (selectedPlacement, canUndo, canRedo), emits action events, Cronevia aesthetic (cream bg, burgundy accents), disabled state when no selection",
+    "Create frontend/src/components/journal/StickerTray.vue — responsive library UI (desktop: 280px side panel, mobile: bottom sheet), tabs (Library, My Stickers) using radix-vue Tabs, grid of stickers (4 columns), Upload button, uses useStickerAssets composable, emits add-sticker and close, styled in Cronevia aesthetic",
+    "Create frontend/src/components/journal/StickerEditor.vue — top-level orchestrator, props (entryId, viewMode), Decorate mode toggle, renders StickerCanvas/StickerTray/StickerToolbar when decorateMode=true, keyboard shortcuts (Delete, Ctrl+Z, Ctrl+Shift+Z, arrow keys), uses useStickerEditor composable, loads placements on mount, emits dirty-change and placements-change"
+  ],
+  "acceptance_criteria": [
+    "All 5 components exist in frontend/src/components/journal/ and compile without errors",
+    "StickerCanvas correctly integrates Moveable library (drag/resize/rotate work)",
+    "StickerToolbar buttons trigger correct composable functions",
+    "StickerTray displays builtin stickers in Library tab, user stickers in My Stickers tab, upload flow works",
+    "StickerEditor keyboard shortcuts function correctly (Delete removes selected, Ctrl+Z undoes, arrows nudge)",
+    "Responsive layout: desktop shows side tray, mobile shows bottom sheet",
+    "View mode renders placements without selection outlines or editing controls",
+    "Cronevia aesthetic maintained (cream #f5ebdd, burgundy #7B0323, pastels, restrained shadows)"
+  ],
+  "verification": [
+    "cd frontend && npm run build — all components compile",
+    "cd frontend && npm run dev — open journal editor, click Decorate toggle, verify tray opens, add sticker, drag/resize/rotate works, toolbar buttons work, keyboard shortcuts work"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

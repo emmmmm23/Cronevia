@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Services, composables, and built-in sticker library. Implements sticker.service.ts for Supabase CRUD (fetch assets, upload with validation, save placements), useStickerAssets composable for library management, useStickerEditor composable for editing state and undo/redo, and creates 10-12 built-in SVG stickers. This feature provides the business logic and data layer for sticker functionality. Depends on FEAT-001 (database and types must exist first).",
+  "status": "pending",
+  "steps": [
+    "Create frontend/src/services/sticker.service.ts with functions: fetchBuiltinAssets() (query sticker_assets WHERE user_id IS NULL, generate signed URLs from stickers-builtin bucket), fetchUserAssets(userId) (query WHERE user_id = userId, signed URLs from stickers-custom), uploadStickerAsset(file) (validate PNG/WebP, max 5MB, max 2000x2000px, check transparency via canvas, upload to stickers-custom/{userId}/, insert row), deleteAsset(assetId) (check no placements reference it, delete storage file and row), fetchPlacements(entryId), savePlacements(entryId, placements), validateLayout(layout)",
+    "Create frontend/src/composables/useStickerAssets.ts with reactive state (builtinAssets, userAssets, loading, uploadProgress, error) and functions (loadBuiltins, loadUserAssets, uploadAsset, deleteUserAsset). Uses sticker.service.ts internally.",
+    "Create frontend/src/composables/useStickerEditor.ts with reactive state (placements, selectedId, history, historyIndex, canvasWidth, canvasHeight) and functions (addSticker, updatePlacement, deleteSticker, duplicateSticker, bringForward/sendBackward/bringToFront/sendToBack, selectSticker, undo, redo, saveSnapshot, normalizeCoords, denormalizeCoords, loadPlacements, savePlacements). Snapshot-based undo/redo, max 50 states.",
+    "Create frontend/public/stickers-builtin/ directory",
+    "Design and export 10-12 SVG stickers in Cronevia aesthetic (cream #f5ebdd, burgundy #7B0323, pastels): star-01.svg, star-02.svg, heart-01.svg, heart-02.svg, flower-01.svg, flower-02.svg, tape-01.svg, tape-02.svg, leaf-01.svg, stamp-travel-01.svg, doodle-abstract-01.svg, doodle-abstract-02.svg. Each SVG viewBox=\"0 0 100 100\", max 2KB, no embedded scripts.",
+    "Manually insert builtin sticker metadata into sticker_assets table via Supabase SQL Editor (user_id=NULL, storage_path='star-01.svg', mime_type='image/svg+xml', width=100, height=100) for each SVG file"
+  ],
+  "acceptance_criteria": [
+    "sticker.service.ts compiles and exports all declared functions",
+    "useStickerAssets and useStickerEditor composables compile without errors",
+    "10-12 SVG files exist in frontend/public/stickers-builtin/ and are valid SVG (can be rendered in browser)",
+    "Builtin sticker metadata rows exist in sticker_assets table with user_id=NULL",
+    "Upload validation correctly rejects files over 5MB, non-PNG/WebP, over 2000x2000px, fully opaque images",
+    "Undo/redo correctly restores previous states, max 50 history snapshots enforced",
+    "Coordinate normalization round-trips correctly (normalizeCoords → denormalizeCoords returns original px values within 1px tolerance)"
+  ],
+  "verification": [
+    "cd frontend && npm run build — service and composables compile",
+    "Open http://127.0.0.1:5173/stickers-builtin/star-01.svg in dev server — SVG renders",
+    "Query Supabase sticker_assets table — 10-12 rows with user_id IS NULL"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

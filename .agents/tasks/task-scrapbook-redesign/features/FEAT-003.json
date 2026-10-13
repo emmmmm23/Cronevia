@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Implement read-only view mode in JournalEditorPage.vue. When route is /journal/:id (not /new), start in view mode showing the saved entry in notebook composition. Left page: title (Caveat font, large), date, mood emoji+label, location, story (readable line-height, paragraph breaks preserved). Right page: photos in Polaroid frames with rotation, tags as decorative labels. Add 'Back to Journal' and 'Edit Entry' buttons. Fetch entry if not in store. Handle loading, not-found, and error states with designed fallbacks. No editing controls visible in view mode.",
+  "status": "pending",
+  "steps": [
+    "In c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\pages\\JournalEditorPage.vue, add reactive ref `mode` with type 'view' | 'edit'. Initialize: if entryId exists, mode = 'view'; else mode = 'edit'.",
+    "Wrap the entire existing form template in a v-if=\"mode === 'edit'\" block to conditionally show edit UI.",
+    "Create a new v-else-if=\"mode === 'view'\" block that uses NotebookSpread and NotebookPage components. Left page slot: render entry title (h1, font-family Caveat, size ~2.5rem, color warm brown), date (formatted, small), mood emoji + label (if present), location with pin icon (if present), and story content (preserve line breaks with white-space: pre-wrap or v-for over paragraphs split by \\n\\n). Right page slot: render photos using ScrapbookPhoto with small random rotations (-3 to +3 degrees), and tags as small decorative pill labels. Add 2-3 ScrapbookDecoration elements scattered with aria-hidden, positioned absolutely to avoid blocking text.",
+    "Add view mode action bar: 'Back to Journal' RouterLink (to /journal) and 'Edit Entry' button that sets mode.value = 'edit'. Place at top or bottom of notebook, styled to match scrapbook aesthetic (handwritten font for Edit button?).",
+    "Ensure existing onMounted logic fetches the entry via API if not in store (already implemented lines 145-153), handle loading state with a subtle spinner or skeleton on the notebook pages.",
+    "Add error state UI: if fetch fails, show message on notebook page 'Entry not found' or 'Unable to load entry' with a 'Back to Journal' link. Use warm, friendly error styling.",
+    "Preserve authorization: if API returns 403/401, show 'You don't have permission to view this entry' and redirect after 2 seconds.",
+    "Test: navigate directly to /journal/:id with a valid ID, verify view mode displays; click Edit Entry, verify it switches to edit mode in-place (no route change)."
+  ],
+  "acceptance_criteria": [
+    "Opening /journal/:id starts in view mode showing saved entry in notebook layout",
+    "View mode displays title, date, mood, location, story, photos, and tags without editing controls",
+    "Photos appear in Polaroid frames with subtle rotation on the right page",
+    "'Edit Entry' button switches to edit mode without changing the URL",
+    "'Back to Journal' link navigates to /journal",
+    "Loading state shows appropriate placeholder",
+    "Not-found or error states display clear, friendly messages",
+    "Story content preserves paragraph breaks"
+  ],
+  "verification": [
+    "Run `npm run build` from frontend/ — TypeScript compilation succeeds",
+    "Start dev server, create a new entry via /journal/new with title, story, mood, location, and photos, save it. Note the entry ID from the redirect.",
+    "Navigate to /journal/:id — verify view mode displays the saved entry in notebook layout with all fields visible and photos displayed",
+    "Click 'Edit Entry' — verify UI switches to edit mode showing the same form as before",
+    "Navigate to /journal/nonexistent-id — verify error state displays",
+    "Close dev server"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

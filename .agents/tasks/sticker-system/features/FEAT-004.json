@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Integration, testing, and polish. Integrates StickerEditor into JournalEditorPage with save/cancel/dirty state tracking, creates unit tests (useStickerEditor, StickerTray, StickerEditor) and E2E test (complete add/edit/save/restore workflow), adds performance optimizations (lazy loading, debounced drag, GSAP animations), accessibility (ARIA labels, keyboard nav, screen reader), and documentation (STICKERS.md). This feature completes the system and ensures production readiness. Depends on FEAT-001, FEAT-002, FEAT-003.",
+  "status": "pending",
+  "steps": [
+    "Modify frontend/src/pages/JournalEditorPage.vue: import StickerEditor, add stickerPlacements and stickerDirty refs, combine isDirty logic, render <StickerEditor> after content textarea, update handleSave to call sticker.service.savePlacements after entry save, update onMounted to load placements when editing, update cancel/route-leave guard to restore saved sticker state",
+    "Create frontend/src/composables/useStickerEditor.test.ts: test addSticker (correct normalized coords), updatePlacement (clamping), deleteSticker, duplicateSticker, layer operations, undo/redo (history snapshots), normalizeCoords/denormalizeCoords round-trip, max 50 history states",
+    "Create frontend/src/components/journal/StickerTray.test.ts: test builtin stickers render, user stickers render, upload button, add sticker emits, delete confirmation, responsive layout (mock viewport sizes). Use @vue/test-utils, mock useStickerAssets.",
+    "Create frontend/src/components/journal/StickerEditor.test.ts: test Decorate toggle shows/hides tray, keyboard shortcuts (Delete, Ctrl+Z, Ctrl+Shift+Z, arrows), view mode hides controls, dirty state emitted, placements loaded on mount",
+    "Create frontend/tests/e2e/stickers.spec.ts: full workflow test (sign in, create journal entry, enable Decorate, add builtin sticker, drag/resize/rotate, duplicate, delete, save, navigate away, return, verify persisted, view mode)",
+    "Add performance optimizations: loading=\"lazy\" on sticker images, debounce Moveable events (16ms/60fps), memoize denormalized coords, GSAP fade/scale transitions (200ms) for add/delete",
+    "Add accessibility: ARIA labels on all interactive elements, keyboard focus management (Tab through stickers, Enter to select), test with screen reader",
+    "Create frontend/docs/STICKERS.md: document architecture, how to add builtins, upload constraints, RLS policies, limitations (max 100 stickers, 5MB uploads), troubleshooting"
+  ],
+  "acceptance_criteria": [
+    "JournalEditorPage integration complete: Decorate toggle visible in edit mode, stickers save with entry, cancel restores saved state, view mode shows stickers without controls",
+    "All unit tests pass: cd frontend && npm run test",
+    "E2E test passes: cd frontend && npm run test:e2e (requires Supabase instance)",
+    "Interactions smooth, no jank (60fps drag/resize)",
+    "All interactive elements have ARIA labels and keyboard navigation works",
+    "Documentation complete and accurate in frontend/docs/STICKERS.md"
+  ],
+  "verification": [
+    "cd frontend && npm run build — compiles without errors",
+    "cd frontend && npm run test — all unit tests pass",
+    "cd frontend && npm run test:e2e — E2E test passes",
+    "cd frontend && npm run dev — full workflow works: create entry, add stickers, edit, save, reload, verify persisted"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

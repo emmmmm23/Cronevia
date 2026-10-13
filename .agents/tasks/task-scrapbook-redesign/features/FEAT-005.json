@@ -1,0 +1,38 @@
+{
+  "id": "FEAT-005",
+  "type": "feat",
+  "description": "Implement responsive behavior for mobile and tablet. On screens <768px (mobile), stack notebook pages vertically instead of side-by-side, simplify center binding, reduce decoration density. On 768px-1024px (tablet), adjust spacing and font sizes. Ensure touch targets are at least 44×44px, text remains readable, and controls are accessible. No horizontal scrolling at 375px width. Adjust NotebookSpread, NotebookPage, ScrapbookPhoto, and JournalEditorPage layouts. Respect prefers-reduced-motion for animations/transitions. Test on 375px, 768px, 1024px, and 1280px+ widths.",
+  "status": "pending",
+  "steps": [
+    "In c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\NotebookSpread.vue, add Tailwind responsive classes or media queries: flex-col on small screens (sm:flex-row for desktop), adjust max-width to ensure pages fit within viewport minus header height (account for h-16 = 64px header from AppLayout.vue).",
+    "In NotebookSpread, simplify center binding on mobile: reduce shadow, use a simpler divider line between stacked pages or remove binding entirely on mobile for cleaner vertical flow.",
+    "In c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\NotebookPage.vue, adjust padding on small screens (more compact), verify graph grid scales appropriately or adjust grid size for mobile legibility.",
+    "In c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\ScrapbookPhoto.vue, ensure photos scale down on mobile (max-width 100%, responsive grid if multiple photos), maintain aspect ratio, keep touch targets around remove buttons or interactions ≥44px.",
+    "In c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\pages\\JournalEditorPage.vue view and edit modes, adjust font sizes for mobile: title may shrink slightly, story text remains readable (min 16px to avoid zoom on iOS). Adjust spacing, ensure buttons are large enough for touch. In edit mode, ensure sticky or fixed action bar for Save/Cancel does not obscure content.",
+    "Add conditional rendering or CSS to reduce decoration density on mobile (fewer ScrapbookDecoration elements or smaller size) to avoid clutter.",
+    "Wrap any animations or transitions (e.g., mode switch, popover open/close) in prefers-reduced-motion media query: disable or reduce animations if user prefers reduced motion.",
+    "Test at 375px width: verify no horizontal scroll, all text readable, buttons tappable. Test at 768px (tablet): verify layout adapts gracefully. Test at 1280px (desktop): verify full spread displays with proper spacing."
+  ],
+  "acceptance_criteria": [
+    "On mobile (<768px), notebook pages stack vertically with simplified or no center binding",
+    "All text is readable (≥16px on mobile for body text)",
+    "Touch targets for buttons and interactive elements are ≥44×44px",
+    "No horizontal scrolling at 375px viewport width",
+    "Photos scale responsively and maintain aspect ratio",
+    "Save/Cancel actions are accessible and do not obscure content on small screens",
+    "Decoration density is reduced on mobile to avoid clutter",
+    "Animations/transitions respect prefers-reduced-motion preference",
+    "Layout adapts smoothly across 375px, 768px, 1024px, and 1280px+ breakpoints"
+  ],
+  "verification": [
+    "Run `npm run build` from frontend/ — TypeScript compilation succeeds",
+    "Start dev server, open /journal/:id (view mode) and resize browser to 375px width — verify pages stack, no horizontal scroll, text readable, buttons tappable",
+    "Switch to edit mode at 375px — verify inputs, textarea, photo upload, and Save/Cancel are usable without horizontal scroll",
+    "Resize to 768px — verify layout adapts, spacing comfortable",
+    "Resize to 1280px — verify full two-page spread displays with proper binding and spacing",
+    "Enable prefers-reduced-motion in browser DevTools, interact with mode switch and popovers — verify animations are disabled or minimal",
+    "Close dev server"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

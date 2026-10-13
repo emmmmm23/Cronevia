@@ -1,0 +1,39 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Transform edit mode to use the scrapbook notebook composition. Replace the plain form layout with NotebookSpread. Left page: title input styled like handwriting on paper (transparent bg, bottom border only, Caveat font), date picker, mood selector, location picker, and story textarea (minimal styling, looks like writing on graph paper). Right page: integrated PhotoUpload component restyled to fit scrapbook aesthetic, tags input. Make inputs feel like writing on the page while remaining accessible native controls. Provide 'Save Changes' (prominent) and 'Cancel' (secondary) actions. Cancel from edit mode: if entryId exists, revert to view mode and restore saved state; if new entry, navigate back to /journal. Preserve validation, unsaved-change warning, upload limits, and all existing save/error handling.",
+  "status": "pending",
+  "steps": [
+    "In c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\pages\\JournalEditorPage.vue edit mode block (v-if=\"mode === 'edit'\"), replace the max-w-3xl container div with NotebookSpread component.",
+    "Left page slot: render title as an input with transparent background, only bottom border (border-bottom: 2px solid currentColor), font-family Caveat, font-size 2rem, placeholder 'Untitled memory...'. Keep the label with for= and required indicator. Ensure focus styles are clear (thicker underline or subtle shadow).",
+    "Continue left page: render date input (existing field, restyle with subtle rounded border to blend with graph paper), mood picker button (keep existing popover logic, style button with handwritten font label), location picker (keep existing logic, restyle selected location display with a small pin icon and handwritten font). Story textarea: style with transparent bg or very light tint, minimal border, font-family 'Caveat' or a readable handwritten font at ~1.1rem, line-height 1.8, placeholder 'Start writing your story...'. Use actual textarea element for accessibility; rely on CSS for visual effect.",
+    "Right page slot: embed existing PhotoUpload component. Modify PhotoUpload.vue (if needed) or wrap it in a div to integrate with scrapbook styling — show upload drop zone as a small decorative area (dashed border in pastel color, small text 'Add photos'), existing/new photos in Polaroid frames using ScrapbookPhoto. Render tags input: small text input with '+' button or Enter-to-add, tags displayed as small pastel pill labels with × remove button.",
+    "Move 'Save Changes' and 'Cancel' buttons to a sticky action bar or fixed bottom bar (mobile-friendly), or integrate them as decorative buttons on the notebook. 'Save Changes' styled prominently (e.g., washi-tape-style button with Caveat font?), 'Cancel' as smaller secondary link.",
+    "Implement Cancel behavior: define handleCancel function. If entryId exists (editing existing), set mode.value = 'view' and restore the saved entry state (re-fetch or reset form fields to the loaded values). If no entryId (new entry), confirm unsaved changes if isDirty, then navigate to /journal. Test that Cancel in edit mode of existing entry returns to view mode without saving.",
+    "Keep all existing validation (title and content required, date required, photo upload limits, unsaved-change route guard). Ensure error messages are visible and styled to fit scrapbook aesthetic (e.g., small note-style error banners).",
+    "After successful save, if entryId existed (update), switch to mode = 'view' to show the saved result. If new entry, keep existing behavior (redirect to /journal). Update onMounted and save logic to support this.",
+    "Verify all inputs have associated labels, focus indicators are visible, and keyboard navigation works."
+  ],
+  "acceptance_criteria": [
+    "Edit mode uses NotebookSpread layout with inputs styled like handwriting on graph paper",
+    "Title input uses Caveat font with transparent background and bottom-border-only styling",
+    "Story textarea is minimal, using a handwritten or readable font, preserving accessibility",
+    "PhotoUpload is integrated into the right page with scrapbook styling",
+    "Tags input allows adding/removing tags with decorative pill display",
+    "'Save Changes' and 'Cancel' buttons are prominent and accessible",
+    "Cancel from edit mode of existing entry returns to view mode without saving changes",
+    "Cancel from new entry returns to /journal after confirmation if dirty",
+    "All existing validation, error handling, and unsaved-change warnings preserved",
+    "After saving an edit, the page switches to view mode showing the updated entry"
+  ],
+  "verification": [
+    "Run `npm run build` from frontend/ — TypeScript compilation succeeds",
+    "Start dev server, navigate to /journal/new, verify edit mode uses notebook layout, inputs are styled, can type title and story, add mood, location, photos, tags. Save entry.",
+    "Open the saved entry (/journal/:id), click Edit Entry, verify edit mode loads with notebook layout and saved data. Make a change, click Cancel, verify it returns to view mode without saving the change.",
+    "In edit mode, leave title blank, try to save — verify validation error appears",
+    "In edit mode, make a change, try to navigate away — verify unsaved-change warning appears",
+    "Close dev server"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

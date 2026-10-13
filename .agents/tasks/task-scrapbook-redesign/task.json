@@ -1,0 +1,7 @@
+{
+  "task_id": "task-scrapbook-redesign",
+  "task_description": "Redesign journal entry experience into a handmade scrapbook aesthetic with view and edit modes, featuring notebook composition, Polaroid-style photos, decorative elements, and responsive layout",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005"],
+  "blocked_reason": null
+}

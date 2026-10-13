@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Database foundation and type system for stickers. Creates Supabase migration with sticker_assets and journal_sticker_placements tables, storage buckets (stickers-builtin public, stickers-custom private), RLS policies (owner_access pattern), and TypeScript types (StickerAsset, StickerPlacement, StickerLayout, etc.). This feature establishes the data model and authorization layer that all subsequent features depend on.",
+  "status": "pending",
+  "steps": [
+    "Create supabase/migrations/20261012000001_add_sticker_system.sql with sticker_assets table (id, user_id nullable, storage_path, mime_type, width, height, created_at), journal_sticker_placements table (id, journal_entry_id FK, sticker_asset_id FK, x/y/width/rotation/z_index normalized, created_at), sticker_layout JSONB column on journal_entries, indexes on user_id and journal_entry_id",
+    "Add storage buckets: stickers-builtin (public read for authenticated), stickers-custom (private, user folders {user_id}/)",
+    "Add RLS policies: sticker_assets (authenticated can read all, insert/update/delete only own where user_id = auth.uid()), journal_sticker_placements (users can read/write only for entries they own via FK join to journal_entries.user_id = auth.uid())",
+    "Create frontend/src/types/sticker.types.ts with StickerAsset, StickerPlacement, StickerLayout, StickerSurface, StickerCategory interfaces. All fields typed from database schema.",
+    "Update frontend/src/types/index.ts to re-export all sticker types"
+  ],
+  "acceptance_criteria": [
+    "Migration file exists at supabase/migrations/20261012000001_add_sticker_system.sql",
+    "sticker_assets and journal_sticker_placements tables created with correct columns, constraints, indexes",
+    "Storage buckets created with correct access policies",
+    "RLS policies enforce ownership (cannot read/write other users' custom stickers or placements)",
+    "TypeScript types compile without errors: cd frontend && npm run build succeeds",
+    "Running cd frontend && npm run check:supabase shows no missing-table errors for sticker_assets or journal_sticker_placements"
+  ],
+  "verification": [
+    "cd frontend && npm run build — compiles without TypeScript errors",
+    "cd frontend && npm run check:supabase — no missing-table errors for sticker tables"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

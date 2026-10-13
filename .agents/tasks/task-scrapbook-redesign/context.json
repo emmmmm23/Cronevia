@@ -1,0 +1,24 @@
+{
+  "project_type": "Vue 3 + TypeScript + Vite frontend with Supabase backend",
+  "language": "TypeScript, Vue 3 SFC",
+  "build_system": "Vite with TypeScript compilation. Frontend is standalone app in frontend/ directory.",
+  "test_framework": "vitest for unit tests, playwright for e2e",
+  "build_command": "cd frontend && npm run build",
+  "test_command": "cd frontend && npm run test",
+  "verification_instructions": "After each feature: 1) Run `npm run build` from frontend/ to verify TypeScript compilation. 2) Start dev server with `npm run dev` and manually verify the UI changes at http://127.0.0.1:5173. 3) Test view mode by navigating to an existing entry (e.g., /journal/:id), edit mode via 'Edit Entry' button or /journal/new.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Dev server runs on port 5173. Supabase is configured in frontend/.env (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY). Never restart or interfere with existing dev server. Photos require valid Supabase signed URLs.",
+  "contribution_requirements": "No formal AGENTS.md found. Follow existing code patterns: Tailwind utility classes for styling, Pinia stores for state, TypeScript strict types, Vue 3 Composition API with <script setup>. Preserve authentication, row-level security, and private media access. Never hardcode credentials or make storage public.",
+  "key_patterns": "Existing color palette: #7B0323 (burgundy primary), #f5ebdd (cream bg), #fdfaf5 (light cream), #6b4423 (brown text), #d7c7b3 (borders). Fonts already loaded: Caveat (handwritten), Playfair Display (serif titles), Inter (UI). PhotoUpload.vue is reusable component. JournalEditorPage.vue is currently edit-only; needs view/edit mode split.",
+  "relevant_files": [
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\pages\\JournalEditorPage.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\ui\\PhotoUpload.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\stores\\journal.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\services\\supabase-api.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\types\\index.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\router\\index.ts",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\layouts\\AppLayout.vue",
+    "c:\\Users\\Juan Miguel\\Cronevia\\frontend\\index.html"
+  ],
+  "directory_structure": "frontend/ contains src/ (pages/, components/ui/, stores/, services/, types/, layouts/, router/), index.html (fonts preloaded), package.json (scripts), .env (Supabase config). Pages load via Vue Router; routes defined in router/index.ts. AppLayout.vue provides sticky header (h-16 = 64px). JournalEditorPage.vue loaded for both /journal/new and /journal/:id."
+}

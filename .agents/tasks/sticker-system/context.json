@@ -1,0 +1,27 @@
+{
+  "project_type": "Vue 3 + TypeScript + Vite SPA with Supabase backend (PostgreSQL + Auth + Storage)",
+  "language": "TypeScript",
+  "build_system": "Vite 5.0, npm workspaces. Frontend in frontend/, migrations in supabase/migrations/",
+  "test_framework": "Vitest 2.0 for unit tests (src/**/*.{test,spec}.ts), Playwright 1.44 for E2E (tests/e2e/*.spec.ts), jsdom 30.1 environment",
+  "build_command": "cd frontend && npm run build",
+  "test_command": "cd frontend && npm run test (unit), npm run test:e2e (E2E)",
+  "verification_instructions": "1. Build: cd frontend && npm run build (must compile without errors). 2. Unit tests: cd frontend && npm run test (all tests pass). 3. E2E tests: cd frontend && npm run test:e2e (requires live Supabase instance with migrations). 4. Supabase check: cd frontend && npm run check:supabase (no missing-table errors). 5. Dev server: cd frontend && npm run dev, open http://127.0.0.1:5173, navigate to /journal/new, verify Decorate toggle visible and functional.",
+  "snapshot_or_generated_files": "None. Vite outputs to frontend/dist/ (excluded from git). Migrations are hand-written SQL, not generated.",
+  "environment_constraints": "Never use service_role key in frontend code. Supabase URL/anon key in frontend/.env (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY). RLS policies enforce all authorization. Signed URLs generated server-side (Supabase Edge Functions or Data API). Moveable version 0.53.0 already installed; use its Vue integration pattern.",
+  "contribution_requirements": "No AGENTS.md or CONTRIBUTING.md found. Inferred from codebase: (1) Follow existing file structure (types in src/types/, services in src/services/, components in src/components/, composables in src/composables/). (2) Use Supabase RLS pattern: authenticated users, owner_access policy (user_id = auth.uid() AND is_account_active()). (3) Migration naming: YYYYMMDDNNNNNN_description.sql. (4) TypeScript strict mode, no any types. (5) Tailwind utility classes, match Cronevia aesthetic (cream #f5ebdd, burgundy #7B0323, pastel accents). (6) All interactive elements need ARIA labels. (7) Test coverage for new composables and components.",
+  "key_patterns": "Pinia stores for state (defineStore, ref, computed). Services return typed responses or throw with { response: { status, data: { message } } }. Supabase client imported from @/lib/supabase. Components use <script setup lang=\"ts\">. Reactive refs with .value. Props with defineProps<Props>(), emits with defineEmits<Emits>(). Route guards with onBeforeRouteLeave. Dirty state tracking for unsaved changes. PhotoUpload.vue pattern for file uploads with validation. CrnButton.vue, CrnInput.vue for styled UI primitives.",
+  "relevant_files": [
+    "frontend/src/pages/JournalEditorPage.vue",
+    "frontend/src/stores/journal.ts",
+    "frontend/src/services/supabase-api.ts",
+    "frontend/src/lib/supabase.ts",
+    "frontend/src/types/index.ts",
+    "frontend/src/components/ui/PhotoUpload.vue",
+    "supabase/migrations/20261011000001_complete_schema.sql",
+    "supabase/migrations/20261011000002_access_and_backend.sql",
+    "frontend/vite.config.ts",
+    "frontend/vitest.config.ts",
+    "frontend/package.json"
+  ],
+  "directory_structure": "frontend/src/: assets/, components/ (ui/, journal/), layouts/, lib/ (supabase.ts), pages/ (JournalEditorPage.vue), router/, services/ (api.service.ts, supabase-api.ts), stores/ (auth.ts, journal.ts, trips.ts, memories.ts, dashboard.ts), types/ (index.ts, database.types.ts). frontend/public/: static assets. supabase/migrations/: SQL files. frontend/tests/e2e/: Playwright specs."
+}

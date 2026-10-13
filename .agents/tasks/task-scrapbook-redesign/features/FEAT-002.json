@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Create reusable scrapbook notebook components and CSS. Build NotebookPage.vue (single page with graph paper, rounded corners, subtle shadow), NotebookSpread.vue (two-page layout with center binding), and shared CSS for graph grid, paper textures, and Polaroid photo frames. Use only CSS and inline SVG — no external images. Color palette: muted denim-blue (#a8c5d8 tinted paper), fine grid lines (#b5cfe0), warm off-white text. Responsive: full spread on desktop, stacked pages on mobile. This is pure visual foundation; no data binding yet.",
+  "status": "pending",
+  "steps": [
+    "Create c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\NotebookPage.vue as a presentational component with slot for content. Implement: denim-blue tinted background (#f0f6f9 with slight blue tint), CSS-only graph paper grid using repeating-linear-gradient (5mm grid, light lines #d0dfe8), rounded outer corners (border-radius on outer edges only), subtle box-shadow. Props: 'side' (left|right) to control which corners are rounded. Mark decorative grid aria-hidden.",
+    "Create c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\NotebookSpread.vue wrapper component with two NotebookPage slots (left and right). Implement center binding visual: 1-2px darker line, subtle inner shadow to create depth. Desktop: side-by-side flex layout, max-width ~1200px. Mobile (<768px): stack pages vertically, simplify binding. Respect prefers-reduced-motion for any transitions.",
+    "Create c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\ScrapbookPhoto.vue for Polaroid-style photo frames. Props: src (string), alt (string), rotation (number, default 0). Style: white border (thicker bottom like Polaroid), subtle shadow, CSS transform rotate, aspect-ratio 4:5. Include decorative washi tape accent (CSS ::before pseudo-element with pastel stripe pattern). Ensure img is accessible and focusable.",
+    "Create c:\\Users\\Juan Miguel\\Cronevia\\frontend\\src\\components\\journal\\ScrapbookDecoration.vue for small SVG motifs (stars, hearts, flowers, hand-drawn lines). Props: type (string), size (number), color (string). Inline SVG definitions for 4-5 simple motifs. All decorations must be aria-hidden and pointer-events-none. Do NOT copy recognizable characters or watermarks from reference image.",
+    "Add Tailwind custom utilities or @apply directives if needed for graph paper and texture, keeping styles reusable. Verify all colors are accessible (sufficient contrast for text on paper background)."
+  ],
+  "acceptance_criteria": [
+    "NotebookPage.vue renders a single page with visible graph grid, rounded corners, and paper tint",
+    "NotebookSpread.vue displays two pages side-by-side on desktop with a center binding line",
+    "ScrapbookPhoto.vue renders a Polaroid-style frame with rotation and washi tape accent",
+    "ScrapbookDecoration.vue provides at least 4 different decorative SVG motifs",
+    "All decorations are marked aria-hidden=true",
+    "Layout is responsive: stacks on mobile, spread on desktop",
+    "No external image dependencies; all visuals are CSS or inline SVG"
+  ],
+  "verification": [
+    "Run `npm run build` from frontend/ — all new components compile without errors",
+    "Create a temporary test page importing NotebookSpread, NotebookPage, ScrapbookPhoto, and ScrapbookDecoration; verify visual appearance in browser at desktop and mobile widths. Check that graph grid is visible, binding is centered, photos have Polaroid frames, and decorations render. Delete test page after verification."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
