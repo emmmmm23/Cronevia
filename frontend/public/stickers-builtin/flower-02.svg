@@ -1,0 +1,7 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="8" fill="#ffd6a5"/>
+  <circle cx="50" cy="35" r="12" fill="#cdb4db" stroke="#b8a1cf" stroke-width="1"/>
+  <circle cx="65" cy="50" r="12" fill="#cdb4db" stroke="#b8a1cf" stroke-width="1"/>
+  <circle cx="50" cy="65" r="12" fill="#cdb4db" stroke="#b8a1cf" stroke-width="1"/>
+  <circle cx="35" cy="50" r="12" fill="#cdb4db" stroke="#b8a1cf" stroke-width="1"/>
+</svg>

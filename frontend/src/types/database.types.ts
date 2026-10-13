@@ -883,6 +883,75 @@ Update: {
 }
 Relationships: []
 }
+sticker_assets: {
+Row: {
+  id: string
+  user_id: string | null
+  storage_path: string
+  mime_type: string
+  width: number
+  height: number
+  category: string
+  created_at: string
+}
+Insert: {
+  id?: string
+  user_id?: string | null
+  storage_path: string
+  mime_type: string
+  width: number
+  height: number
+  category?: string
+  created_at?: string
+}
+Update: {
+  id?: string
+  user_id?: string | null
+  storage_path?: string
+  mime_type?: string
+  width?: number
+  height?: number
+  category?: string
+  created_at?: string
+}
+Relationships: []
+}
+journal_sticker_placements: {
+Row: {
+  id: string
+  journal_entry_id: string
+  sticker_asset_id: string
+  x: number
+  y: number
+  width: number
+  rotation: number
+  z_index: number
+  created_at: string
+}
+Insert: {
+  id?: string
+  journal_entry_id: string
+  sticker_asset_id: string
+  x: number
+  y: number
+  width: number
+  rotation?: number
+  z_index?: number
+  created_at?: string
+}
+Update: {
+  id?: string
+  journal_entry_id?: string
+  sticker_asset_id?: string
+  x?: number
+  y?: number
+  width?: number
+  rotation?: number
+  z_index?: number
+  created_at?: string
+}
+Relationships: []
+}
 }; Views: { [_ in never]: never }; Functions: {
 get_on_this_day: { Args: Record<string, never>; Returns: Json }
 is_super_admin: { Args: Record<string, never>; Returns: boolean }

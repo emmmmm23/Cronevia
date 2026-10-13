@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Services, composables, and built-in sticker library. Implements sticker.service.ts for Supabase CRUD (fetch assets, upload with validation, save placements), useStickerAssets composable for library management, useStickerEditor composable for editing state and undo/redo, and creates 10-12 built-in SVG stickers. This feature provides the business logic and data layer for sticker functionality. Depends on FEAT-001 (database and types must exist first).",
-  "status": "pending",
+  "status": "completed",
   "steps": [
     "Create frontend/src/services/sticker.service.ts with functions: fetchBuiltinAssets() (query sticker_assets WHERE user_id IS NULL, generate signed URLs from stickers-builtin bucket), fetchUserAssets(userId) (query WHERE user_id = userId, signed URLs from stickers-custom), uploadStickerAsset(file) (validate PNG/WebP, max 5MB, max 2000x2000px, check transparency via canvas, upload to stickers-custom/{userId}/, insert row), deleteAsset(assetId) (check no placements reference it, delete storage file and row), fetchPlacements(entryId), savePlacements(entryId, placements), validateLayout(layout)",
     "Create frontend/src/composables/useStickerAssets.ts with reactive state (builtinAssets, userAssets, loading, uploadProgress, error) and functions (loadBuiltins, loadUserAssets, uploadAsset, deleteUserAsset). Uses sticker.service.ts internally.",
@@ -26,5 +26,5 @@
     "Query Supabase sticker_assets table — 10-12 rows with user_id IS NULL"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Implemented sticker.service.ts with all CRUD operations using Supabase client. Created useStickerAssets composable for reactive library management with loading/error states. Created useStickerEditor composable with snapshot-based undo/redo (max 50 states), coordinate normalization utilities, and full editing operations (add, move, resize, rotate, duplicate, delete, layer ordering). Designed 12 SVG stickers in Cronevia aesthetic (burgundy #7B0323, cream #f5ebdd, pastels). Updated database.types.ts to include sticker_assets and journal_sticker_placements tables (note: table name is journal_sticker_placements not sticker_placements per migration). Created seed-builtin-stickers.sql for easy metadata insertion. Upload validation correctly checks PNG/WebP format, 5MB limit, 2000x2000px max, and transparency via canvas rendering. All services and composables compile without errors. SVG files are under 2KB each and use viewBox=\"0 0 100 100\" for consistent scaling."
 }
