@@ -1,658 +1,101 @@
 <script setup lang="ts">
-/**
- * TripDetailPage — View and manage a trip with its destinations (itinerary items).
- *
- * Features:
- * - View trip details
- * - Add/edit/delete destinations
- * - Reorder destinations with move up/down
- * - Schedule arrival/departure times
- * - Link to journal entries and memories
- */
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
-import { useTripsStore } from '@/stores/trips'
-import PhotoUpload from '@/components/ui/PhotoUpload.vue'
-import type { Trip, TripDay, ItineraryItem, Media } from '@/types'
+import {ref,computed,onMounted,onBeforeUnmount} from 'vue'
+import {useRoute,RouterLink,onBeforeRouteLeave} from 'vue-router'
 import api from '@/services/api.service'
-
-const route = useRoute()
-const store = useTripsStore()
-
-const tripId = route.params.id as string
-
-const trip = ref<Trip | null>(null)
-const tripDays = ref<TripDay[]>([])
-const currentDayId = ref<string | null>(null)
-const destinations = ref<ItineraryItem[]>([])
-
-const loading = ref(false)
-const error = ref('')
-const saving = ref(false)
-
-// Add destination form
-const showAddForm = ref(false)
-const newDestTitle = ref('')
-const newDestTime = ref('')
-const newDestNotes = ref('')
-
-// Edit destination
-const editingDest = ref<string | null>(null)
-const editTitle = ref('')
-const editTime = ref('')
-const editNotes = ref('')
-
-// Delete confirmation
-const confirmDelete = ref<string | null>(null)
-
-// Photos
-const newPhotos = ref<File[]>([])
-const existingPhotos = ref<Media[]>([])
-const photosToDelete = ref<string[]>([])
-const uploadingPhotos = ref(false)
-const showPhotoSection = ref(false)
-
-onMounted(async () => {
-  await loadTrip()
-})
-
-async function loadTrip() {
-  loading.value = true
-  error.value = ''
-  try {
-    trip.value = await store.fetchTrip(tripId)
-    existingPhotos.value = trip.value.media ?? []
-    tripDays.value = await store.fetchTripDays(tripId)
-
-    // Auto-select first day or create one if none exist
-    if (tripDays.value.length > 0) {
-      currentDayId.value = tripDays.value[0].id
-      await loadDestinations()
-    } else if (trip.value?.start_date) {
-      // Create first day automatically
-      const day = await store.createTripDay(tripId, {
-        date: trip.value.start_date,
-        day_number: 1,
-        title: 'Day 1',
-      })
-      tripDays.value = [day]
-      currentDayId.value = day.id
-    }
-  } catch (e) {
-    error.value = 'Failed to load trip'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadDestinations() {
-  if (!currentDayId.value) return
-  try {
-    destinations.value = await store.fetchItineraryItems(tripId, currentDayId.value)
-  } catch (err) {
-    console.error('Failed to load destinations:', err)
-  }
-}
-
-
-const canAddDestination = computed(() => {
-  return newDestTitle.value.trim().length > 0 && !saving.value
-})
-
-async function handleAddDestination() {
-  if (!canAddDestination.value || !currentDayId.value) return
-
-  saving.value = true
-  try {
-    const payload = {
-      title: newDestTitle.value.trim(),
-      scheduled_time: newDestTime.value || null,
-      description: newDestNotes.value.trim() || null,
-      status: 'planned' as const,
-    }
-
-    await store.createItineraryItem(tripId, currentDayId.value, payload)
-    await loadDestinations()
-
-    // Reset form
-    newDestTitle.value = ''
-    newDestTime.value = ''
-    newDestNotes.value = ''
-    showAddForm.value = false
-  } catch (err) {
-    console.error('Failed to add destination:', err)
-  } finally {
-    saving.value = false
-  }
-}
-
-function startEdit(dest: ItineraryItem) {
-  editingDest.value = dest.id
-  editTitle.value = dest.title
-  editTime.value = dest.scheduled_time || ''
-  editNotes.value = dest.description || ''
-}
-
-function cancelEdit() {
-  editingDest.value = null
-  editTitle.value = ''
-  editTime.value = ''
-  editNotes.value = ''
-}
-
-async function saveEdit(destId: string) {
-  if (!currentDayId.value) return
-
-  saving.value = true
-  try {
-    await store.updateItineraryItem(tripId, currentDayId.value, destId, {
-      title: editTitle.value.trim(),
-      scheduled_time: editTime.value || null,
-      description: editNotes.value.trim() || null,
-    })
-    await loadDestinations()
-    cancelEdit()
-  } catch (err) {
-    console.error('Failed to update destination:', err)
-  } finally {
-    saving.value = false
-  }
-}
-
-async function handleDelete(destId: string) {
-  if (!currentDayId.value) return
-
-  saving.value = true
-  try {
-    await store.deleteItineraryItem(tripId, currentDayId.value, destId)
-    await loadDestinations()
-    confirmDelete.value = null
-  } catch (err) {
-    console.error('Failed to delete destination:', err)
-  } finally {
-    saving.value = false
-  }
-}
-
-async function moveUp(index: number) {
-  if (index === 0) return
-  const newOrder = [...destinations.value]
-  ;[newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]]
-  await reorder(newOrder)
-}
-
-async function moveDown(index: number) {
-  if (index === destinations.value.length - 1) return
-  const newOrder = [...destinations.value]
-  ;[newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]]
-  await reorder(newOrder)
-}
-
-async function reorder(newOrder: ItineraryItem[]) {
-  if (!currentDayId.value) return
-
-  saving.value = true
-  try {
-    const orderIds = newOrder.map(d => d.id)
-    await store.reorderItineraryItems(tripId, currentDayId.value, orderIds)
-    await loadDestinations()
-  } catch (err) {
-    console.error('Failed to reorder:', err)
-  } finally {
-    saving.value = false
-  }
-}
-
-function formatDate(d: string | null): string {
-  if (!d) return '—'
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-function formatTime(t: string | null): string {
-  if (!t) return ''
-  const parts = t.split(':')
-  const hour = parseInt(parts[0])
-  const min = parts[1]
-  const ampm = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
-  return `${displayHour}:${min} ${ampm}`
-}
-
-async function handleRemoveExistingPhoto(photoId: string) {
-  photosToDelete.value.push(photoId)
-  existingPhotos.value = existingPhotos.value.filter(p => p.id !== photoId)
-}
-
-async function savePhotos() {
-  if (!trip.value) return
-
-  uploadingPhotos.value = true
-  try {
-    while (photosToDelete.value.length) {
-      await api.delete(`/trips/${trip.value.id}/media/${photosToDelete.value[0]}`)
-      photosToDelete.value.shift()
-    }
-    while (newPhotos.value.length) {
-      const formData = new FormData()
-      formData.append('file', newPhotos.value[0])
-      await api.post(`/trips/${trip.value.id}/media`, formData)
-      newPhotos.value.shift()
-    }
-
-    // Reload trip to get updated photos
-    await loadTrip()
-    showPhotoSection.value = false
-  } catch (err) {
-    error.value = (err as Error).message
-  } finally {
-    uploadingPhotos.value = false
-  }
-}
-
-async function setCoverPhoto(photoId: string) {
-  if (!trip.value) return
-
-  try {
-    await api.patch(`/trips/${trip.value.id}/media/${photoId}/set-cover`)
-    await loadTrip()
-  } catch (err) {
-    console.error('Failed to set cover photo:', err)
-  }
-}
-
+import {loadPlan,saveActivity,moveActivity,allRecords} from '@/services/planner.service'
+import {dayLabel,localClock,nextActivity,overlapping,outsideRange,dateError,directions,tripGroup} from '@/composables/tripPlanner'
+import {useEditingViewport} from '@/composables/useEditingViewport'
+import type {Trip,TripDay,ItineraryItem,PreparationItem,Memory,JournalEntry,Media} from '@/types'
+import AppSheet from '@/components/shared/AppSheet.vue'
+import TripBasicsForm,{type TripDraft} from '@/components/trips/TripBasicsForm.vue'
+import '@/styles/field-notes.css'
+const id=String(useRoute().params.id)
+useEditingViewport()
+const trip=ref<Trip|null>(null),days=ref<TripDay[]>([]),items=ref<ItineraryItem[]>([]),activeDay=ref(''),tab=ref('itinerary')
+const loading=ref(true),busy=ref(false),error=ref(''),message=ref(''),now=ref(new Date())
+const memories=ref<Memory[]>([]),journals=ref<JournalEntry[]>([]),linksError=ref('')
+const prep=ref<PreparationItem[]>([]),prepBaseline=ref('[]'),prepTitle=ref(''),prepCategory=ref<PreparationItem['category']>('packing')
+const prepDirty=computed(()=>JSON.stringify(prep.value)!==prepBaseline.value)
+const categories=[{id:'packing',label:'Packing'},{id:'reservations',label:'Reservations'},{id:'documents',label:'Tickets & documents'},{id:'reminders',label:'Personal reminders'}] as const
+const activityOpen=ref(false),activityDraft=ref<Partial<ItineraryItem>>({}),activityId=ref(''),activityDay=ref(''),activityBaseline=ref(''),sheetError=ref('')
+const activityDirty=computed(()=>activityOpen.value&&JSON.stringify(activityDraft.value)!==activityBaseline.value)
+const detailsOpen=ref(false),details=ref<TripDraft>({title:'',destination:'',start:'',end:'',undecided:true,description:'',timezone:'',status:'planning'}),detailsBaseline=ref('')
+const detailsDirty=computed(()=>detailsOpen.value&&JSON.stringify(details.value)!==detailsBaseline.value)
+const menuItem=ref<ItineraryItem|null>(null),moveTarget=ref(''),deleteConfirm=ref(false),linkOpen=ref(false),linkKind=ref('memories'),linkId=ref(''),linkOptions=ref<(Memory|JournalEntry)[]>([]),linkBusy=ref(false)
+const photoOpen=ref(false),photoDrafts=ref<{id:string;file:File;url:string}[]>([]),photoBusy=ref(false),photoError=ref('')
+const normalDays=computed(()=>days.value.filter(d=>!d.is_ideas)),ideasDay=computed(()=>days.value.find(d=>d.is_ideas))
+const clock=computed(()=>localClock(trip.value?.timezone,now.value)),todayDay=computed(()=>normalDays.value.find(d=>d.date===clock.value.date))
+const currentDay=computed(()=>tab.value==='ideas'?ideasDay.value:tab.value==='today'?todayDay.value:normalDays.value.find(d=>d.id===activeDay.value))
+const shown=computed(()=>items.value.filter(i=>i.trip_day_id===currentDay.value?.id).sort((a,b)=>a.sort_order-b.sort_order||a.id.localeCompare(b.id)))
+const overlaps=computed(()=>overlapping(shown.value)),next=computed(()=>nextActivity(shown.value,clock.value.time))
+const outside=computed(()=>normalDays.value.filter(d=>trip.value&&outsideRange(d,trip.value)))
+const allDirty=computed(()=>prepDirty.value||activityDirty.value||detailsDirty.value||photoDrafts.value.length>0)
+let timer:ReturnType<typeof setInterval>|undefined
+onMounted(async()=>{await refresh();timer=setInterval(()=>now.value=new Date(),30000)})
+onBeforeUnmount(()=>{clearInterval(timer);photoDrafts.value.forEach(p=>URL.revokeObjectURL(p.url))})
+async function refresh(){try{const plan=await loadPlan(id);trip.value=plan.trip;days.value=plan.days;items.value=plan.items;if(!normalDays.value.some(d=>d.id===activeDay.value))activeDay.value=normalDays.value[0]?.id||'';if(!prepDirty.value){prep.value=structuredClone(plan.trip.preparation||[]);prepBaseline.value=JSON.stringify(prep.value)}error.value='';await loadLinks()}catch(e){console.warn('[trip planner]',e);error.value='This planner couldn’t load. Retry before making changes. If setup is incomplete, the trip-planner upgrade must be installed.'}finally{loading.value=false}}
+async function loadLinks(){try{[memories.value,journals.value]=await Promise.all([allRecords<Memory>('memories',{trip_id:id}),allRecords<JournalEntry>('journal',{trip_id:id})]);linksError.value=''}catch{linksError.value='Linked keepsakes couldn’t load. Try again.'}}
+async function run(action:()=>Promise<void>,success='Changes saved'){if(busy.value)return;busy.value=true;error.value='';try{await action();message.value=success}catch(e){console.warn('[trip change]',e);error.value='That change couldn’t be saved. Your plan is still here; please retry.'}finally{busy.value=false}}
+function openActivity(item?:ItineraryItem){activityId.value=item?.id||crypto.randomUUID();activityDay.value=item?.trip_day_id||currentDay.value?.id||'';activityDraft.value=item?{...item}:{title:'',description:'',scheduled_time:'',duration_minutes:null,location_name:'',time_label:'',booking_reference:'',status:'planned'};activityBaseline.value=JSON.stringify(activityDraft.value);sheetError.value='';activityOpen.value=true}
+function closeActivity(value:boolean){if(busy.value)return;if(!value&&activityDirty.value&&!confirm('Discard these activity changes?'))return;activityOpen.value=value}
+async function submitActivity(){if(busy.value)return;const d=activityDraft.value;if(!d.title?.trim()){sheetError.value='Give this activity a title.';return}if(d.scheduled_time&&!/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(d.scheduled_time)){sheetError.value='Use a valid time, or leave it flexible.';return}if(d.duration_minutes!=null&&(!Number.isInteger(Number(d.duration_minutes))||Number(d.duration_minutes)<1||Number(d.duration_minutes)>1440)){sheetError.value='Duration should be 1–1440 minutes.';return}
+ busy.value=true;sheetError.value='';try{const saved=await saveActivity(id,activityDay.value,activityId.value,d);items.value=[...items.value.filter(i=>i.id!==saved.id),saved];activityBaseline.value=JSON.stringify(d);activityOpen.value=false;message.value='Activity saved'}catch(e){console.warn('[activity save]',e);sheetError.value='This activity couldn’t be saved. Your changes are here; please retry.'}finally{busy.value=false}}
+function openMenu(item:ItineraryItem){menuItem.value=item;moveTarget.value=item.trip_day_id;deleteConfirm.value=false;error.value=''}
+async function reorder(from:number,to:number){if(from===to||from<0||to<0||to>=shown.value.length)return;const order=shown.value.map(i=>i.id);order.splice(to,0,...order.splice(from,1));await run(async()=>{await api.patch('/trips/'+id+'/days/'+currentDay.value!.id+'/itinerary/reorder',{order});order.forEach((key,index)=>{items.value.find(i=>i.id===key)!.sort_order=index})},'Activity order saved')}
+const dragging=ref<string|null>(null),dropIndex=ref(-1)
+function dragStart(e:PointerEvent,item:ItineraryItem){if(busy.value||e.button!==0)return;e.preventDefault();(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);dragging.value=item.id;dropIndex.value=shown.value.findIndex(i=>i.id===item.id)}
+function dragMove(e:PointerEvent){if(!dragging.value)return;const cards=[...document.querySelectorAll<HTMLElement>('.activity-card')];const found=cards.findIndex(c=>{const r=c.getBoundingClientRect();return e.clientY>=r.top&&e.clientY<=r.bottom});if(found>=0)dropIndex.value=found}
+function dragEnd(){if(!dragging.value)return;const from=shown.value.findIndex(i=>i.id===dragging.value),to=dropIndex.value;dragging.value=null;dropIndex.value=-1;void reorder(from,to)}
+async function duplicate(){if(!menuItem.value)return;const source=menuItem.value;const copyId=crypto.randomUUID();await run(async()=>{const saved=await saveActivity(id,source.trip_day_id,copyId,{...source,title:source.title.slice(0,245)+' (copy)',status:'planned'});items.value.push(saved);menuItem.value=null},'Activity duplicated')}
+async function move(){if(!menuItem.value)return;const source=menuItem.value,target=moveTarget.value;await run(async()=>{await moveActivity(source.id,target);const max=Math.max(-1,...items.value.filter(i=>i.trip_day_id===target).map(i=>i.sort_order));source.trip_day_id=target;source.sort_order=max+1;menuItem.value=null;await loadLinks()},'Activity moved')}
+async function remove(){if(!menuItem.value)return;const source=menuItem.value;await run(async()=>{await api.delete('/trips/'+id+'/days/'+source.trip_day_id+'/itinerary/'+source.id);items.value=items.value.filter(i=>i.id!==source.id);menuItem.value=null},'Activity removed')}
+async function addDay(){await run(async()=>{const number=Math.max(0,...normalDays.value.map(d=>d.day_number))+1;let date:string|null=null;if(trip.value?.start_date){const d=new Date(trip.value.start_date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+number-1);date=d.toISOString().slice(0,10)}const result=(await api.post<{data:TripDay}>('/trips/'+id+'/days',{day_number:number,date,title:'Day '+number})).data.data;days.value.push(result);activeDay.value=result.id;tab.value='itinerary'},'Day added')}
+function openDetails(){const t=trip.value!;details.value={title:t.title,destination:t.destination||'',start:t.start_date||'',end:t.end_date||'',undecided:!t.start_date,description:t.description||'',timezone:t.timezone||'',status:t.status};detailsBaseline.value=JSON.stringify(details.value);sheetError.value='';detailsOpen.value=true}
+function closeDetails(value:boolean){if(busy.value)return;if(!value&&detailsDirty.value&&!confirm('Discard these trip details?'))return;detailsOpen.value=value}
+async function saveDetails(){const d=details.value;sheetError.value=dateError(d.start,d.end,d.undecided);if(!d.title.trim())sheetError.value='Give your trip a name.';try{if(d.timezone)new Intl.DateTimeFormat('en',{timeZone:d.timezone})}catch{sheetError.value='Use a timezone such as Asia/Manila.'}if(sheetError.value||busy.value)return;busy.value=true;try{await api.put('/trips/'+id,{title:d.title,destination:d.destination||null,description:d.description||null,start_date:d.undecided?null:d.start,end_date:d.undecided?null:d.end||d.start,timezone:d.timezone||null,status:d.status});detailsBaseline.value=JSON.stringify(d);detailsOpen.value=false;await refresh();message.value='Trip details saved; every activity has been kept.'}catch(e){console.warn('[trip dates]',e);sheetError.value='Details couldn’t be saved. Please retry.'}finally{busy.value=false}}
+function addPrep(){if(!prepTitle.value.trim()||prep.value.length>=200)return;prep.value.push({id:crypto.randomUUID(),title:prepTitle.value.trim().slice(0,300),category:prepCategory.value,done:false});prepTitle.value=''}
+function starterPrep(){for(const [category,title] of [['packing','Pack the essentials'],['reservations','Confirm accommodation'],['documents','Keep tickets and ID handy'],['reminders','Check the weather']] as const)prep.value.push({id:crypto.randomUUID(),title,category,done:false})}
+async function savePrep(){await run(async()=>{await api.put('/trips/'+id,{preparation:prep.value});prepBaseline.value=JSON.stringify(prep.value)},'Preparation saved')}
+async function openLinks(){linkOpen.value=true;linkId.value='';linkBusy.value=true;sheetError.value='';try{linkOptions.value=await allRecords<Memory|JournalEntry>(linkKind.value)}catch{sheetError.value='Your records couldn’t load. Try choosing the type again.'}finally{linkBusy.value=false}}
+async function attach(){if(!menuItem.value||!linkId.value||busy.value)return;busy.value=true;try{await api.patch('/'+linkKind.value+'/'+linkId.value,{trip_id:id,itinerary_item_id:menuItem.value.id,...(linkKind.value==='journal'?{trip_day_id:menuItem.value.trip_day_id}:{})});linkOpen.value=false;menuItem.value=null;await loadLinks();message.value='Keepsake linked'}catch{sheetError.value='This link couldn’t be saved. Please retry.'}finally{busy.value=false}}
+function linkedMemory(item:ItineraryItem){return memories.value.filter(m=>m.itinerary_item_id===item.id)}
+function linkedJournal(item:ItineraryItem){return journals.value.filter(j=>j.itinerary_item_id===item.id)}
+function activityQuery(item:ItineraryItem){return {trip_id:id,trip_day_id:item.trip_day_id,itinerary_item_id:item.id}}
+function niceDate(date:string|null){return date?new Date(date+'T12:00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'Dates undecided'}
+function choosePhotos(event:Event){const input=event.target as HTMLInputElement;photoError.value='';for(const file of Array.from(input.files||[])){if(!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)||file.size>10485760){photoError.value='Choose a JPG, PNG, WebP or GIF under 10 MB.';continue}photoDrafts.value.push({id:crypto.randomUUID(),file,url:URL.createObjectURL(file)})}input.value=''}
+async function uploadPhotos(){if(photoBusy.value)return;photoBusy.value=true;photoError.value='';try{while(photoDrafts.value.length){const p=photoDrafts.value[0],body=new FormData();body.append('file',p.file);body.append('upload_id',p.id);await api.post('/trips/'+id+'/media',body);photoDrafts.value.shift();URL.revokeObjectURL(p.url)}trip.value=(await api.get<{data:Trip}>('/trips/'+id)).data.data;message.value='Trip photos saved'}catch{photoError.value='A photo couldn’t upload. Its preview is kept; retry Upload photos.'}finally{photoBusy.value=false}}
+async function cover(photo:Media){await run(async()=>{await api.patch('/trips/'+id+'/media/'+photo.id+'/set-cover');trip.value=(await api.get<{data:Trip}>('/trips/'+id)).data.data},'Cover updated')}
+async function removePhoto(photo:Media){if(!confirm('Delete this stored trip photo?'))return;await run(async()=>{await api.delete('/trips/'+id+'/media/'+photo.id);trip.value!.media=trip.value!.media?.filter(m=>m.id!==photo.id)},'Photo removed')}
+function preventUnload(e:BeforeUnloadEvent){if(allDirty.value){e.preventDefault();e.returnValue=''}}
+onMounted(()=>window.addEventListener('beforeunload',preventUnload));onBeforeUnmount(()=>window.removeEventListener('beforeunload',preventUnload));onBeforeRouteLeave(()=>!allDirty.value||confirm('Leave with unsaved trip changes?'))
 </script>
 
-<template>
-  <div class="min-h-screen bg-[#f5ebdd]">
-
-    <!-- Loading -->
-    <div v-if="loading" class="max-w-4xl mx-auto px-4 sm:px-6 py-10 animate-pulse">
-      <div class="h-4 bg-[#e5d4bb] rounded w-24 mb-6" />
-      <div class="h-8 bg-[#e5d4bb] rounded w-2/3 mb-3" />
-      <div class="h-48 bg-[#fdfaf5] border border-[#e5d4bb] rounded-sm" />
-    </div>
-
-    <!-- Error -->
-    <div v-else-if="error" class="max-w-4xl mx-auto px-4 sm:px-6 py-16 text-center">
-      <p class="text-sm text-[#7B0323] mb-4">{{ error }}</p>
-      <RouterLink :to="{ name: 'trips' }" class="text-sm font-semibold text-[#7B0323] hover:underline">
-        Back to Trips
-      </RouterLink>
-    </div>
-
-    <!-- Trip content -->
-    <div v-else-if="trip">
-      <!-- Header -->
-      <div class="bg-[#fdfaf5] border-b border-[#e5d4bb]">
-        <div class="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-          <RouterLink :to="{ name: 'trips' }" class="inline-flex items-center gap-1 text-xs text-[#8a5c2e] hover:text-[#7B0323] mb-3 transition-colors">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-            </svg>
-            All Trips
-          </RouterLink>
-
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex-1">
-              <h1 class="text-2xl sm:text-3xl font-bold text-[#2b1a10]" style="font-family:'Playfair Display',Georgia,serif;">
-                {{ trip.title }}
-              </h1>
-              <div class="flex flex-wrap items-center gap-3 mt-2">
-                <span class="text-sm text-[#8a5c2e]">
-                  {{ formatDate(trip.start_date) }}<span v-if="trip.end_date"> – {{ formatDate(trip.end_date) }}</span>
-                </span>
-              </div>
-              <p v-if="trip.description" class="mt-2 text-sm text-[#6b4423] max-w-2xl">{{ trip.description }}</p>
-            </div>
-
-            <RouterLink
-              :to="{ name: 'trips.edit', params: { id: trip.id } }"
-              class="text-sm font-semibold text-[#7B0323] hover:underline shrink-0"
-            >
-              Edit Trip
-            </RouterLink>
-          </div>
-        </div>
-      </div>
-
-      <!-- Main content -->
-      <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-
-        <!-- Destinations section -->
-        <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xs font-semibold uppercase tracking-widest text-[#8a5c2e]">
-              Destinations
-            </h2>
-            <button
-              v-if="!showAddForm"
-              type="button"
-              class="text-sm font-semibold text-[#7B0323] hover:underline"
-              @click="showAddForm = true"
-            >
-              + Add Destination
-            </button>
-          </div>
-
-          <!-- Add destination form -->
-          <div v-if="showAddForm" class="mb-6 bg-[#fdfaf5] border border-[#d7c7b3] rounded-sm p-5">
-            <h3 class="text-sm font-bold text-[#2b1a10] mb-4">Add Destination</h3>
-            <div class="flex flex-col gap-4">
-              <div>
-                <label for="new-dest-title" class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-                  Place <span class="text-[#7B0323]">*</span>
-                </label>
-                <input
-                  id="new-dest-title"
-                  v-model="newDestTitle"
-                  type="text"
-                  placeholder="e.g. Tagaytay Picnic Grove"
-                  class="w-full px-3 py-2.5 text-sm bg-white border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
-                />
-              </div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label for="new-dest-time" class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-                    Arrival Time
-                  </label>
-                  <input
-                    id="new-dest-time"
-                    v-model="newDestTime"
-                    type="time"
-                    class="w-full px-3 py-2.5 text-sm bg-white border border-[#d7c7b3] rounded text-[#2b1a10] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition"
-                  />
-                </div>
-              </div>
-              <div>
-                <label for="new-dest-notes" class="block text-xs font-semibold uppercase tracking-wider text-[#6b4423] mb-1.5">
-                  Notes
-                </label>
-                <textarea
-                  id="new-dest-notes"
-                  v-model="newDestNotes"
-                  rows="2"
-                  placeholder="Any details or reminders..."
-                  class="w-full px-3 py-2.5 text-sm bg-white border border-[#d7c7b3] rounded text-[#2b1a10] placeholder:text-[#a68e73] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 transition resize-none"
-                />
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  type="button"
-                  :disabled="!canAddDestination"
-                  :class="[
-                    'px-4 py-2 text-sm font-semibold rounded border transition-colors',
-                    canAddDestination
-                      ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
-                      : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-50',
-                  ]"
-                  @click="handleAddDestination"
-                >
-                  Add Destination
-                </button>
-                <button
-                  type="button"
-                  class="px-4 py-2 text-sm font-medium text-[#6b4423] hover:text-[#2b1a10]"
-                  @click="showAddForm = false; newDestTitle = ''; newDestTime = ''; newDestNotes = ''"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Destinations list -->
-          <div v-if="destinations.length > 0" class="flex flex-col gap-3">
-            <div
-              v-for="(dest, index) in destinations"
-              :key="dest.id"
-              class="bg-[#fdfaf5] border border-[#d7c7b3] rounded-sm overflow-hidden"
-            >
-              <!-- View mode -->
-              <div v-if="editingDest !== dest.id" class="px-5 py-4">
-                <div class="flex items-start justify-between gap-4">
-                  <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="text-lg font-bold text-[#7B0323]">{{ index + 1 }}</span>
-                      <span v-if="dest.scheduled_time" class="text-xs font-semibold uppercase tracking-wider text-[#8a5c2e]">
-                        {{ formatTime(dest.scheduled_time) }}
-                      </span>
-                    </div>
-                    <h3 class="text-lg font-bold text-[#2b1a10]" style="font-family:'Playfair Display',serif;">
-                      {{ dest.title }}
-                    </h3>
-                    <p v-if="dest.description" class="mt-1 text-sm text-[#6b4423]">
-                      {{ dest.description }}
-                    </p>
-                  </div>
-
-                  <!-- Actions -->
-                  <div class="flex items-center gap-2 shrink-0">
-                    <button
-                      v-if="index > 0"
-                      type="button"
-                      :disabled="saving"
-                      class="p-1.5 text-[#a68e73] hover:text-[#7B0323] disabled:opacity-50"
-                      title="Move up"
-                      @click="moveUp(index)"
-                    >
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
-                      </svg>
-                    </button>
-                    <button
-                      v-if="index < destinations.length - 1"
-                      type="button"
-                      :disabled="saving"
-                      class="p-1.5 text-[#a68e73] hover:text-[#7B0323] disabled:opacity-50"
-                      title="Move down"
-                      @click="moveDown(index)"
-                    >
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      class="text-xs font-semibold text-[#7B0323] hover:underline"
-                      @click="startEdit(dest)"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      class="text-xs font-semibold text-[#c4ad94] hover:text-[#7B0323]"
-                      @click="confirmDelete = dest.id"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Edit mode -->
-              <div v-else class="px-5 py-4 bg-[#f5ebdd]">
-                <div class="flex flex-col gap-3">
-                  <div>
-                    <input
-                      v-model="editTitle"
-                      type="text"
-                      class="w-full px-3 py-2 text-sm bg-white border border-[#d7c7b3] rounded text-[#2b1a10] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      v-model="editTime"
-                      type="time"
-                      class="w-full px-3 py-2 text-sm bg-white border border-[#d7c7b3] rounded text-[#2b1a10] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10"
-                    />
-                  </div>
-                  <div>
-                    <textarea
-                      v-model="editNotes"
-                      rows="2"
-                      class="w-full px-3 py-2 text-sm bg-white border border-[#d7c7b3] rounded text-[#2b1a10] focus:outline-none focus:border-[#7B0323] focus:ring-2 focus:ring-[#7B0323]/10 resize-none"
-                    />
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      :disabled="saving"
-                      class="px-3 py-1.5 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] rounded border border-[#5a0019] hover:bg-[#5a0019] disabled:opacity-50"
-                      @click="saveEdit(dest.id)"
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 text-sm font-medium text-[#6b4423] hover:text-[#2b1a10]"
-                      @click="cancelEdit"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Delete confirmation -->
-              <div v-if="confirmDelete === dest.id" class="bg-[#fdf2f3] border-t border-[#eeaab5] px-5 py-3">
-                <p class="text-sm text-[#7B0323] mb-2">
-                  <strong>Delete this destination?</strong> This action cannot be undone.
-                </p>
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    :disabled="saving"
-                    class="px-3 py-1.5 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] rounded border border-[#5a0019] hover:bg-[#5a0019] disabled:opacity-50"
-                    @click="handleDelete(dest.id)"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    class="px-3 py-1.5 text-sm font-medium text-[#6b4423] hover:text-[#2b1a10]"
-                    @click="confirmDelete = null"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Empty state -->
-          <div v-else-if="!showAddForm" class="text-center py-12 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded-sm">
-            <svg class="w-12 h-12 mx-auto mb-3 text-[#c4ad94]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
-            </svg>
-            <p class="text-sm text-[#8a5c2e] mb-4">No destinations added yet.</p>
-            <button
-              type="button"
-              class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] rounded border border-[#5a0019] hover:bg-[#5a0019] transition-colors"
-              @click="showAddForm = true"
-            >
-              Add Your First Destination
-            </button>
-          </div>
-        </section>
-
-        <!-- Photos section -->
-        <section class="mt-12">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xs font-semibold uppercase tracking-widest text-[#8a5c2e]">
-              Trip Photos
-            </h2>
-            <button
-              v-if="!showPhotoSection"
-              type="button"
-              class="text-sm font-semibold text-[#7B0323] hover:underline"
-              @click="showPhotoSection = true"
-            >
-              Manage Photos
-            </button>
-          </div>
-
-          <!-- Photo management -->
-          <div v-if="showPhotoSection" class="mb-6 bg-[#fdfaf5] border border-[#d7c7b3] rounded-sm p-5">
-            <h3 class="text-sm font-bold text-[#2b1a10] mb-4">Manage Trip Photos</h3>
-
-            <PhotoUpload
-              v-model="newPhotos"
-              :existing-photos="existingPhotos"
-              :disabled="uploadingPhotos"
-              @remove-existing="handleRemoveExistingPhoto"
-            />
-
-            <div class="flex items-center gap-2 mt-4">
-              <button
-                type="button"
-                :disabled="uploadingPhotos || (newPhotos.length === 0 && photosToDelete.length === 0)"
-                :class="[
-                  'px-4 py-2 text-sm font-semibold rounded border transition-colors',
-                  (newPhotos.length > 0 || photosToDelete.length > 0) && !uploadingPhotos
-                    ? 'bg-[#7B0323] text-[#fdfaf5] border-[#5a0019] hover:bg-[#5a0019]'
-                    : 'bg-[#d7c7b3] text-[#fdfaf5] border-[#d7c7b3] cursor-not-allowed opacity-50',
-                ]"
-                @click="savePhotos"
-              >
-                {{ uploadingPhotos ? 'Saving...' : 'Save Photos' }}
-              </button>
-              <button
-                type="button"
-                :disabled="uploadingPhotos"
-                class="px-4 py-2 text-sm font-medium text-[#6b4423] hover:text-[#2b1a10] disabled:opacity-50"
-                @click="showPhotoSection = false; newPhotos = []; photosToDelete = []"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-
-          <!-- Photo gallery display -->
-          <div v-if="existingPhotos.length > 0 && !showPhotoSection" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            <div
-              v-for="photo in existingPhotos"
-              :key="photo.id"
-              class="relative aspect-square bg-[#f5ebdd] border border-[#d7c7b3] rounded overflow-hidden group cursor-pointer"
-            >
-              <img
-                :src="`/storage/${photo.file_path}`"
-                :alt="photo.original_filename"
-                class="w-full h-full object-cover"
-              />
-              <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                <button
-                  v-if="trip?.cover_media_id !== photo.id"
-                  type="button"
-                  class="text-xs font-semibold text-white hover:underline"
-                  @click="setCoverPhoto(photo.id)"
-                >
-                  Set as Cover
-                </button>
-                <span v-else class="text-xs font-semibold text-white">
-                  Cover Photo
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Empty state -->
-          <div v-else-if="!showPhotoSection" class="text-center py-12 bg-[#fdfaf5] border border-dashed border-[#d7c7b3] rounded-sm">
-            <svg class="w-12 h-12 mx-auto mb-3 text-[#c4ad94]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-            </svg>
-            <p class="text-sm text-[#8a5c2e] mb-4">No photos added yet.</p>
-            <button
-              type="button"
-              class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[#7B0323] text-[#fdfaf5] rounded border border-[#5a0019] hover:bg-[#5a0019] transition-colors"
-              @click="showPhotoSection = true"
-            >
-              Add Trip Photos
-            </button>
-          </div>
-        </section>
-      </div>
-    </div>
-  </div>
-</template>
+<template><main class="field-notes planner">
+ <div class="topline"><RouterLink to="/trips" class="back">← All trips</RouterLink><span class="status-note" role="status">{{busy||photoBusy?'Saving…':allDirty?'Unsaved changes':message||'Your travel notebook'}}</span></div>
+ <div v-if="loading" class="loading">Opening your itinerary…</div>
+ <p v-if="error&&!menuItem" role="alert" class="notice">{{error}} <button v-if="!trip" @click="loading=true;refresh()">Retry</button></p>
+ <template v-if="trip"><header class="page-heading"><div><p class="eyebrow">{{trip.destination || 'A destination to discover'}}</p><h1>{{trip.title}}</h1><p class="muted">{{niceDate(trip.start_date)}}<span v-if="trip.end_date&&trip.end_date!==trip.start_date"> — {{niceDate(trip.end_date)}}</span> · {{tripGroup(trip)}}</p></div><button @click="openDetails" :disabled="busy">Trip details</button></header>
+ <nav class="planner-tabs" aria-label="Trip workspace"><button v-for="t in [{id:'itinerary',label:'Itinerary'},{id:'ideas',label:'Ideas'},{id:'prepare',label:'Prepare'},{id:'today',label:'Today'},{id:'keepsakes',label:'Keepsakes'}]" :key="t.id" :aria-pressed="tab===t.id" @click="tab=t.id">{{t.label}}<span v-if="t.id==='prepare'&&prepDirty" aria-label="unsaved">•</span></button></nav>
+ <div class="planner-columns"><div class="main-plan">
+ <template v-if="['itinerary','ideas','today'].includes(tab)">
+  <div v-if="tab==='itinerary'" class="day-nav"><label>Choose a day<select v-model="activeDay"><option v-for="day in normalDays" :key="day.id" :value="day.id">{{dayLabel(day)}} · {{day.date?niceDate(day.date):'Date to come'}}{{outsideRange(day,trip)?' · Outside dates':''}}</option></select></label><button @click="addDay" :disabled="busy">＋ Day</button></div>
+  <div v-if="tab==='today'" class="today-note"><p class="eyebrow">{{clock.date}} · {{clock.zone}}</p><h2>A day at a time.</h2><p v-if="!trip.timezone" class="muted">Using this device’s timezone. Set the destination timezone in Trip details.</p><p v-if="next" class="next-activity">Next planned · {{next.scheduled_time?.slice(0,5)}} — {{next.title}}</p><p v-else class="muted">No upcoming timed activity. Flexible plans are still below.</p></div>
+  <p v-if="currentDay&&outsideRange(currentDay,trip)" class="notice">This day is outside your current travel dates. Every activity is kept. Move items to another day or revise the dates.</p>
+  <div class="section-heading"><div><p class="eyebrow">{{tab==='ideas'?'Unscheduled possibilities':currentDay?.date?niceDate(currentDay.date):'Room to explore'}}</p><h2>{{tab==='ideas'?'For another moment.':tab==='today'?'Today’s plan':currentDay?dayLabel(currentDay):'No day scheduled'}}</h2></div><button v-if="currentDay" class="primary" :disabled="busy" @click="openActivity()">＋ {{tab==='ideas'?'Add idea':'Add activity'}}</button></div>
+  <p v-if="tab==='ideas'" class="muted ideas-intro">Keep a place or possibility here. Move it into a day when you’re ready.</p>
+  <div v-if="shown.length" class="activities"><article v-for="(item,index) in shown" :key="item.id" class="activity-card" :class="{'drop-target':dragging&&dropIndex===index,completed:item.status==='visited'}" :data-activity-id="item.id"><div class="activity-marker" aria-hidden="true">{{String(index+1).padStart(2,'0')}}</div><div class="activity-content"><div class="activity-top"><p class="activity-time">{{item.scheduled_time?.slice(0,5) || item.time_label || 'Flexible'}}<span v-if="item.duration_minutes"> · {{item.duration_minutes}} min</span></p><span v-if="item.status!=='planned'" class="badge">{{item.status==='visited'?'Completed':item.status}}</span></div><h3>{{item.title}}</h3><p v-if="item.location_name" class="activity-place">⌖ {{item.location_name}}</p><p v-if="item.description" class="activity-notes">{{item.description}}</p><p v-if="item.booking_reference" class="booking">Reference · {{item.booking_reference}}</p><p v-if="overlaps.has(item.id)" class="overlap">Times overlap. Keep it flexible or adjust in Edit.</p><div class="activity-links"><a v-if="directions(item)" :href="directions(item)!" target="_blank" rel="noopener noreferrer">Directions ↗</a><RouterLink v-for="m in linkedMemory(item)" :key="m.id" :to="'/memories/'+m.id">{{m.title}} ↗</RouterLink><RouterLink v-for="j in linkedJournal(item)" :key="j.id" :to="'/journal/'+j.id">{{j.title}} ↗</RouterLink></div><div class="activity-actions"><button :aria-label="'Edit '+item.title" @click="openActivity(item)" :disabled="busy">Edit</button><button :aria-label="'Options for '+item.title" @click="openMenu(item)" :disabled="busy">More</button><button :aria-label="'Move '+item.title+' up'" :disabled="busy||index===0" @click="reorder(index,index-1)">↑</button><button :aria-label="'Move '+item.title+' down'" :disabled="busy||index===shown.length-1" @click="reorder(index,index+1)">↓</button><button class="drag-handle" :aria-label="'Drag '+item.title+' to reorder'" :disabled="busy" @pointerdown="dragStart($event,item)" @pointermove="dragMove" @pointerup="dragEnd" @pointercancel="dragging=null;dropIndex=-1">⠿</button></div></div></article></div>
+  <section v-else class="empty"><p class="handnote">Leave a little room for discovery.</p><h3>{{tab==='today'&&!todayDay?'No itinerary day matches today.':tab==='ideas'?'A place for possibilities.':'This day is yours to shape.'}}</h3><p>{{tab==='today'&&!todayDay?'Open Itinerary to browse your numbered days.':'Add a place, a meal, or an unhurried afternoon. Exact times are optional.'}}</p><button v-if="tab==='today'&&!todayDay" @click="tab='itinerary'">Open itinerary</button></section>
+ </template>
+ <section v-if="tab==='prepare'"><div class="section-heading"><div><p class="eyebrow">Before you go</p><h2>A few things to remember.</h2></div><button class="primary" :disabled="busy||!prepDirty" @click="savePrep">Save preparation</button></div><p class="muted">{{prep.filter(p=>p.done).length}} of {{prep.length}} ready. Changes stay here until you save.</p><div v-if="!prep.length" class="empty"><h3>Travel a little lighter.</h3><p>Start with four practical reminders, then make this list your own.</p><button @click="starterPrep">Use starter checklist</button></div><section v-for="category in categories.filter(c=>prep.some(p=>p.category===c.id))" :key="category.id" class="prep-group"><h3>{{category.label}}</h3><div v-for="item in prep.filter(p=>p.category===category.id)" :key="item.id" class="prep-row"><label class="check-label"><input v-model="item.done" type="checkbox" :disabled="busy" /><span :class="{checked:item.done}">{{item.title}}</span></label><button :aria-label="'Remove '+item.title" @click="prep=prep.filter(p=>p.id!==item.id)" :disabled="busy">×</button></div></section><form class="paper-card prep-add" @submit.prevent="addPrep"><label>New preparation item<input v-model="prepTitle" maxlength="300" placeholder="One less thing to forget" :disabled="busy" /></label><label>Category<select v-model="prepCategory" :disabled="busy"><option v-for="c in categories" :key="c.id" :value="c.id">{{c.label}}</option></select></label><button :disabled="busy||!prepTitle.trim()||prep.length>=200">Add to checklist</button></form></section>
+ <section v-if="tab==='keepsakes'"><div class="section-heading"><div><p class="eyebrow">The journey, remembered</p><h2>Moments & reflections.</h2></div></div><div class="actions"><RouterLink :to="{path:'/memories/new',query:{trip_id:id}}" class="button primary">Create memory</RouterLink><RouterLink :to="{path:'/journal/new',query:{trip_id:id}}" class="button">Write in journal</RouterLink><button @click="photoOpen=true">Trip photos</button></div><p v-if="linksError" class="notice" role="alert">{{linksError}} <button @click="loadLinks">Retry links</button></p><div class="linked-grid"><RouterLink v-for="m in memories" :key="m.id" :to="'/memories/'+m.id" class="paper-card"><img v-if="m.media?.[0]" :src="m.media[0].file_path" :alt="m.title" loading="lazy" /><span class="eyebrow">Memory · {{m.memory_date}}</span><h3>{{m.title}}</h3></RouterLink><RouterLink v-for="j in journals" :key="j.id" :to="'/journal/'+j.id" class="paper-card"><span class="eyebrow">Journal · {{j.entry_date}}</span><h3>{{j.title}}</h3><p class="muted">{{j.content.slice(0,160)}}</p></RouterLink></div><p v-if="!memories.length&&!journals.length&&!linksError" class="empty">The itinerary is your plan. Keep the moments that actually happen here.</p></section>
+ </div><aside class="trip-summary"><img v-if="trip.cover_image_path" :src="trip.cover_image_path" :alt="trip.destination || trip.title" /><p class="eyebrow">Field notes</p><h3>{{trip.destination || 'An open possibility'}}</h3><p class="muted">{{normalDays.length}} days · {{items.filter(i=>i.trip_day_id!==ideasDay?.id).length}} activities</p><p v-if="trip.description" class="summary-notes">{{trip.description}}</p><p v-if="outside.length" class="muted">{{outside.length}} days kept outside your travel dates.</p><button @click="photoOpen=true">Manage trip photos</button><p class="handnote">Plans guide the day.<br>They don’t have to fill it.</p></aside></div>
+ </template>
+ <AppSheet :model-value="activityOpen" title="Plan an activity" @update:model-value="closeActivity"><form class="planner-sheet form-grid" @submit.prevent="submitActivity"><label>Activity title<input v-model="activityDraft.title" maxlength="255" :disabled="busy" /></label><div class="pair"><label>Start time · optional<input v-model="activityDraft.scheduled_time" type="time" :disabled="busy" /></label><label>Duration in minutes<input v-model.number="activityDraft.duration_minutes" type="number" min="1" max="1440" :disabled="busy" /></label></div><label>Flexible time label<input v-model="activityDraft.time_label" maxlength="80" placeholder="Afternoon, after lunch, whenever…" :disabled="busy" /></label><label>Place<input v-model="activityDraft.location_name" maxlength="255" placeholder="Place name or address" :disabled="busy" /></label><label>Notes<textarea v-model="activityDraft.description" :disabled="busy" /></label><details><summary>Reservation & completion</summary><div class="form-grid"><label>Booking reference<input v-model="activityDraft.booking_reference" maxlength="255" :disabled="busy" /></label><label>Activity status<select v-model="activityDraft.status" :disabled="busy"><option value="planned">Planned</option><option value="visited">Completed</option><option value="skipped">Skipped</option><option value="cancelled">Cancelled</option></select></label><p class="muted">A past time never automatically marks an activity completed.</p></div></details><p v-if="sheetError" role="alert" class="notice">{{sheetError}}</p><div class="sheet-actions"><button type="button" :disabled="busy" @click="closeActivity(false)">Cancel</button><button class="primary" :disabled="busy">{{busy?'Saving…':'Save activity'}}</button></div></form></AppSheet>
+ <AppSheet :model-value="detailsOpen" title="Trip details" @update:model-value="closeDetails"><form @submit.prevent="saveDetails"><TripBasicsForm v-model="details" editing :disabled="busy" /><p v-if="sheetError" role="alert" class="notice">{{sheetError}}</p><div class="sheet-actions"><button type="button" :disabled="busy" @click="closeDetails(false)">Cancel</button><button class="primary" :disabled="busy">Save trip details</button></div></form></AppSheet>
+ <AppSheet :model-value="!!menuItem" title="Activity options" @update:model-value="!busy&&(menuItem=null)"><div v-if="menuItem" class="form-grid"><h3>{{menuItem.title}}</h3><p v-if="error" role="alert" class="notice">{{error}}</p><label>Move to day<select v-model="moveTarget" :disabled="busy"><option v-for="d in days" :key="d.id" :value="d.id">{{dayLabel(d)}}{{d.date?' · '+niceDate(d.date):''}}</option></select></label><button :disabled="busy||moveTarget===menuItem.trip_day_id" @click="move">Move activity</button><button :disabled="busy" @click="duplicate">Duplicate activity</button><button :disabled="busy" @click="openLinks">Link an existing keepsake</button><RouterLink :to="{path:'/memories/new',query:activityQuery(menuItem)}" class="button">Create memory from this activity</RouterLink><RouterLink :to="{path:'/journal/new',query:activityQuery(menuItem)}" class="button">Reflect in journal</RouterLink><button v-if="!deleteConfirm" @click="deleteConfirm=true" :disabled="busy">Remove activity</button><template v-else><p class="muted">Remove this activity? Linked memories and journal entries are kept.</p><button @click="remove" :disabled="busy">Confirm removal</button></template></div></AppSheet>
+ <AppSheet v-model="linkOpen" title="Link a keepsake"><div class="form-grid"><label>Record type<select v-model="linkKind" @change="openLinks"><option value="memories">Memory</option><option value="journal">Journal entry</option></select></label><label>Choose a record<select v-model="linkId" :disabled="linkBusy"><option value="">{{linkBusy?'Loading…':'Choose one of your records'}}</option><option v-for="record in linkOptions" :key="record.id" :value="record.id">{{record.title}}</option></select></label><p class="muted">This updates its trip and activity link. Its writing, photos, and decorations stay intact.</p><p v-if="sheetError" role="alert" class="notice">{{sheetError}}</p><button class="primary" :disabled="busy||linkBusy||!linkId" @click="attach">Save link</button></div></AppSheet>
+ <AppSheet v-model="photoOpen" title="Trip photographs"><div class="form-grid"><label>Add trip photos<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" :disabled="photoBusy" @change="choosePhotos" /></label><p v-if="photoError" class="notice" role="alert">{{photoError}}</p><div class="photo-drafts"><img v-for="p in photoDrafts" :key="p.id" :src="p.url" :alt="p.file.name" /></div><button v-if="photoDrafts.length" class="primary" :disabled="photoBusy" @click="uploadPhotos">{{photoBusy?'Uploading…':'Upload photos'}}</button><div v-for="photo in trip?.media || []" :key="photo.id" class="trip-photo"><img :src="photo.file_path" :alt="photo.original_filename" /><div class="actions"><button @click="cover(photo)" :disabled="busy">{{trip?.cover_media_id===photo.id?'Current cover':'Use as cover'}}</button><button @click="removePhoto(photo)" :disabled="busy">Delete photo</button></div></div></div></AppSheet>
+</main></template>
+<style scoped>
+.planner-tabs{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid #d4c9b5;margin:26px 0 24px;padding-bottom:8px}.planner-tabs button{border:0;background:transparent;flex-shrink:0}.planner-tabs button[aria-pressed=true]{background:#74283c;color:#fff7e9}.planner-columns{display:grid;gap:28px}.main-plan{min-width:0}.day-nav{display:flex;gap:12px;align-items:flex-end;padding:18px;background:#e5e7db;border-radius:10px}.day-nav label{flex:1;min-width:0}.day-nav button{flex-shrink:0}.activities{display:grid;gap:16px}.activity-card{position:relative;display:flex;gap:12px;background:#fffbf2;border:1px solid #ddd1bd;border-radius:10px;padding:20px 14px;box-shadow:0 4px 14px #634a2a08}.activity-marker{font:italic 18px Georgia;color:#8a9379;padding-top:3px;min-width:24px}.activity-content{min-width:0;flex:1}.activity-top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}.activity-time{font-size:12px;color:#74283c}.activity-time span{color:#85765f}.activity-card h3{margin:9px 0 10px;font-size:27px}.activity-place{font-size:14px;color:#6a765a;margin-bottom:8px;overflow-wrap:anywhere}.activity-notes{font-size:15px;line-height:1.65;color:#776a58;white-space:pre-wrap;overflow-wrap:anywhere}.booking{font:13px monospace;border-top:1px dashed #daceb9;margin-top:12px;padding-top:10px;overflow-wrap:anywhere}.activity-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:16px}.activity-actions button{padding:8px 12px}.activity-actions .drag-handle{touch-action:none;font-size:22px;cursor:grab;margin-left:auto}.activity-links{display:flex;flex-wrap:wrap;gap:12px}.activity-links a{font-size:14px;color:#74283c;min-height:44px;display:inline-flex;align-items:center}.overlap{font-size:13px;color:#87643a;margin-top:12px}.drop-target{outline:3px solid #8a9573;outline-offset:3px}.completed{border-left:4px solid #8b9876}.trip-summary{display:none}.today-note{padding:24px;background:#e4e8db;border-radius:12px;margin-bottom:24px}.today-note h2{margin:10px 0}.next-activity{font-size:16px;line-height:1.6;margin-top:16px;color:#74283c}.ideas-intro{margin-bottom:24px}.prep-group{margin:26px 0}.prep-group h3{margin-bottom:12px}.prep-row{display:flex;align-items:center;gap:12px;justify-content:space-between;border-bottom:1px solid #ddd1bd;padding:10px 0}.prep-row label{flex:1;min-width:0}.prep-row span{overflow-wrap:anywhere}.checked{text-decoration:line-through;color:#7c866a}.prep-add{display:grid;gap:16px;margin-top:24px}.linked-grid{display:grid;gap:20px;margin-top:24px}.linked-grid img{width:100%;height:200px;object-fit:contain;background:#e5e7db;margin-bottom:18px}.linked-grid h3{margin-top:12px}.photo-drafts{display:flex;gap:10px;overflow-x:auto}.photo-drafts img{width:90px;height:90px;object-fit:contain}.trip-photo img{width:100%;max-height:260px;object-fit:contain;background:#e6e4d8;margin-bottom:10px}@media(min-width:700px){.activity-card{padding:26px;gap:20px}.linked-grid{grid-template-columns:1fr 1fr}}@media(min-width:1100px){.planner-columns{grid-template-columns:minmax(0,1fr) 260px}.trip-summary{display:block;align-self:start;background:#ece8db;border:1px solid #dcd2bf;padding:22px;border-radius:10px;position:sticky;top:90px}.trip-summary>img{width:100%;height:160px;object-fit:contain;margin-bottom:22px}.trip-summary h3{margin:12px 0}.summary-notes{font-size:14px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:20px 0}.trip-summary button{margin:20px 0}.trip-summary .handnote{margin-top:14px}}
+</style>

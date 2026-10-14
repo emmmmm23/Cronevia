@@ -8,9 +8,9 @@ type RecordData = Record<string, any>
 type Options = { params?: Record<string, string | number>; headers?: Record<string, string> }
 const tables: Record<string, Table> = { trips: 'trips', journal: 'journal_entries', memories: 'memories' }
 const writable: Record<Table, string[]> = {
-  trips: ['title', 'description', 'destination', 'start_date', 'end_date', 'status', 'budget', 'currency', 'visibility'],
+  trips: ['timezone', 'preparation', 'title', 'description', 'destination', 'start_date', 'end_date', 'status', 'budget', 'currency', 'visibility'],
   journal_entries: ['scrapbook_layout', 'title', 'content', 'entry_date', 'trip_id', 'trip_day_id', 'itinerary_item_id', 'memory_id', 'mood_emoji', 'mood_name', 'mood_enum', 'location_name', 'latitude', 'longitude', 'weather', 'visibility', 'status', 'is_archived', 'location_source', 'tags'],
-  memories: ['scrapbook_layout', 'title', 'description', 'trip_id', 'memory_date', 'location_name', 'latitude', 'longitude', 'is_archived'],
+  memories: ['itinerary_item_id', 'journal_entry_id', 'scrapbook_layout', 'title', 'description', 'trip_id', 'memory_date', 'location_name', 'latitude', 'longitude', 'is_archived'],
 }
 export function preparePayload(table: Table, input: RecordData) {
   const source = { ...input }
@@ -86,7 +86,7 @@ async function upload(table: Table, parentId: string, body: FormData, userId: st
   return { data: result.data }
 }
 function itineraryPayload(input: RecordData) {
-  const keys = ['title', 'description', 'location_id', 'duration_minutes', 'sort_order', 'start_time', 'end_time', 'cost', 'currency', 'item_type', 'status']
+  const keys = ['location_name', 'time_label', 'booking_reference', 'title', 'description', 'location_id', 'duration_minutes', 'sort_order', 'start_time', 'end_time', 'cost', 'currency', 'item_type', 'status']
   const source = { ...input }
   if ('scheduled_time' in source) source.start_time = source.scheduled_time
   if (source.status === 'visited') source.status = 'completed'
@@ -175,7 +175,9 @@ async function request(method: string, path: string, body?: RecordData | FormDat
   if (method === 'POST') {
     if (!String(payload.title || '').trim()) failure('A title is required.', 422)
     if (table === 'trips') payload.slug = `${String(payload.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0,100)}-${crypto.randomUUID()}`
-    const row = table === 'journal_entries' && input.draft_key
+    const row = table === 'trips' && input.draft_key
+      ? check(await supabase.rpc('create_trip_draft',{draft_id:String(input.draft_key),details:payload}))
+      : table === 'journal_entries' && input.draft_key
       ? check(await supabase.rpc('create_journal_draft', {
         draft_id: String(input.draft_key), draft_title: String(payload.title),
         draft_content: String(payload.content || ''), draft_date: String(payload.entry_date)

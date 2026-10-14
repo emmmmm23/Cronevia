@@ -30,7 +30,7 @@ onMounted(async () => {
         if (failure) throw failure
         for (const row of data || []) {
           items.value.push({ id: row.id, title: row.title, type: table === 'journal_entries' ? 'Journal' : table === 'trips' ? 'Trip' : 'Memory',
-            date: ('entry_date' in row ? row.entry_date : 'start_date' in row ? row.start_date : row.memory_date) || row.created_at.slice(0,10),
+            date: ('entry_date' in row ? row.entry_date : 'start_date' in row ? row.start_date : 'memory_date' in row ? row.memory_date : null) || row.created_at.slice(0,10),
             to: `/${table === 'journal_entries' ? 'journal' : table}/${row.id}`,
             latitude: 'latitude' in row ? row.latitude : null, longitude: 'longitude' in row ? row.longitude : null,
             location: 'location_name' in row ? row.location_name : 'destination' in row ? row.destination : null })

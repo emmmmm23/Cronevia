@@ -204,7 +204,7 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-const journalEditor = computed(() => ['journal.create','journal.edit','memories.create','memories.show','memories.edit'].includes(String(route.name)))
+const journalEditor = computed(() => ['journal.create','journal.edit','memories.create','memories.show','memories.edit','trips.create','trips.edit','trips.show'].includes(String(route.name)))
 
 // Mobile menu state
 const mobileMenuOpen = ref<boolean>(false)

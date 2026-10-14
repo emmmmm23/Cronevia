@@ -15,6 +15,7 @@ import api from '@/services/api.service'
 const route=useRoute(), router=useRouter(), store=useJournalStore(), auth=useAuthStore()
 const entryId=route.params.id as string | undefined
 const savedEntryId=ref(entryId), draftKey=crypto.randomUUID()
+const linkedTrip=ref(String(route.query.trip_id||'')),linkedDay=ref(String(route.query.trip_day_id||'')),linkedActivity=ref(String(route.query.itinerary_item_id||''))
 const title=ref(''), content=ref(''), date=ref(new Date().toLocaleDateString('en-CA'))
 const tags=ref<string[]>([]), tagInput=ref(''), moodEmoji=ref(''), moodLabel=ref('')
 const locationName=ref(''), latitude=ref<number|null>(null), longitude=ref<number|null>(null)
@@ -34,6 +35,7 @@ async function load() {
   try {
     if(entryId) {
       const entry=(await api.get<{data:JournalEntry}>(`/journal/${entryId}`)).data.data
+      linkedTrip.value=entry.trip_id||'';linkedDay.value=entry.trip_day_id||'';linkedActivity.value=entry.itinerary_item_id||''
       title.value=entry.title;content.value=entry.content;date.value=entry.entry_date
       tags.value=entry.tags || [];moodEmoji.value=entry.mood_emoji || '';moodLabel.value=entry.mood_label || entry.mood || ''
       locationName.value=entry.location_name || '';latitude.value=entry.latitude;longitude.value=entry.longitude
@@ -57,7 +59,7 @@ function cancelEdit() {
 async function handleSave() {
   if(!canSave.value) return
   saving.value=true;saveError.value=''
-  const payload={title:title.value,content:content.value,entry_date:date.value,tags:tags.value,mood_emoji:moodEmoji.value || null,mood_label:moodLabel.value || null,location_name:locationName.value || null,latitude:latitude.value,longitude:longitude.value,location_source:locationSource.value,visibility:visibility.value}
+  const payload={trip_id:linkedTrip.value||null,trip_day_id:linkedDay.value||null,itinerary_item_id:linkedActivity.value||null,title:title.value,content:content.value,entry_date:date.value,tags:tags.value,mood_emoji:moodEmoji.value || null,mood_label:moodLabel.value || null,location_name:locationName.value || null,latitude:latitude.value,longitude:longitude.value,location_source:locationSource.value,visibility:visibility.value}
   try {
     if(!savedEntryId.value) savedEntryId.value=(await store.createEntry({...payload,draft_key:draftKey})).id
     const composition=await notebook.value!.prepareSave(savedEntryId.value)

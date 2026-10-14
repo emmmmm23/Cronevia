@@ -126,6 +126,8 @@ Relationships: []
 }
 trips: {
 Row: {
+  timezone?: string | null
+  preparation?: Json
   id: string
   user_id: string
   title: string
@@ -143,6 +145,8 @@ Row: {
   deleted_at: string | null
 }
 Insert: {
+  timezone?: string | null
+  preparation?: Json
   id?: string
   user_id: string
   title: string
@@ -160,6 +164,8 @@ Insert: {
   deleted_at?: string | null
 }
 Update: {
+  timezone?: string | null
+  preparation?: Json
   id?: string
   user_id?: string
   title?: string
@@ -180,6 +186,7 @@ Relationships: []
 }
 trip_days: {
 Row: {
+  is_ideas?: boolean
   id: string
   trip_id: string
   title: string | null
@@ -190,6 +197,7 @@ Row: {
   updated_at: string
 }
 Insert: {
+  is_ideas?: boolean
   id?: string
   trip_id: string
   title?: string | null
@@ -200,6 +208,7 @@ Insert: {
   updated_at?: string
 }
 Update: {
+  is_ideas?: boolean
   id?: string
   trip_id?: string
   title?: string | null
@@ -213,6 +222,9 @@ Relationships: []
 }
 itinerary_items: {
 Row: {
+  location_name?: string | null
+  time_label?: string | null
+  booking_reference?: string | null
   id: string
   trip_day_id: string
   location_id: string | null
@@ -230,6 +242,9 @@ Row: {
   updated_at: string
 }
 Insert: {
+  location_name?: string | null
+  time_label?: string | null
+  booking_reference?: string | null
   id?: string
   trip_day_id: string
   location_id?: string | null
@@ -247,6 +262,9 @@ Insert: {
   updated_at?: string
 }
 Update: {
+  location_name?: string | null
+  time_label?: string | null
+  booking_reference?: string | null
   id?: string
   trip_day_id?: string
   location_id?: string | null
@@ -267,6 +285,8 @@ Relationships: []
 }
 memories: {
 Row: {
+  itinerary_item_id?: string | null
+  journal_entry_id?: string | null
 scrapbook_layout: Json | null
   id: string
   user_id: string
@@ -283,6 +303,8 @@ scrapbook_layout: Json | null
   deleted_at: string | null
 }
 Insert: {
+  itinerary_item_id?: string | null
+  journal_entry_id?: string | null
 scrapbook_layout?: Json | null
   id?: string
   user_id: string
@@ -299,6 +321,8 @@ scrapbook_layout?: Json | null
   deleted_at?: string | null
 }
 Update: {
+  itinerary_item_id?: string | null
+  journal_entry_id?: string | null
   id?: string
   user_id?: string
   trip_id?: string | null
@@ -957,6 +981,10 @@ Update: {
 Relationships: []
 }
 }; Views: { [_ in never]: never }; Functions: {
+ensure_trip_days: {Args:{target_trip_id:string};Returns:undefined}
+create_trip_draft: {Args:{draft_id:string;details:Json};Returns:Database['public']['Tables']['trips']['Row']}
+save_trip_activity: {Args:{target_trip_id:string;target_day_id:string;activity_id:string;details:Json};Returns:Database['public']['Tables']['itinerary_items']['Row']}
+move_trip_activity: {Args:{activity_id:string;target_day_id:string};Returns:undefined}
 replace_journal_stickers: { Args: { target_entry_id: string; placements: Json }; Returns: undefined }
 create_memory_draft: { Args: { draft_id: string; draft_title: string; draft_description: string; draft_date: string }; Returns: Database['public']['Tables']['memories']['Row'] }
 create_journal_draft: { Args: { draft_id: string; draft_title: string; draft_content: string; draft_date: string }; Returns: Database['public']['Tables']['journal_entries']['Row'] }

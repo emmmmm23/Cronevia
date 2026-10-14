@@ -23,7 +23,11 @@ export interface User {
 
 export type TripStatus = 'planning' | 'active' | 'completed' | 'archived'
 
+export interface PreparationItem { id:string; title:string; done:boolean; category: 'packing'|'reservations'|'documents'|'reminders' }
+
 export interface Trip {
+  timezone?: string | null
+  preparation?: PreparationItem[]
   id: string
   user_id: string
   title: string
@@ -43,16 +47,17 @@ export interface Trip {
 }
 
 export interface TripDay {
+  is_ideas?: boolean
   id: string
   trip_id: string
-  date: string
+  date: string | null
   day_number: number
   title: string | null
   notes: string | null
   itinerary_items?: ItineraryItem[]
 }
 
-export type ItineraryStatus = 'planned' | 'visited' | 'skipped'
+export type ItineraryStatus = 'planned' | 'visited' | 'skipped' | 'cancelled'
 
 export interface Location {
   id: string
@@ -65,6 +70,9 @@ export interface Location {
 }
 
 export interface ItineraryItem {
+  location_name?: string | null
+  time_label?: string | null
+  booking_reference?: string | null
   id: string
   trip_day_id: string
   location_id: string | null
@@ -125,6 +133,7 @@ export interface Media {
 }
 
 export interface Memory {
+  journal_entry_id?: string | null
   location_name?: string | null
   scrapbook_layout?: import('./scrapbook').ScrapbookLayout | null
   id: string
