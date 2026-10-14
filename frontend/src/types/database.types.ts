@@ -281,7 +281,7 @@ Update: {
   created_at?: string
   updated_at?: string
 }
-Relationships: []
+Relationships: [{foreignKeyName:'itinerary_items_location_id_fkey';columns:['location_id'];isOneToOne:false;referencedRelation:'locations';referencedColumns:['id']}]
 }
 memories: {
 Row: {

@@ -1,4 +1,5 @@
--- Apply to an existing October 14 scrapbook installation after review.
+-- Idempotent planner upgrade for the October 14 Cronevia schema.
+-- Review TRIPS_MEMORIES_REDESIGN.md before applying to the hosted project.
 BEGIN;
 -- Additive planner upgrade. Existing days, activities, media and budgets are retained.
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS timezone text;

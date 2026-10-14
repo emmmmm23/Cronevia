@@ -9,7 +9,15 @@ export async function loadPlan(id:string){
  const ensured=await supabase.rpc('ensure_trip_days',{target_trip_id:id});if(ensured.error)throw ensured.error
  const trip=(await api.get<{data:Trip}>('/trips/'+id)).data.data
  const days=(await api.get<{data:TripDay[]}>('/trips/'+id+'/days')).data.data
- const items=(await Promise.all(days.map(async d=>(await api.get<{data:ItineraryItem[]}>('/trips/'+id+'/days/'+d.id+'/itinerary')).data.data))).flat()
+ const items:ItineraryItem[]=[]
+ // Page through the whole plan; the API's default row cap must not hide later activities.
+ for(let offset=0;days.length;offset+=500){
+  const result=await supabase.from('itinerary_items').select('*, location:locations(*)').in('trip_day_id',days.map(d=>d.id)).order('sort_order').order('id').range(offset,offset+499)
+  if(result.error)throw result.error
+  const rows=result.data||[]
+  items.push(...rows.map(i=>({...i,scheduled_time:i.start_time,category:i.item_type,converted_to_memory:false,status:i.status==='completed'?'visited':i.status})) as ItineraryItem[])
+  if(rows.length<500)break
+ }
  return {trip,days,items}
 }
 export async function saveActivity(tripId:string,dayId:string,id:string,details:Partial<ItineraryItem>){

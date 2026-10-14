@@ -158,7 +158,7 @@ async function request(method: string, path: string, body?: RecordData | FormDat
       return { data: presentItem(check(result)) }
     }
     if (method === 'GET') return { data: check(await supabase.from('trip_days').select('*').eq('trip_id', id).order('day_number')) }
-    if (method === 'POST') return { data: check(await supabase.from('trip_days').insert({ trip_id: id, day_number: input.day_number,
+    if (method === 'POST') return { data: check(await supabase.from('trip_days').upsert({ id:input.id || crypto.randomUUID(),trip_id: id, day_number: input.day_number,
       date: input.date, title: input.title, notes: input.notes }).select().single()) }
   }
   if (method === 'GET') {
