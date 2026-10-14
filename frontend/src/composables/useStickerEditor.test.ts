@@ -109,7 +109,7 @@ describe('useStickerEditor', () => {
 
     it('creates history snapshot after deleting', () => {
       editor.addSticker('asset-1')
-      const historyLengthBefore = editor.canUndo.value
+      // historyLengthBefore not used but kept for future reference
       
       editor.deleteSticker(editor.placements.value[0].id)
       

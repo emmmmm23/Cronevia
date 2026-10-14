@@ -3,8 +3,8 @@ import { mount } from '@vue/test-utils'
 import StickerTray from './StickerTray.vue'
 
 // Mock composables
-const mockBuiltinAssets = vi.fn(() => [])
-const mockUserAssets = vi.fn(() => [])
+const mockBuiltinAssets = vi.fn(() => [] as any[])
+const mockUserAssets = vi.fn(() => [] as any[])
 const mockLoadBuiltins = vi.fn()
 const mockLoadUserAssets = vi.fn()
 const mockUploadAsset = vi.fn()

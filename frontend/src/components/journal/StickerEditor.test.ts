@@ -28,9 +28,9 @@ vi.mock('./StickerToolbar.vue', () => ({
 }))
 
 // Mock composables
-const mockPlacements = vi.fn(() => [])
-const mockSelectedId = vi.fn(() => null)
-const mockSelectedSticker = vi.fn(() => null)
+const mockPlacements = vi.fn(() => [] as any[])
+const mockSelectedId = vi.fn(() => null as any)
+const mockSelectedSticker = vi.fn(() => null as any)
 const mockCanUndo = vi.fn(() => false)
 const mockCanRedo = vi.fn(() => false)
 const mockHasChanges = vi.fn(() => false)
