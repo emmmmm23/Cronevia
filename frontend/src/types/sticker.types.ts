@@ -22,6 +22,7 @@ export interface StickerAsset {
  */
 export interface StickerPlacement {
   id: string
+  asset_aspect_ratio?: number // Hydrated metadata for legacy-to-notebook conversion
   journal_entry_id: string
   sticker_asset_id: string
   x: number // Normalized 0-1

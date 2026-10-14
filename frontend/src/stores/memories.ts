@@ -61,7 +61,7 @@ export const useMemoriesStore = defineStore('memories', () => {
   /**
    * Create a new memory
    */
-  async function createMemory(payload: Partial<Memory> & { title: string; memory_date: string }) {
+  async function createMemory(payload: Partial<Memory> & { title: string; memory_date: string; draft_key?: string }) {
     saving.value = true
     error.value = null
     try {

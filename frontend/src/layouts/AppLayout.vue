@@ -1,7 +1,8 @@
 <template>
   <div class="min-h-screen bg-[#f5ebdd]">
+    <div v-if="journalEditor" class="journal-brand"><RouterLink to="/journal" aria-label="Cronevia journal">Cronevia<span aria-hidden="true">.</span></RouterLink><span>Your days, kept close.</span></div>
     <!-- Header navigation -->
-    <header role="banner" class="sticky top-0 z-40 bg-[#fdfaf5] border-b border-[#e5d4bb] shadow-sm">
+    <header v-if="!journalEditor" role="banner" class="sticky top-0 z-40 bg-[#fdfaf5] border-b border-[#e5d4bb] shadow-sm">
       <nav class="max-w-7xl mx-auto px-4 sm:px-6" aria-label="Main navigation">
         <div class="flex items-center justify-between h-16">
           
@@ -203,6 +204,7 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const journalEditor = computed(() => route.name === 'journal.create' || route.name === 'journal.edit')
 
 // Mobile menu state
 const mobileMenuOpen = ref<boolean>(false)
@@ -274,3 +276,7 @@ onClickOutside(profileDropdownRef, () => {
   profileDropdownOpen.value = false
 })
 </script>
+
+<style scoped>
+.journal-brand{height:58px;padding:0 38px;display:flex;align-items:center;justify-content:space-between;background:#f7f4ec;border-bottom:1px solid #ded8cb}.journal-brand a{font:600 25px Georgia,serif;color:#74283c;letter-spacing:-1px}.journal-brand a span{color:#829073}.journal-brand>span{font:16px 'Caveat',cursive;color:#878773}@media(max-width:767px){.journal-brand{height:52px;padding:0 18px}.journal-brand a{font-size:22px}}
+</style>

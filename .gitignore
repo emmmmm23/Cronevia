@@ -39,3 +39,7 @@ supabase/apply-existing-project.sql
 # Local Vercel project links
 .vercel/
 frontend/.vercel/
+
+# Local browser regression artifacts
+frontend/test-results/
+frontend/playwright-report/

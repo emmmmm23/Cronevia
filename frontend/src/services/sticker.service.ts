@@ -171,7 +171,7 @@ export async function validateStickerFile(file: File): Promise<StickerUploadVali
  * Upload a new sticker asset
  * Validates file, uploads to stickers-custom bucket, creates database row
  */
-export async function uploadStickerAsset(file: File): Promise<StickerAsset & { url: string }> {
+export async function uploadStickerAsset(file: File, uploadId: string = crypto.randomUUID()): Promise<StickerAsset & { url: string }> {
   const user = await requireUser()
 
   // Validate file
@@ -182,19 +182,20 @@ export async function uploadStickerAsset(file: File): Promise<StickerAsset & { u
 
   // Generate unique storage path
   const ext = file.type === 'image/png' ? 'png' : 'webp'
-  const path = `${user.id}/${crypto.randomUUID()}.${ext}`
+  const path = `${user.id}/${uploadId}.${ext}`
 
   // Upload to storage
   check(
     await supabase.storage
       .from('stickers-custom')
-      .upload(path, file, { contentType: file.type, upsert: false })
+      .upload(path, file, { contentType: file.type, upsert: true })
   )
 
   // Create database row
   const result = await supabase
     .from('sticker_assets')
-    .insert({
+    .upsert({
+      id: uploadId,
       user_id: user.id,
       storage_path: path,
       mime_type: file.type,
@@ -205,11 +206,8 @@ export async function uploadStickerAsset(file: File): Promise<StickerAsset & { u
     .select()
     .single()
 
-  // If database insert fails, clean up storage
-  if (result.error) {
-    await supabase.storage.from('stickers-custom').remove([path])
-    check(result)
-  }
+  // A failed response may follow a committed upsert. Keep the private object for safe retry.
+  check(result)
 
   const asset = result.data!
 
@@ -256,21 +254,13 @@ export async function deleteAsset(assetId: string): Promise<void> {
     failure('Cannot delete sticker that is used in journal entries. Remove it from all entries first.', 409)
   }
 
-  // Delete from storage
+  // Database triggers reject deletion while any saved scrapbook still references this asset.
+  // Perform that check before touching the underlying private object.
   check(
-    await supabase.storage
-      .from('stickers-custom')
-      .remove([asset.storage_path])
+    await supabase.from('sticker_assets').delete().eq('id', assetId).eq('user_id', user.id)
   )
+  check(await supabase.storage.from('stickers-custom').remove([asset.storage_path]))
 
-  // Delete from database
-  check(
-    await supabase
-      .from('sticker_assets')
-      .delete()
-      .eq('id', assetId)
-      .eq('user_id', user.id)
-  )
 }
 
 /**
@@ -300,6 +290,8 @@ export async function fetchPlacements(entryId: string): Promise<StickerPlacement
           user_id,
           storage_path,
           mime_type,
+          width,
+          height,
           category
         )
       `)
@@ -309,7 +301,7 @@ export async function fetchPlacements(entryId: string): Promise<StickerPlacement
 
   // For built-in stickers, convert asset ID to our client-side format
   return placements.map((p: any) => {
-    const placement = { ...p }
+    const placement = { ...p, asset_aspect_ratio: p.sticker_asset?.width / p.sticker_asset?.height || 1 }
     
     // If the asset is built-in (user_id is null), use our client-side ID format
     if (p.sticker_asset && p.sticker_asset.user_id === null) {
@@ -331,97 +323,14 @@ export async function fetchPlacements(entryId: string): Promise<StickerPlacement
  * For custom stickers, we reference the database ID
  */
 export async function savePlacements(entryId: string, placements: StickerPlacement[]): Promise<void> {
-  const user = await requireUser()
-
-  // Verify entry ownership
-  check(
-    await supabase
-      .from('journal_entries')
-      .select('id')
-      .eq('id', entryId)
-      .eq('user_id', user.id)
-      .single()
-  )
-
-  // Delete existing placements
-  check(
-    await supabase
-      .from('journal_sticker_placements')
-      .delete()
-      .eq('journal_entry_id', entryId)
-  )
-
-  // Insert new placements if any
-  // For built-in stickers, we need to ensure they exist in the database or handle them specially
-  if (placements.length > 0) {
-    // For built-in placements, we'll create entries in sticker_assets if they don't exist
-    // This ensures referential integrity
-    const builtinPlacements = placements.filter(p => p.sticker_asset_id.startsWith('builtin-'))
-
-    for (const bp of builtinPlacements) {
-      const storagePath = bp.sticker_asset_id.replace('builtin-', '')
-      
-      // Check if this builtin sticker exists in database
-      const existing = await supabase
-        .from('sticker_assets')
-        .select('id')
-        .is('user_id', null)
-        .eq('storage_path', storagePath)
-        .maybeSingle()
-
-      if (!existing.data) {
-        // Insert it
-        const category = storagePath.split('-')[0] // e.g., 'heart' from 'heart-01.svg'
-        await supabase
-          .from('sticker_assets')
-          .insert({
-            user_id: null,
-            storage_path: storagePath,
-            mime_type: 'image/svg+xml',
-            width: 100,
-            height: 100,
-            category: category
-          })
-      }
-    }
-
-    // Now get the actual database IDs for built-in stickers
-    const placementsToInsert = await Promise.all(
-      placements.map(async (p) => {
-        let assetId = p.sticker_asset_id
-
-        if (assetId.startsWith('builtin-')) {
-          const storagePath = assetId.replace('builtin-', '')
-          const asset = check(
-            await supabase
-              .from('sticker_assets')
-              .select('id')
-              .is('user_id', null)
-              .eq('storage_path', storagePath)
-              .single()
-          )
-          assetId = asset.id
-        }
-
-        return {
-          id: p.id,
-          journal_entry_id: entryId,
-          sticker_asset_id: assetId,
-          x: p.x,
-          y: p.y,
-          width: p.width,
-          rotation: p.rotation,
-          z_index: p.z_index
-        }
-      })
-    )
-
-    check(
-      await supabase
-        .from('journal_sticker_placements')
-        .insert(placementsToInsert)
-    )
-  }
+  await requireUser()
+  check(await supabase.rpc('replace_journal_stickers', {
+    target_entry_id: entryId,
+    placements: placements.map(p => ({
+      id:p.id, sticker_asset_id:p.sticker_asset_id, x:p.x, y:p.y,
+      width:p.width, rotation:p.rotation, z_index:p.z_index
+    }))
+  }))
 }
 
 /**

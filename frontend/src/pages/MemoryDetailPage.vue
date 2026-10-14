@@ -1,119 +1,61 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRoute, RouterLink, onBeforeRouteLeave } from 'vue-router'
 import api from '@/services/api.service'
-import type { Memory, Trip, JournalEntry } from '@/types'
-
-const route    = useRoute()
+import { useAuthStore } from '@/stores/auth'
+import ScrapbookNotebook from '@/components/journal/ScrapbookNotebook.vue'
+import { scrapbookError } from '@/services/scrapbook-errors'
+import { emptyLayout, type ScrapbookLayout } from '@/types/scrapbook'
+import type { Memory } from '@/types'
+const route = useRoute(), auth = useAuthStore()
 const memoryId = route.params.id as string
-
-const memory  = ref<Memory | null>(null)
-const trip    = ref<Trip | null>(null)
-const journal = ref<JournalEntry | null>(null)
-const loading = ref(false)
-const error   = ref('')
-
-onMounted(async () => {
-  loading.value = true
-  error.value   = ''
-  try {
-    const { data } = await api.get<{ data: Memory }>(`/memories/${memoryId}`)
-    memory.value = data.data
-
-    // Fetch related trip if linked
-    if (memory.value.trip_id) {
-      try {
-        const tripRes = await api.get<{ data: Trip }>(`/trips/${memory.value.trip_id}`)
-        trip.value = tripRes.data.data
-      } catch { /* trip may have been deleted */ }
-    }
-
-    // Fetch related journal entry if linked
-    if (memory.value.journal_entry) {
-      journal.value = memory.value.journal_entry
-    }
-  } catch (e: unknown) {
-    const status = (e as { response?: { status?: number } })?.response?.status
-    error.value = (status === 403 || status === 404)
-      ? 'This memory could not be found.'
-      : `We couldn't load this memory right now. Please try again.`
-  } finally {
-    loading.value = false
-  }
-})
-
-function formatDate(d: string): string {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
+const memory = ref<Memory | null>(null), title = ref(''), text = ref(''), date = ref('')
+const layout = ref<ScrapbookLayout>(emptyLayout()), viewMode = ref(true), loading = ref(true), saving = ref(false), error = ref('')
+const notebook = ref<InstanceType<typeof ScrapbookNotebook> | null>(null)
+const baseline = ref(''), uploadBusy=ref(false)
+const snapshot = () => JSON.stringify({ title:title.value,text:text.value,date:date.value,layout:layout.value })
+const dirty = computed(() => !!memory.value && snapshot() !== baseline.value)
+function restore() {
+  if (!memory.value) return
+  title.value=memory.value.title; text.value=memory.value.description || ''; date.value=memory.value.memory_date
+  layout.value=JSON.parse(JSON.stringify(memory.value.scrapbook_layout || emptyLayout()))
+  notebook.value?.reset(layout.value); baseline.value=snapshot(); viewMode.value=true
 }
+async function load() {
+  loading.value=true;error.value=''
+  try { memory.value=(await api.get<{data:Memory}>(`/memories/${memoryId}`)).data.data; restore() }
+  catch(e) { error.value=scrapbookError(e,'load') }
+  finally { loading.value=false }
+}
+onMounted(load)
+async function save() {
+  if (!title.value.trim() || !date.value || saving.value) return
+  saving.value=true; error.value=''
+  try {
+    const composition=await notebook.value!.prepareSave(memoryId)
+    memory.value=(await api.put<{data:Memory}>(`/memories/${memoryId}`,{title:title.value,description:text.value,memory_date:date.value,scrapbook_layout:composition})).data.data
+    notebook.value?.markSaved(); restore()
+  } catch(e) { error.value=scrapbookError(e,'save') }
+  finally { saving.value=false }
+}
+function preventUnload(event:BeforeUnloadEvent) {if(dirty.value){event.preventDefault();event.returnValue=''}}
+onMounted(()=>window.addEventListener('beforeunload',preventUnload))
+onBeforeUnmount(()=>window.removeEventListener('beforeunload',preventUnload))
+onBeforeRouteLeave(() => !dirty.value || window.confirm('Leave without saving your memory changes?'))
 </script>
-
 <template>
-  <div class="min-h-screen bg-[#f5ebdd]">
-
-    <!-- Loading -->
-    <div v-if="loading" class="max-w-3xl mx-auto px-4 sm:px-6 py-10 animate-pulse">
-      <div class="h-4 bg-[#e5d4bb] rounded w-24 mb-6" />
-      <div class="w-full h-56 bg-[#e5d4bb] rounded-sm mb-6" />
-      <div class="h-6 bg-[#e5d4bb] rounded w-2/3 mb-3" />
-      <div class="h-4 bg-[#e5d4bb] rounded w-1/3" />
-    </div>
-
-    <!-- Error -->
-    <div v-else-if="error" class="max-w-3xl mx-auto px-4 sm:px-6 py-16 text-center">
-      <p class="text-sm text-[#7B0323] mb-4">{{ error }}</p>
-      <RouterLink :to="{ name: 'memories' }" class="text-sm font-semibold text-[#7B0323] hover:underline">Back to Memories</RouterLink>
-    </div>
-
-    <!-- Memory -->
-    <div v-else-if="memory" class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <RouterLink :to="{ name: 'memories' }" class="inline-flex items-center gap-1 text-xs text-[#8a5c2e] hover:text-[#7B0323] mb-6 transition-colors">
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-        </svg>
-        All Memories
-      </RouterLink>
-
-      <!-- Photo area -->
-      <div
-        class="w-full h-56 sm:h-72 rounded-sm bg-[#efe2cf] border border-[#d7c7b3] flex items-center justify-center mb-6"
-        aria-label="Memory photo area"
-      >
-        <svg class="w-10 h-10 text-[#c4ad94]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-        </svg>
-      </div>
-
-      <!-- Content card -->
-      <div class="bg-[#fdfaf5] border border-[#d7c7b3] rounded-sm px-6 py-6">
-        <time class="text-xs font-semibold uppercase tracking-widest text-[#8a5c2e] block mb-2">
-          {{ formatDate(memory.memory_date) }}
-        </time>
-        <h1 class="text-2xl font-bold text-[#2b1a10] mb-3" style="font-family:'Playfair Display',Georgia,serif;">
-          {{ memory.title }}
-        </h1>
-
-        <p v-if="memory.description" class="text-base text-[#6b4423] italic leading-relaxed border-l-2 border-[#d7c7b3] pl-4">
-          "{{ memory.description }}"
-        </p>
-
-        <!-- Related -->
-        <div class="mt-6 pt-5 border-t border-[#efe2cf] flex flex-col gap-3">
-          <div v-if="trip">
-            <p class="text-xs font-semibold uppercase tracking-wide text-[#a68e73] mb-1">Part of trip</p>
-            <RouterLink :to="{ name: 'trips.show', params: { id: trip.id } }"
-              class="text-sm font-bold text-[#7B0323] hover:underline" style="font-family:'Playfair Display',serif;">
-              {{ trip.title }}
-            </RouterLink>
-          </div>
-          <div v-if="journal">
-            <p class="text-xs font-semibold uppercase tracking-wide text-[#a68e73] mb-1">Related journal entry</p>
-            <RouterLink :to="{ name: 'journal.edit', params: { id: journal.id } }"
-              class="text-sm font-bold text-[#7B0323] hover:underline" style="font-family:'Playfair Display',serif;">
-              {{ journal.title }}
-            </RouterLink>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <main class="min-h-screen bg-[#e7dccb] p-3 sm:p-6">
+    <header class="max-w-6xl mx-auto flex flex-wrap justify-between gap-3 mb-5">
+      <RouterLink :to="{name:'memories'}">← All memories</RouterLink>
+      <button v-if="memory && viewMode" class="bg-[#7b0323] text-white rounded px-4 py-2" @click="viewMode=false">Edit memory</button>
+      <div v-if="memory && !viewMode" class="flex gap-3"><button :disabled="saving || uploadBusy" @click="restore">Cancel</button><button :disabled="saving || uploadBusy || !title.trim()" class="bg-[#7b0323] text-white rounded px-4 py-2" @click="save">{{saving?'Saving…':'Save memory'}}</button></div>
+    </header>
+    <p v-if="error" role="alert" class="max-w-6xl mx-auto text-red-800 mb-4">{{error}} <button v-if="!memory" @click="load">Retry loading</button></p>
+    <p v-if="loading">Loading your memory…</p>
+    <template v-if="memory">
+      <div class="max-w-6xl mx-auto mb-4"><time v-if="viewMode">{{date}}</time><label v-else>Date <input v-model="date" type="date" /></label></div>
+      <ScrapbookNotebook ref="notebook" v-model="layout" v-model:title="title" v-model:text="text" resource="memories" :entry-id="memoryId" :user-id="auth.user?.id" :media="memory.media" :view-mode="viewMode" :disabled="saving" @busy-change="uploadBusy=$event" />
+      <nav class="max-w-6xl mx-auto mt-5 flex gap-4" aria-label="Related records"><RouterLink v-if="memory.trip_id" :to="{name:'trips.show',params:{id:memory.trip_id}}">Related trip</RouterLink><RouterLink v-if="memory.journal_entry" :to="{name:'journal.edit',params:{id:memory.journal_entry.id}}">{{memory.journal_entry.title}}</RouterLink></nav>
+    </template>
+  </main>
 </template>

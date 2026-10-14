@@ -44,7 +44,7 @@ export const useJournalStore = defineStore('journal', () => {
    * Create a new journal entry.
    * Returns the created entry on success, throws on failure.
    */
-  async function createEntry(payload: Partial<JournalEntry> & { title: string; content: string; entry_date: string }) {
+  async function createEntry(payload: Partial<JournalEntry> & { title: string; content: string; entry_date: string; draft_key?: string }) {
     saving.value = true
     error.value  = null
     try {

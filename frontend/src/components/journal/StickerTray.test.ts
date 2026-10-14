@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
+import { ref } from 'vue'
+enableAutoUnmount(afterEach)
 import StickerTray from './StickerTray.vue'
 
 // Mock composables
+const mockLoading = vi.fn(() => false)
+const mockError = vi.fn(() => null as string | null)
 const mockBuiltinAssets = vi.fn(() => [] as any[])
 const mockUserAssets = vi.fn(() => [] as any[])
 const mockLoadBuiltins = vi.fn()
@@ -13,11 +17,11 @@ const mockClearError = vi.fn()
 
 vi.mock('@/composables/useStickerAssets', () => ({
   useStickerAssets: () => ({
-    builtinAssets: { value: mockBuiltinAssets() },
-    userAssets: { value: mockUserAssets() },
-    loading: { value: false },
-    uploadProgress: { value: 0 },
-    error: { value: null },
+    builtinAssets: ref(mockBuiltinAssets()),
+    userAssets: ref(mockUserAssets()),
+    loading: ref(mockLoading()),
+    uploadProgress: ref(0),
+    error: ref(mockError()),
     loadBuiltins: mockLoadBuiltins,
     loadUserAssets: mockLoadUserAssets,
     uploadAsset: mockUploadAsset,
@@ -35,6 +39,8 @@ vi.mock('@/stores/auth', () => ({
 describe('StickerTray', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockLoading.mockReturnValue(false)
+    mockError.mockReturnValue(null)
     mockBuiltinAssets.mockReturnValue([])
     mockUserAssets.mockReturnValue([])
   })
@@ -48,11 +54,12 @@ describe('StickerTray', () => {
     expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe('Library')
   })
 
-  it('loads builtin and user stickers on mount', () => {
+  it('loads builtin and user stickers on mount', async () => {
     mount(StickerTray, {
       props: { userId: 'test-user' },
     })
     
+    await flushPromises()
     expect(mockLoadBuiltins).toHaveBeenCalledTimes(1)
     expect(mockLoadUserAssets).toHaveBeenCalledWith('test-user')
   })
@@ -67,7 +74,7 @@ describe('StickerTray', () => {
       props: { userId: 'test-user' },
     })
     
-    const stickers = wrapper.findAll('[aria-label*="sticker"]')
+    const stickers = wrapper.findAll('button[aria-label*="sticker"]').filter(b => b.attributes('aria-label') !== 'Close sticker tray')
     expect(stickers).toHaveLength(2)
     expect(stickers[0].attributes('aria-label')).toContain('hearts')
     expect(stickers[1].attributes('aria-label')).toContain('stars')
@@ -98,7 +105,7 @@ describe('StickerTray', () => {
     const myStickersTab = wrapper.findAll('[role="tab"]')[1]
     await myStickersTab.trigger('click')
     
-    const stickers = wrapper.findAll('[aria-label*="sticker"]')
+    const stickers = wrapper.findAll('button[aria-label*="sticker"]').filter(b => b.attributes('aria-label') !== 'Close sticker tray')
     expect(stickers.length).toBeGreaterThanOrEqual(2)
   })
 
@@ -130,7 +137,7 @@ describe('StickerTray', () => {
     const myStickersTab = wrapper.findAll('[role="tab"]')[1]
     await myStickersTab.trigger('click')
     
-    const sticker = wrapper.find('[aria-label*="Custom sticker"]')
+    const sticker = wrapper.find('[aria-label="Add custom sticker"]')
     await sticker.trigger('click')
     
     expect(wrapper.emitted('add-sticker')).toBeTruthy()
@@ -186,20 +193,7 @@ describe('StickerTray', () => {
   })
 
   it('displays loading state', () => {
-    vi.mock('@/composables/useStickerAssets', () => ({
-      useStickerAssets: () => ({
-        builtinAssets: { value: [] },
-        userAssets: { value: [] },
-        loading: { value: true },
-        uploadProgress: { value: 0 },
-        error: { value: null },
-        loadBuiltins: mockLoadBuiltins,
-        loadUserAssets: mockLoadUserAssets,
-        uploadAsset: mockUploadAsset,
-        deleteUserAsset: mockDeleteUserAsset,
-        clearError: mockClearError,
-      }),
-    }))
+    mockLoading.mockReturnValue(true)
     
     const wrapper = mount(StickerTray, {
       props: { userId: 'test-user' },
@@ -232,20 +226,7 @@ describe('StickerTray', () => {
   })
 
   it('shows error message when error prop is set', () => {
-    vi.mock('@/composables/useStickerAssets', () => ({
-      useStickerAssets: () => ({
-        builtinAssets: { value: [] },
-        userAssets: { value: [] },
-        loading: { value: false },
-        uploadProgress: { value: 0 },
-        error: { value: 'Failed to load stickers' },
-        loadBuiltins: mockLoadBuiltins,
-        loadUserAssets: mockLoadUserAssets,
-        uploadAsset: mockUploadAsset,
-        deleteUserAsset: mockDeleteUserAsset,
-        clearError: mockClearError,
-      }),
-    }))
+    mockError.mockReturnValue('Failed to load stickers')
     
     const wrapper = mount(StickerTray, {
       props: { userId: 'test-user' },

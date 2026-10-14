@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { fetchPlacements, savePlacements } from '@/services/sticker.service'
 import { useStickerEditor } from './useStickerEditor'
 
 // Mock the sticker service
@@ -331,5 +332,51 @@ describe('useStickerEditor', () => {
       expect(editor.selectedId.value).toBeNull()
       expect(editor.canUndo.value).toBe(false)
     })
+  })
+})
+
+describe('saved baseline and load protection',()=>{
+  beforeEach(()=>vi.clearAllMocks())
+  it('undoes the first placement back to a clean empty draft',()=>{
+    const editor=useStickerEditor()
+    expect(editor.hasChanges.value).toBe(false)
+    editor.addSticker('builtin-flower-01.svg')
+    expect(editor.hasChanges.value).toBe(true)
+    editor.undo()
+    expect(editor.placements.value).toEqual([])
+    expect(editor.hasChanges.value).toBe(false)
+    editor.redo()
+    expect(editor.placements.value).toHaveLength(1)
+  })
+  it('loading and saving establish clean baselines',async()=>{
+    const editor=useStickerEditor()
+    await editor.loadPlacements('entry')
+    expect(editor.hasChanges.value).toBe(false)
+    editor.addSticker('builtin-flower-01.svg')
+    await editor.savePlacements('entry')
+    expect(editor.hasChanges.value).toBe(false)
+    editor.deleteSticker(editor.placements.value[0].id)
+    expect(editor.hasChanges.value).toBe(true)
+  })
+  it('retains the draft after failed save and permits retry',async()=>{
+    const editor=useStickerEditor()
+    editor.addSticker('builtin-flower-01.svg')
+    vi.mocked(savePlacements).mockRejectedValueOnce(new Error('offline'))
+    await expect(editor.savePlacements('entry')).rejects.toThrow('offline')
+    expect(editor.hasChanges.value).toBe(true)
+    expect(editor.placements.value).toHaveLength(1)
+    await editor.savePlacements('entry')
+    expect(editor.hasChanges.value).toBe(false)
+  })
+  it('blocks replacement after failed initial load until loading succeeds',async()=>{
+    const editor=useStickerEditor()
+    vi.mocked(fetchPlacements).mockRejectedValueOnce(new Error('missing schema'))
+    await editor.loadPlacements('entry')
+    editor.addSticker('builtin-flower-01.svg')
+    await expect(editor.savePlacements('entry')).rejects.toThrow('Reload saved stickers')
+    expect(savePlacements).not.toHaveBeenCalled()
+    await editor.loadPlacements('entry')
+    await editor.savePlacements('entry')
+    expect(savePlacements).toHaveBeenCalledOnce()
   })
 })

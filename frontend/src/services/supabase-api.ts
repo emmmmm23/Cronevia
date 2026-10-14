@@ -1,4 +1,5 @@
 /** Adapts the existing screens to Supabase Auth, Postgres and private Storage. */
+import { validateScrapbook } from '@/types/scrapbook'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
 
@@ -8,11 +9,12 @@ type Options = { params?: Record<string, string | number>; headers?: Record<stri
 const tables: Record<string, Table> = { trips: 'trips', journal: 'journal_entries', memories: 'memories' }
 const writable: Record<Table, string[]> = {
   trips: ['title', 'description', 'destination', 'start_date', 'end_date', 'status', 'budget', 'currency', 'visibility'],
-  journal_entries: ['title', 'content', 'entry_date', 'trip_id', 'trip_day_id', 'itinerary_item_id', 'memory_id', 'mood_emoji', 'mood_name', 'mood_enum', 'location_name', 'latitude', 'longitude', 'weather', 'visibility', 'status', 'is_archived', 'location_source', 'tags'],
-  memories: ['title', 'description', 'trip_id', 'memory_date', 'location_name', 'latitude', 'longitude', 'is_archived'],
+  journal_entries: ['scrapbook_layout', 'title', 'content', 'entry_date', 'trip_id', 'trip_day_id', 'itinerary_item_id', 'memory_id', 'mood_emoji', 'mood_name', 'mood_enum', 'location_name', 'latitude', 'longitude', 'weather', 'visibility', 'status', 'is_archived', 'location_source', 'tags'],
+  memories: ['scrapbook_layout', 'title', 'description', 'trip_id', 'memory_date', 'location_name', 'latitude', 'longitude', 'is_archived'],
 }
 export function preparePayload(table: Table, input: RecordData) {
   const source = { ...input }
+  if (source.scrapbook_layout) validateScrapbook(source.scrapbook_layout)
   if ('mood_label' in source) source.mood_name = source.mood_label
   if ('mood' in source) source.mood_enum = source.mood
   if (source.visibility === 'shared') source.visibility = 'friends'
@@ -72,12 +74,15 @@ async function upload(table: Table, parentId: string, body: FormData, userId: st
   const file = body.get('file')
   if (!(file instanceof File)) failure('Choose a file to upload.', 422)
   if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024) failure('Choose a JPG, PNG, WebP or GIF image under 10 MB.', 422)
-  const path = `${userId}/${crypto.randomUUID()}.${file.type.split('/')[1]}`
-  check(await supabase.storage.from('cronevia-media').upload(path, file, { contentType: file.type, upsert: false }))
+  const uploadId = String(body.get('upload_id') || crypto.randomUUID())
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uploadId)) failure('Invalid upload reference.',422)
+  const path = `${userId}/${uploadId}.${file.type.split('/')[1]}`
+  check(await supabase.storage.from('cronevia-media').upload(path, file, { contentType: file.type, upsert: true }))
   const foreignKey = table === 'trips' ? 'trip_id' : table === 'journal_entries' ? 'journal_entry_id' : 'memory_id'
-  const result = await supabase.from('media').insert({ user_id: userId, [foreignKey]: parentId,
+  const result = await supabase.from('media').upsert({ id:uploadId, user_id: userId, [foreignKey]: parentId,
     storage_path: path, file_name: file.name, mime_type: file.type, size_bytes: file.size } as Database['public']['Tables']['media']['Insert']).select().single()
-  if (result.error) { await supabase.storage.from('cronevia-media').remove([path]); check(result) }
+  // Keep the private object when a response is uncertain; the same upload ID safely retries.
+  check(result)
   return { data: result.data }
 }
 function itineraryPayload(input: RecordData) {
@@ -122,8 +127,9 @@ async function request(method: string, path: string, body?: RecordData | FormDat
     const foreignKey = table === 'trips' ? 'trip_id' : table === 'journal_entries' ? 'journal_entry_id' : 'memory_id'
     const row = check(await supabase.from('media').select('*').eq('id', childId).eq(foreignKey, id).eq('user_id', user.id).single())
     if (method === 'DELETE') {
-      check(await supabase.storage.from('cronevia-media').remove([row.storage_path]))
+      // Check database reference protection before removing the underlying reusable file.
       check(await supabase.from('media').delete().eq('id', row.id).eq('user_id', user.id))
+      check(await supabase.storage.from('cronevia-media').remove([row.storage_path]))
       return { data: null }
     }
     if (method === 'PATCH' && action === 'set-cover' && table === 'trips') {
@@ -169,7 +175,14 @@ async function request(method: string, path: string, body?: RecordData | FormDat
   if (method === 'POST') {
     if (!String(payload.title || '').trim()) failure('A title is required.', 422)
     if (table === 'trips') payload.slug = `${String(payload.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0,100)}-${crypto.randomUUID()}`
-    const row = await writeRecord(table, { ...payload, user_id: user.id })
+    const row = table === 'journal_entries' && input.draft_key
+      ? check(await supabase.rpc('create_journal_draft', {
+        draft_id: String(input.draft_key), draft_title: String(payload.title),
+        draft_content: String(payload.content || ''), draft_date: String(payload.entry_date)
+      }))
+      : table === 'memories' && input.draft_key
+        ? check(await supabase.rpc('create_memory_draft', {draft_id:String(input.draft_key),draft_title:String(payload.title),draft_description:String(payload.description || ''),draft_date:String(payload.memory_date)}))
+        : await writeRecord(table, { ...payload, user_id: user.id })
     return { data: await present(table, row) }
   }
   if ((method === 'PUT' || method === 'PATCH') && id) {

@@ -22,9 +22,12 @@ export function useStickerEditor() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  const baseline = ref('[]')
+  const loadFailed = ref(false)
+
   // History state (snapshot-based undo/redo)
-  const history = ref<StickerLayout[]>([])
-  const historyIndex = ref(-1)
+  const history = ref<StickerLayout[]>([{version:1,surfaces:[{id:'page-1',stickers:[]}]}])
+  const historyIndex = ref(0)
 
   // Computed
   const selectedSticker = computed(() => 
@@ -33,7 +36,7 @@ export function useStickerEditor() {
   
   const canUndo = computed(() => historyIndex.value > 0)
   const canRedo = computed(() => historyIndex.value < history.value.length - 1)
-  const hasChanges = computed(() => placements.value.length > 0 || history.value.length > 0)
+  const hasChanges = computed(() => JSON.stringify(placements.value) !== baseline.value)
 
   /**
    * Create a snapshot of current state
@@ -310,9 +313,11 @@ export function useStickerEditor() {
       // Initialize history with loaded state
       history.value = [createSnapshot()]
       historyIndex.value = 0
+      baseline.value = JSON.stringify(placements.value)
+      loadFailed.value = false
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      error.value = e?.response?.data?.message || 'Could not load sticker placements.'
+      loadFailed.value = true
+      error.value = 'Saved stickers could not be loaded. Please retry before saving.'
       console.error('[useStickerEditor] loadPlacements error:', err)
     } finally {
       loading.value = false
@@ -325,6 +330,7 @@ export function useStickerEditor() {
   async function savePlacementsToDb(journalEntryId: string) {
     if (!journalEntryId) return
     
+    if (loadFailed.value) throw new Error('Reload saved stickers before saving.')
     saving.value = true
     error.value = null
     
@@ -347,6 +353,7 @@ export function useStickerEditor() {
       // Update history baseline after save
       history.value = [createSnapshot()]
       historyIndex.value = 0
+      baseline.value = JSON.stringify(placements.value)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       error.value = e?.response?.data?.message || 'Could not save sticker placements.'
@@ -363,8 +370,10 @@ export function useStickerEditor() {
   function clearPlacements() {
     placements.value = []
     selectedId.value = null
-    history.value = []
-    historyIndex.value = -1
+    history.value = [createSnapshot()]
+    historyIndex.value = 0
+    baseline.value = '[]'
+    loadFailed.value = false
   }
 
   /**

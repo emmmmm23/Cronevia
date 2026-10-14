@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mount, enableAutoUnmount } from '@vue/test-utils'
+enableAutoUnmount(afterEach)
 import { nextTick } from 'vue'
 import StickerEditor from './StickerEditor.vue'
 

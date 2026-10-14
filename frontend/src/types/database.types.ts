@@ -267,6 +267,7 @@ Relationships: []
 }
 memories: {
 Row: {
+scrapbook_layout: Json | null
   id: string
   user_id: string
   trip_id: string | null
@@ -282,6 +283,7 @@ Row: {
   deleted_at: string | null
 }
 Insert: {
+scrapbook_layout?: Json | null
   id?: string
   user_id: string
   trip_id?: string | null
@@ -315,6 +317,7 @@ Relationships: []
 }
 journal_entries: {
 Row: {
+scrapbook_layout: Json | null
 location_source: string | null
 tags: string[]
   id: string
@@ -341,6 +344,7 @@ tags: string[]
   deleted_at: string | null
 }
 Insert: {
+scrapbook_layout?: Json | null
 location_source?: string | null
 tags?: string[]
   id?: string
@@ -953,6 +957,9 @@ Update: {
 Relationships: []
 }
 }; Views: { [_ in never]: never }; Functions: {
+replace_journal_stickers: { Args: { target_entry_id: string; placements: Json }; Returns: undefined }
+create_memory_draft: { Args: { draft_id: string; draft_title: string; draft_description: string; draft_date: string }; Returns: Database['public']['Tables']['memories']['Row'] }
+create_journal_draft: { Args: { draft_id: string; draft_title: string; draft_content: string; draft_date: string }; Returns: Database['public']['Tables']['journal_entries']['Row'] }
 get_on_this_day: { Args: Record<string, never>; Returns: Json }
 is_super_admin: { Args: Record<string, never>; Returns: boolean }
 is_account_active: { Args: Record<string, never>; Returns: boolean }
