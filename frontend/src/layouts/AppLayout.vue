@@ -204,7 +204,7 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-const journalEditor = computed(() => route.name === 'journal.create' || route.name === 'journal.edit')
+const journalEditor = computed(() => ['journal.create','journal.edit','memories.create','memories.show','memories.edit'].includes(String(route.name)))
 
 // Mobile menu state
 const mobileMenuOpen = ref<boolean>(false)
@@ -279,4 +279,5 @@ onClickOutside(profileDropdownRef, () => {
 
 <style scoped>
 .journal-brand{height:58px;padding:0 38px;display:flex;align-items:center;justify-content:space-between;background:#f7f4ec;border-bottom:1px solid #ded8cb}.journal-brand a{font:600 25px Georgia,serif;color:#74283c;letter-spacing:-1px}.journal-brand a span{color:#829073}.journal-brand>span{font:16px 'Caveat',cursive;color:#878773}@media(max-width:767px){.journal-brand{height:52px;padding:0 18px}.journal-brand a{font-size:22px}}
+@media(max-width:959px){.journal-brand{display:none}}
 </style>

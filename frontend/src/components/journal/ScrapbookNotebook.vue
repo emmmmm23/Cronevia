@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core'
+import AppSheet from '@/components/shared/AppSheet.vue'
+import { useEditingViewport } from '@/composables/useEditingViewport'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { fetchBuiltinAssets, fetchUserAssets, uploadStickerAsset } from '@/services/sticker.service'
 import api from '@/services/api.service'
@@ -11,6 +14,13 @@ const emit = defineEmits<{ 'update:modelValue': [ScrapbookLayout]; 'update:title
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 const layout = ref<ScrapbookLayout>(clone(props.modelValue || emptyLayout()))
 const decorate = ref(false), activePage = ref('page-left'), selectedId = ref<string | null>(null)
+useEditingViewport()
+const wideTools=useMediaQuery('(min-width:1280px)')
+const libraryOpen=ref(false), panelSection=ref<'library'|'selection'>('library')
+const pageSelections:Record<string,string|null>={}
+function selectPage(id:string){pageSelections[activePage.value]=selectedId.value;activePage.value=id;selectedId.value=pageSelections[id] || null}
+function openTools(section:'library'|'selection'='library'){panelSection.value=section;libraryOpen.value=true}
+function startDecorating(){decorate.value=true;if(!wideTools.value)openTools()}
 const showHelp = ref(false)
 const tab = ref('library'), assetError = ref(''), photoError = ref('')
 const builtins = ref<Awaited<ReturnType<typeof fetchBuiltinAssets>>>([])
@@ -43,7 +53,7 @@ watch(() => props.modelValue, value => {
 watch(() => props.viewMode, () => { decorate.value = false; selectedId.value = null })
 watch(() => props.media, media => { for (const m of media) urls.value[m.id] = m.file_path }, { immediate: true })
 onMounted(async () => {
-  observer = new ResizeObserver(entries => { if (entries[0]) sheetWidth.value = entries[0].contentRect.width })
+  observer = new ResizeObserver(entries => { const visible=entries.find(e=>e.contentRect.width>0);if (visible) sheetWidth.value = visible.contentRect.width })
   sheetRefs.forEach(el => observer!.observe(el))
   builtins.value = await fetchBuiltinAssets()
   builtins.value.forEach(a => urls.value[a.id] = a.url)
@@ -67,7 +77,7 @@ function add(type: 'sticker' | 'photo', assetId: string, ratio = 1) {
   const page = layout.value.pages.find(p => p.id === activePage.value)!
   if (page.elements.length >= 100) { photoError.value = 'This page has reached 100 decorations.'; return }
   const e = constrainElement({ id: crypto.randomUUID(), type, assetId, x: .55, y: .55, width: type === 'photo' ? .38 : .2, aspectRatio: ratio, rotation: type === 'photo' ? -5 : 0, zIndex: Math.max(-1,...page.elements.map(e=>e.zIndex))+1, frame: 'plain' })
-  page.elements.push(e); selectedId.value = e.id; commit()
+  page.elements.push(e); selectedId.value = e.id; commit();if(!wideTools.value)libraryOpen.value=false
 }
 function change(updates: Partial<ScrapbookElement>) {
   if (props.disabled) return
@@ -102,7 +112,7 @@ function movePage() {
 }
 let gesture: { id: string; mode: string; start: ScrapbookElement; px: number; py: number; rect: DOMRect; angle: number; distance: number; target: HTMLElement; pointer: number } | null = null
 function startGesture(event: PointerEvent, e: ScrapbookElement, page: string, mode = 'drag') {
-  if (!decorate.value || props.viewMode || props.disabled || event.button !== 0) return
+  if (gesture || !decorate.value || props.viewMode || props.disabled || event.button !== 0) return
   event.preventDefault(); event.stopPropagation(); selectedId.value = e.id; activePage.value = page
   const rect = sheetRefs.get(page)!.getBoundingClientRect(), cx = rect.left + e.x * rect.width, cy = rect.top + e.y * rect.height
   const target = event.currentTarget as HTMLElement
@@ -110,7 +120,7 @@ function startGesture(event: PointerEvent, e: ScrapbookElement, page: string, mo
   gesture = { id: e.id, mode, start: {...e}, px: event.clientX, py: event.clientY, rect, angle: Math.atan2(event.clientY-cy,event.clientX-cx), distance: Math.hypot(event.clientX-cx,event.clientY-cy), target, pointer: event.pointerId }
 }
 function moveGesture(event: PointerEvent) {
-  if (!gesture || !selected.value) return
+  if (!gesture || event.pointerId!==gesture.pointer || !selected.value) return
   const g = gesture, rect = sheetRefs.get(activePage.value)!.getBoundingClientRect()
   const cx = rect.left + g.start.x*rect.width, cy = rect.top + g.start.y*rect.height
   let updates: Partial<ScrapbookElement> = {}
@@ -208,10 +218,11 @@ defineExpose({ prepareSave, markSaved, reset })
 
 <template>
   <section class="scrapbook" tabindex="-1" @keydown="keydown">
+    <div class="page-tabs" role="tablist" aria-label="Notebook pages"><button v-for="p in layout.pages" :key="p.id" role="tab" :aria-selected="activePage===p.id" :aria-controls="p.id" @click="selectPage(p.id)">{{p.id==='page-left'?'Story':'Keepsakes'}}</button></div>
     <div v-if="!viewMode" class="workbench">
       <div class="mode-switch" role="group" aria-label="Notebook mode">
         <button :disabled="disabled" :aria-pressed="!decorate" @click="decorate=false;selectedId=null">Write</button>
-        <button :disabled="disabled" :aria-pressed="decorate" @click="decorate=true">Decorate</button>
+        <button :disabled="disabled" :aria-pressed="decorate" @click="startDecorating">Decorate</button>
       </div>
       <span class="mode-note">{{decorate ? 'Make this page your own.' : 'A moment to slow down.'}}</span>
       <div class="bench-actions">
@@ -220,16 +231,17 @@ defineExpose({ prepareSave, markSaved, reset })
         <button class="icon-button help-button" aria-label="Keyboard help" :aria-expanded="showHelp" @click="showHelp=!showHelp">?</button>
       </div>
     </div>
+    <div v-if="decorate && !viewMode" class="compact-decoration-actions"><button @click="openTools()">Stickers</button><button v-if="selected" class="selection-button" @click="openTools('selection')">Adjust {{selected.type}}</button><button aria-label="Undo" :disabled="!canUndo || disabled" @click="undo">↶</button><button aria-label="Redo" :disabled="!canRedo || disabled" @click="redo">↷</button><button aria-label="Keyboard help" @click="showHelp=!showHelp">?</button></div>
     <div v-if="showHelp && !viewMode" class="keyboard-help">
       <strong>A few helpful shortcuts</strong>
       <p>Arrow keys move · + / − resize · [ / ] rotate · Delete removes a placement · Ctrl/Cmd Z undoes · Shift Ctrl/Cmd Z redoes · Page Up/Down changes layers (Shift for front/back) · Escape clears selection.</p>
-      <p>Your writing scrolls inside the paper. Choose Decorate to move anything covering it. Switch pages with the page selector or “Move to left/right page”.</p>
+      <p>Long writing continues below the decorated area on smaller screens. Choose Decorate to move anything covering it. Switch pages with the page selector or “Move to left/right page”.</p>
     </div>
     <p v-if="photoError" class="friendly-notice" role="alert">{{photoError}}</p>
     <div class="workspace" :class="{'with-tools':decorate && !viewMode}">
       <div class="book-area">
         <div class="spread" :class="{decorating:decorate && !viewMode}" :style="{'--sheet-scale':sheetWidth/600}">
-          <article v-for="(page,index) in layout.pages" :key="page.id" :ref="el=>sheetRef(page.id,el)" class="paper" :class="{active:decorate && activePage===page.id,right:index===1}" :aria-label="index===0?'Left notebook page':'Right notebook page'" @pointerdown.self="activePage=page.id;selectedId=null">
+          <article v-for="(page,index) in layout.pages" :key="page.id" :id="page.id" class="paper" :class="{active:decorate && activePage===page.id,current:activePage===page.id,right:index===1}" :aria-label="index===0?'Left notebook page':'Right notebook page'" @pointerdown.self="activePage=page.id;selectedId=null">
             <div class="writing" @pointerdown="activePage=page.id;selectedId=null">
               <template v-if="index===0">
                 <span class="eyebrow">{{resource==='journal'?'The everyday, remembered':'A memory to keep'}}</span>
@@ -240,12 +252,12 @@ defineExpose({ prepareSave, markSaved, reset })
               <template v-else>
                 <span class="eyebrow keepsake-label">Keepsakes</span>
                 <p class="caption">The little things.</p>
-                <div v-if="!page.elements.length && !viewMode" class="empty-keepsakes"><span class="empty-photo" aria-hidden="true"><svg viewBox="0 0 80 60" fill="none"><path d="M10 45 30 24l16 16 11-12 15 17" stroke="currentColor" stroke-width="1.3"/><circle cx="55" cy="16" r="5" stroke="currentColor" stroke-width="1.3"/></svg></span><p>A photo. A sticker.<br>A little piece of your day.</p><button :disabled="disabled" @click="decorate=true;activePage='page-right'">Add a keepsake <span aria-hidden="true">↗</span></button></div>
+                <div v-if="!page.elements.length && !viewMode" class="empty-keepsakes"><span class="empty-photo" aria-hidden="true"><svg viewBox="0 0 80 60" fill="none"><path d="M10 45 30 24l16 16 11-12 15 17" stroke="currentColor" stroke-width="1.3"/><circle cx="55" cy="16" r="5" stroke="currentColor" stroke-width="1.3"/></svg></span><p>A photo. A sticker.<br>A little piece of your day.</p><button :disabled="disabled" @click="activePage='page-right';startDecorating()">Add a keepsake <span aria-hidden="true">↗</span></button></div>
                 <slot name="right" />
               </template>
             </div>
             <span class="page-number" aria-hidden="true">{{index===0?'01':'02'}}</span>
-            <div class="decoration-layer" @pointerdown.self="activePage=page.id;selectedId=null">
+            <div :ref="el=>sheetRef(page.id,el)" class="decoration-layer" @pointerdown.self="activePage=page.id;selectedId=null">
               <div v-for="e in page.elements" :key="e.id" class="decoration" :class="[{selected:decorate && selectedId===e.id,photo:e.type==='photo'},e.type==='photo'?'frame-'+e.frame:'']" :style="style(e)" :tabindex="decorate && !viewMode?0:undefined" :role="decorate && !viewMode?'button':undefined" :aria-label="e.type+' decoration'" @focus="selectedId=e.id;activePage=page.id" @pointerdown="startGesture($event,e,page.id)" @pointermove="moveGesture" @pointerup="endGesture" @pointercancel="endGesture" @lostpointercapture="endGesture">
                 <div class="asset-surface"><img v-if="src(e)" :src="src(e)" :alt="e.type==='photo'?'Placed photo':'Placed sticker'" draggable="false" /><span v-else class="unavailable">Image unavailable</span></div>
                 <template v-if="decorate && selectedId===e.id && !viewMode"><button class="handle resize" aria-label="Resize decoration" @pointerdown.stop="startGesture($event,e,page.id,'resize')">↔</button><button class="handle rotate" aria-label="Rotate decoration" @pointerdown.stop="startGesture($event,e,page.id,'rotate')">↻</button></template>
@@ -256,12 +268,12 @@ defineExpose({ prepareSave, markSaved, reset })
         </div>
         <p class="book-caption" v-if="!viewMode">{{decorate?'Small details, your own way.':'No perfect words needed. Just yours.'}}</p>
       </div>
-      <aside v-if="decorate && !viewMode" class="tools-panel" aria-label="Decorating tools">
+      <AppSheet v-if="decorate && !viewMode" v-model="libraryOpen" :docked="wideTools" :title="panelSection==='selection'?'Adjust decoration':'Sticker collection'"><div class="tools-panel" aria-label="Decorating tools">
         <div class="panel-heading"><span class="eyebrow">A little collection</span><h2>Make it yours</h2></div>
         <div class="page-picker" role="group" aria-label="Active page">
-          <button v-for="p in layout.pages" :key="p.id" :aria-pressed="activePage===p.id" @click="activePage=p.id;selectedId=null">{{p.id==='page-left'?'Left page':'Right page'}}</button>
+          <button v-for="p in layout.pages" :key="p.id" :aria-pressed="activePage===p.id" @click="selectPage(p.id)">{{p.id==='page-left'?'Left page':'Right page'}}</button>
         </div>
-        <div class="library">
+        <div v-show="wideTools || panelSection==='library'" class="library">
           <div role="tablist" aria-label="Sticker library"><button role="tab" :aria-selected="tab==='library'" @click="tab='library'">Library</button><button role="tab" :aria-selected="tab==='custom'" @click="tab='custom'">My stickers</button><button role="tab" :aria-selected="tab==='photos'" @click="tab='photos'">Photos</button></div>
           <template v-if="tab==='library'"><p class="library-hint">Pick a little something for your page.</p><div class="thumbnails"><button v-for="a in builtins" :key="a.id" :disabled="disabled" :aria-label="'Add '+a.storage_path" @click="add('sticker',a.id,a.width/a.height)"><img :src="a.url" :alt="a.storage_path.replace('.svg','').replace(/-/g,' ')" /></button></div></template>
           <div v-if="tab==='custom'">
@@ -273,7 +285,7 @@ defineExpose({ prepareSave, markSaved, reset })
           <div v-if="tab==='photos'" class="thumbnails"><button v-for="m in media" :key="m.id" :aria-label="'Place '+m.original_filename" @click="placeMedia(m)"><img :src="m.file_path" :alt="m.original_filename" /></button><p v-if="!media.length" class="collection-empty">Use Add photo to keep a moment on your page.</p></div>
           <div v-if="assetError" class="asset-notice"><p role="alert">{{assetError}}</p><button @click="loadCustom">Retry my stickers</button></div>
         </div>
-        <div v-if="selected" class="context-tools" role="toolbar" aria-label="Selected decoration">
+        <div v-if="selected" v-show="wideTools || panelSection==='selection'" class="context-tools" role="toolbar" aria-label="Selected decoration">
           <div class="selection-heading"><span>{{selected.type==='photo'?'Your photo':'Your sticker'}}</span><button class="icon-button" aria-label="Clear selection" @click="selectedId=null">×</button></div>
           <div class="transform-fields"><label>Size<input aria-label="Decoration size" type="range" min="0.06" max="0.8" step="0.01" :value="selected.width" @change="change({width:Number(($event.target as HTMLInputElement).value)})" /></label><label>Angle<input aria-label="Decoration rotation" type="number" min="-180" max="180" :value="Math.round(selected.rotation)" @input="change({rotation:Math.max(-180,Math.min(180,Number(($event.target as HTMLInputElement).value)))})" /></label></div>
           <label v-if="selected.type==='photo'" class="frame-field">Frame<select aria-label="Photo frame" :value="selected.frame" @change="change({frame:($event.target as HTMLSelectElement).value as PhotoFrame})"><option value="plain">Plain</option><option value="polaroid">Polaroid</option><option value="paper">Paper border</option><option value="washi">Washi tape</option></select></label>
@@ -282,7 +294,7 @@ defineExpose({ prepareSave, markSaved, reset })
         </div>
         <div aria-live="polite"><div v-for="(item,id) in pending" :key="id" class="upload-status"><p>{{item.status==='pending'?'Ready to add when you save.':item.status==='uploading'?'Adding your keepsake…':item.error}}</p><button v-if="item.status==='failed' && (entryId || item.type==='sticker')" @click="uploadOne(String(id),entryId || '')">Retry upload</button></div></div>
         <button class="done-decorating" @click="decorate=false;selectedId=null">Done Decorating</button>
-      </aside>
+      </div></AppSheet>
     </div>
   </section>
 </template>
@@ -315,4 +327,32 @@ textarea:not(.title)::placeholder{color:#b0a48e;opacity:1}textarea:focus,.title:
 @media(max-width:1100px){.workspace.with-tools{grid-template-columns:minmax(0,1fr) 224px;gap:18px}.tools-panel{padding:17px 12px}.thumbnails{gap:5px}.mode-note{display:none}}
 @media(max-width:767px){.workbench{gap:8px;margin-bottom:18px;flex-wrap:wrap}.bench-actions{gap:4px}.mode-switch button{padding:10px 13px}.help-button{margin-left:4px}.photo-upload{padding:8px;font-size:11px}.workspace.with-tools{grid-template-columns:1fr;gap:18px}.tools-panel{position:static;grid-row:1;padding:14px;max-height:450px;overflow:auto}.panel-heading{display:none}.page-picker{margin-bottom:10px}.thumbnails{grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}.library-hint{margin:6px 0}.context-tools{margin-top:12px;padding-top:8px}.transform-fields{grid-template-columns:1fr 75px;margin:8px 0}.selection-actions button,.arrange-options button{min-height:40px}.spread{grid-template-columns:1fr;gap:12px;padding:5px 5px 10px}.spread:after{display:none}.handle{width:44px;height:44px}.resize{right:-24px;bottom:-24px}.rotate{left:calc(50% - 22px);top:-51px}.paper{border-radius:3px;box-shadow:inset 8px 0 20px -20px #66533c55}.paper.right{box-shadow:inset 8px 0 20px -20px #66533c55}.mode-switch button,.icon-button{min-height:40px}.writing .eyebrow{font-size:2.4cqw}.story,textarea:not(.title){font-size:4.2cqw;line-height:1.8;background:repeating-linear-gradient(transparent 0 calc(7.56cqw - 1px),#aa94701a calc(7.56cqw - 1px) 7.56cqw)}.book-caption{font-size:17px}.empty-keepsakes button{font-size:3.2cqw;min-height:40px}}
 @media(prefers-reduced-motion:reduce){.thumbnails button{transition:none}}
+
+/* Adaptive presentation; the decoration reference remains a 3:4 sheet at every width. */
+.page-tabs,.compact-decoration-actions{display:none}.tools-panel{position:static;border:0;box-shadow:none;background:transparent;margin:0}
+.context-tools button,.page-picker button,.library [role=tab],.done-decorating{min-height:44px}.transform-fields input[type=number],.frame-field select{font-size:16px;min-height:44px}
+.decoration-layer{inset:0 0 auto;aspect-ratio:3/4;height:auto;touch-action:pan-y}.workspace.with-tools{grid-template-columns:minmax(0,1fr) 252px}
+@media(min-width:960px) and (max-width:1279px){.workspace.with-tools{grid-template-columns:1fr;max-width:1020px}.compact-decoration-actions{display:flex}}
+@media(max-width:1279px){
+ .bench-actions>.icon-button{display:none}.compact-decoration-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:1020px;margin:0 auto 12px}
+ .compact-decoration-actions button{min-width:44px;min-height:44px;border:1px solid #d4cbbb;background:#fbf7ec;padding:8px 12px;border-radius:8px;font-size:14px;color:#74283c}
+ .compact-decoration-actions .selection-button{background:#e7ebdf;border-color:#c6ccba;margin-right:auto}.tools-panel{padding:0;max-height:none;overflow:visible}
+ .panel-heading,.tools-panel .page-picker{display:none}.library-hint{font-size:13px}.library [role=tab]{font-size:14px;padding:8px}
+ .thumbnails{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.thumbnails button{min-height:48px;min-width:44px}.context-tools{margin-top:0;border:0;padding-top:0}
+ .selection-heading{font-size:16px}.transform-fields label,.frame-field{font-size:14px}.selection-actions button,.arrange-options button{font-size:14px;min-height:44px}.upload-status,.asset-notice{font-size:14px}.asset-notice button,.upload-status button{min-height:44px;font-size:14px}
+ .handle{width:44px;height:44px}.resize{right:-24px;bottom:-24px}.rotate{left:calc(50% - 22px);top:-51px}
+}
+@media(max-width:959px){
+ .scrapbook{width:100%;max-width:700px}.page-tabs{display:flex;border-bottom:1px solid #d4cebd;margin:0 0 12px;gap:4px;position:relative}
+ .page-tabs button{flex:1;min-height:44px;border:0;border-bottom:3px solid transparent;background:none;font-size:16px;color:#756c5c}.page-tabs button[aria-selected=true]{color:#74283c;border-bottom-color:#74283c;font-weight:600}
+ .workbench{margin-bottom:12px;gap:8px;flex-wrap:nowrap}.mode-switch{padding:2px;gap:0}.mode-switch button{padding:9px 12px;font-size:14px;min-height:44px}.mode-note,.help-button,.bench-actions>.icon-button{display:none}.bench-actions{margin-left:auto;gap:0}.photo-upload{min-height:48px;font-size:14px;padding:8px 10px;background:#faf6eb}
+ .workspace,.workspace.with-tools{display:block;max-width:700px}.book-area{padding:0}.spread{display:block;padding:3px;background:#a4a28a;border-radius:6px;box-shadow:0 5px 15px #54483a16}.spread:after,.spread:before{display:none}
+ .paper:not(.current){display:none}.paper{aspect-ratio:3/4;min-height:420px;border-radius:4px;box-shadow:none!important}.paper.right{background:#faf5e7}
+ .writing{position:relative;inset:auto;padding:28px 24px 55px;gap:16px;min-height:420px}.writing .eyebrow{font-size:10px}.title,h1{font-size:28px;line-height:1.2;min-height:34px;max-height:none;overflow:visible}
+ .story,textarea:not(.title){font-size:18px;line-height:1.7;flex:none;min-height:210px;field-sizing:content;overflow:visible;background:repeating-linear-gradient(transparent 0 29.6px,#aa94701a 29.6px 30.6px)}.story{min-height:0}
+ .title{field-sizing:content;overflow:hidden}.caption{font-size:27px;margin:0}.page-number{display:none}.book-caption{font-size:17px;padding:12px 0}.paper.active:after{display:none}
+ .empty-keepsakes{margin:34px auto;transform:none}.empty-keepsakes p{font-size:22px;margin:18px 0}.empty-keepsakes button{font-size:16px;min-height:44px}.empty-photo{width:105px;height:120px;padding:12px 10px 25px}
+ .keyboard-help{font-size:14px}.friendly-notice{font-size:14px}.decoration-layer{min-height:0}
+}
+
 </style>

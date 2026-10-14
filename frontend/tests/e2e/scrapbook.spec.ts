@@ -11,19 +11,20 @@ const photoId = '33333333-3333-4333-8333-333333333333'
 const user = {id:owner,email:'scrapbook@example.test',aud:'authenticated',role:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-10-14T00:00:00Z'}
 const empty = () => ({version:1,pages:[{id:'page-left',elements:[]},{id:'page-right',elements:[]}]})
 
-async function fixture(page: Page, resource: 'journal'|'memories') {
+export async function fixture(page: Page, resource: 'journal'|'memories') {
   const table = resource === 'journal' ? 'journal_entries' : 'memories'
   let record: any = {id:recordId,user_id:owner,title:'An afternoon by the lake',content:'We followed the path beside the water and stopped to watch the clouds.\n\nA small, ordinary afternoon worth keeping.',description:'We followed the path beside the water and stopped to watch the clouds.\n\nA small, ordinary afternoon worth keeping.',entry_date:'2026-10-14',memory_date:'2026-10-14',tags:['weekend'],visibility:'private',scrapbook_layout:empty()}
   let stickers: any[] = [], customEnabled=false, failLoad=false, lostDraftResponse=false; const draftIds=new Set<string>();let failSign=false, customLoadDelay:Promise<void>|undefined, releaseCustomLoad:()=>void=()=>{}
+  let collection:any[]|null=null, mediaByParent:Record<string,any[]>={}, images:Record<string,Buffer>={}
   let media: any[] = [], image = Buffer.from(''), writes = 0, creates = 0, failUpload = false, failSave = false
   const session = {access_token:`${Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')}.${Buffer.from(JSON.stringify({sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated'})).toString('base64url')}.fixture`,refresh_token:'fixture',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}
   await page.addInitScript(({key,session}) => localStorage.setItem(key,JSON.stringify(session)),{key:`sb-${host.split('.')[0]}-auth-token`,session})
   await page.route(`https://${host}/**`,async route => {
     const url = new URL(route.request().url()), method = route.request().method()
-    const json = (body:unknown,status=200) => route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)})
+    const json = (body:unknown,status=200) => route.fulfill({status,contentType:'application/json',body:JSON.stringify(body),headers:Array.isArray(body)?{'content-range':`0-${Math.max(0,body.length-1)}/${body.length}`}:{}})
     if(url.pathname.endsWith('/auth/v1/user')) return json(user)
-    if(url.pathname.includes('/storage/v1/object/sign/') && method==='GET') return route.fulfill({contentType:'image/png',body:image})
-    if(url.pathname.includes('/storage/v1/object/sign/')) {if(failSign){failSign=false;return json({message:'Signing failed'},500)} return json({signedURL:'/object/sign/cronevia-media/fixture.png?token=fixture'})}
+    if(url.pathname.includes('/storage/v1/object/sign/') && method==='GET') return route.fulfill({contentType:'image/png',body:images[url.pathname.split('/').pop()!] || image})
+    if(url.pathname.includes('/storage/v1/object/sign/')) {if(failSign){failSign=false;return json({message:'Signing failed'},500)} return json({signedURL:'/object/sign/'+url.pathname.split('/sign/')[1]+'?token=fixture'})}
     if(url.pathname.includes('/storage/v1/object/') && method==='POST') {
       if(failUpload) {failUpload=false;return json({message:'Fixture upload failed',error:'Upload failed'},500)}
       return json({Key:owner+'/fixture.png'})
@@ -34,18 +35,20 @@ async function fixture(page: Page, resource: 'journal'|'memories') {
       const loaded=[...stickers];if(customLoadDelay){const wait=customLoadDelay;customLoadDelay=undefined;await wait}
       return customEnabled ? json(loaded) : json({message:'Bucket not found'},400)
     }
-    if(url.pathname.endsWith('/rest/v1/rpc/create_journal_draft')) {
+    if(url.pathname.endsWith('/rest/v1/rpc/create_journal_draft') || url.pathname.endsWith('/rest/v1/rpc/create_memory_draft')) {
       const body=route.request().postDataJSON()
-      if(!draftIds.has(body.draft_id)){draftIds.add(body.draft_id);creates++;record={...record,id:body.draft_id,title:body.draft_title,content:body.draft_content,entry_date:body.draft_date}}
+      if(!draftIds.has(body.draft_id)){draftIds.add(body.draft_id);creates++;record={...record,id:body.draft_id,title:body.draft_title,content:body.draft_content,description:body.draft_description,entry_date:body.draft_date,memory_date:body.draft_date}}
       if(lostDraftResponse){lostDraftResponse=false;return json({message:'Response lost'},500)}
       return json(record)
     }
     if(url.pathname.endsWith('/rest/v1/journal_sticker_placements')) return failLoad ? json({message:'missing journal_sticker_placements',code:'PGRST205'},404) : json([])
     if(url.pathname.endsWith('/rest/v1/media')) {
       if(method==='POST') {media=[{...route.request().postDataJSON(),id:photoId,sort_order:0}];return json(media[0])}
-      return json(media)
+      const parent=(url.searchParams.get('memory_id') || url.searchParams.get('journal_entry_id') || '').slice(3)
+      return json(mediaByParent[parent] || media)
     }
     if(url.pathname.endsWith('/rest/v1/'+table)) {
+      if(collection && method==='GET'){const id=url.searchParams.get('id')?.slice(3);return json(id?collection.find(m=>m.id===id):collection.filter(m=>!!m.is_archived===(url.searchParams.get('is_archived')==='eq.true')))}
       if(method==='PATCH' || method==='POST') {
         if(failSave) {failSave=false;return json({message:'Fixture save rejected',code:'23514'},400)}
         const body=route.request().postDataJSON(); record={...record,...body};writes++;if(method==='POST')creates++
@@ -54,9 +57,9 @@ async function fixture(page: Page, resource: 'journal'|'memories') {
     }
     return json([])
   })
-  return {delayCustomLoad(){customLoadDelay=new Promise<void>(resolve=>{releaseCustomLoad=resolve})},releaseCustomLoad(){releaseCustomLoad()},failSigning(){failSign=true},enableCustom(){customEnabled=true},failLoad(value:boolean){failLoad=value;if(value)record.scrapbook_layout=null},loseDraftResponse(){lostDraftResponse=true},get stickers(){return stickers},get record(){return record},get writes(){return writes},get creates(){return creates},failUpload(){failUpload=true},failSave(){failSave=true},setImage(value:Buffer){image=value}}
+  return {setCollection(rows:any[],files:Record<string,any[]>={},pictures:Record<string,Buffer>={}){collection=rows;mediaByParent=files;images=pictures},delayCustomLoad(){customLoadDelay=new Promise<void>(resolve=>{releaseCustomLoad=resolve})},releaseCustomLoad(){releaseCustomLoad()},failSigning(){failSign=true},enableCustom(){customEnabled=true},failLoad(value:boolean){failLoad=value;if(value)record.scrapbook_layout=null},loseDraftResponse(){lostDraftResponse=true},get stickers(){return stickers},get record(){return record},get writes(){return writes},get creates(){return creates},failUpload(){failUpload=true},failSave(){failSave=true},setImage(value:Buffer){image=value}}
 }
-async function landscape(page: Page) {
+export async function landscape(page: Page) {
   const data = await page.evaluate(() => {
     const canvas=document.createElement('canvas');canvas.width=600;canvas.height=400
     const c=canvas.getContext('2d')!;c.fillStyle='#bad7db';c.fillRect(0,0,600,400)
@@ -67,7 +70,7 @@ async function landscape(page: Page) {
     return canvas.toDataURL('image/png').split(',')[1]
   });return Buffer.from(data,'base64')
 }
-async function capture(page:Page,options:{path:string;fullPage:boolean}) {
+export async function capture(page:Page,options:{path:string;fullPage:boolean}) {
   await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo({top:0,behavior:'instant'});await new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r())))})
   await page.screenshot(options)
 }
@@ -151,9 +154,9 @@ for (const resource of ['journal','memories'] as const) {
     await expect(page.getByRole('heading',{name:'An afternoon by the lake'})).toBeVisible()
     expect(f.record.scrapbook_layout).toEqual(saved)
     await page.setViewportSize({width:390,height:844})
-    const lb=(await left.boundingBox())!,rb=(await right.boundingBox())!
-    expect(rb.y).toBeGreaterThan(lb.y+lb.height)
-    expect(Math.abs(lb.width/lb.height-.75)).toBeLessThan(.01)
+    await expect(left).toBeVisible();await expect(right).toBeHidden()
+    await page.getByRole('tab',{name:'Keepsakes',exact:true}).click()
+    await expect(right).toBeVisible();await expect(left).toBeHidden()
     await expect(page.locator('.decoration')).toHaveCount(4)
     await capture(page,{path:`test-results/evidence/${resource}-mobile.png`,fullPage:true})
   })
@@ -283,4 +286,141 @@ test('long writing keeps stable paper geometry and keyboard editing respects tex
   await page.reload()
   await expect(page.getByLabel('Your story',{exact:true})).toHaveText(text)
   expect(await page.getByLabel('Your story',{exact:true}).evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true)
+})
+
+async function touchDrag(page:Page,locator:ReturnType<Page['locator']>,dx:number,dy:number){
+ await locator.scrollIntoViewIfNeeded();const b=(await locator.boundingBox())!,x=b.x+b.width/2,y=b.y+b.height/2
+ const cdp=await page.context().newCDPSession(page)
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1,radiusX:10,radiusY:10}]})
+ for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/8,y:y+dy*i/8,id:1,radiusX:10,radiusY:10}]})
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach()
+}
+async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)}
+test.describe('Adaptive touch experiences (mock API)',()=>{
+ test.use({hasTouch:true,isMobile:true})
+ for(const resource of ['journal','memories'] as const)test(resource+': touch, sheets, pages, retries and six adaptive widths',async({page})=>{
+  test.setTimeout(90000)
+  const f=await fixture(page,resource);f.enableCustom()
+  await page.setViewportSize({width:360,height:800})
+  await page.goto('/'+resource+'/new')
+  await expect(page.getByLabel('Title',{exact:true})).toBeVisible()
+  await mkdir('test-results/evidence/adaptive',{recursive:true})
+  await capture(page,{path:'test-results/evidence/adaptive/'+resource+'-empty-360.png',fullPage:true})
+  await page.getByLabel('Title',{exact:true}).fill('The quiet garden\nand its small surprises')
+  await page.getByLabel('Your story',{exact:true}).fill('A little walk under the trees.\n\nThe light stayed with me.')
+  expect(await page.getByLabel('Your story',{exact:true}).evaluate(e=>parseFloat(getComputedStyle(e).fontSize))).toBeGreaterThanOrEqual(16)
+  await page.getByRole('button',{name:'Entry options',exact:true}).tap()
+  await page.getByRole('button',{name:'Date & details',exact:true}).tap()
+  const detailSheet=page.getByRole('dialog',{name:resource==='journal'?'Entry details':'Memory details'})
+  await expect(detailSheet).toBeVisible()
+  await detailSheet.getByLabel('Place',{exact:false}).fill('Botanical garden')
+  await detailSheet.getByRole('button',{name:'Close sheet',exact:true}).tap()
+  await expect(page.getByRole('button',{name:'Entry options',exact:true})).toBeFocused()
+  // Desktop Chromium cannot display a native mobile keyboard. Compress its viewport while editing.
+  await page.setViewportSize({width:360,height:430})
+  await page.getByLabel('Your story',{exact:true}).focus();await page.keyboard.press('End');await page.keyboard.type(' A moment worth keeping.')
+  await expect(page.getByLabel('Your story',{exact:true})).toBeFocused()
+  await capture(page,{path:'test-results/evidence/adaptive/'+resource+'-keyboard-viewport.png',fullPage:true})
+  await page.setViewportSize({width:360,height:800})
+  await page.getByRole('button',{name:'Decorate',exact:true}).tap()
+  await expect(page.getByRole('dialog',{name:'Sticker collection'})).toBeVisible()
+  await capture(page,{path:'test-results/evidence/adaptive/'+resource+'-library-360.png',fullPage:true})
+  await page.getByRole('button',{name:'Add flower-01.svg',exact:true}).tap()
+  await expect(page.getByRole('dialog',{name:'Sticker collection'})).toBeHidden()
+  const left=page.locator('#page-left'),right=page.locator('#page-right'),sticker=left.locator('.decoration')
+  const first=await sticker.getAttribute('style')
+  await touchDrag(page,sticker,40,32)
+  expect(await sticker.getAttribute('style')).not.toBe(first)
+  await page.getByRole('button',{name:'Adjust sticker',exact:true}).tap()
+  await page.getByLabel('Decoration rotation',{exact:true}).fill('25')
+  await page.getByLabel('Decoration size',{exact:true}).focus();await page.keyboard.press('ArrowRight')
+  await page.getByRole('button',{name:'Duplicate',exact:true}).tap();await expect(left.locator('.decoration')).toHaveCount(2)
+  await page.getByRole('button',{name:'Delete placement',exact:true}).tap()
+  await page.getByRole('button',{name:'Close sheet',exact:true}).tap()
+  await page.getByRole('button',{name:'Undo',exact:true}).tap();await expect(left.locator('.decoration')).toHaveCount(2)
+  await page.getByRole('button',{name:'Redo',exact:true}).tap();await expect(left.locator('.decoration')).toHaveCount(1)
+  await sticker.tap()
+  const transformed=await sticker.getAttribute('style')
+  await page.getByRole('tab',{name:'Keepsakes',exact:true}).tap();await expect(left).toBeHidden()
+  const png=await landscape(page);f.setImage(png)
+  await page.getByLabel('Upload photo',{exact:true}).setInputFiles({name:'garden.png',mimeType:'image/png',buffer:png})
+  await expect(right.locator('.photo')).toHaveCount(1)
+  await page.getByRole('button',{name:'Adjust photo',exact:true}).tap()
+  await page.getByLabel('Photo frame',{exact:true}).selectOption('polaroid')
+  await page.getByLabel('Decoration rotation',{exact:true}).fill('-9')
+  await page.getByRole('button',{name:'Close sheet',exact:true}).tap()
+  await page.getByRole('tab',{name:'Story',exact:true}).tap()
+  await expect(sticker).toHaveAttribute('style',transformed!)
+  await expect(sticker).toHaveClass(/selected/)
+  await page.getByRole('tab',{name:'Keepsakes',exact:true}).tap()
+  const photoStyle=await right.locator('.photo').getAttribute('style')
+  for(const width of [360,390,430,768,1024,1440]){
+   await page.setViewportSize({width,height:900});await noOverflow(page)
+   await expect(right.locator('.photo')).toHaveAttribute('style',photoStyle!)
+   await expect(right.locator('.photo')).toHaveClass(/selected/)
+   if(width<960){await expect(left).toBeHidden();await expect(right).toBeVisible()}
+   else{await expect(left).toBeVisible();await expect(right).toBeVisible()}
+   await capture(page,{path:'test-results/evidence/adaptive/'+resource+'-'+width+'.png',fullPage:true})
+  }
+  await page.setViewportSize({width:844,height:390});await noOverflow(page)
+  await expect(right.locator('.photo')).toHaveAttribute('style',photoStyle!)
+  await page.setViewportSize({width:390,height:844})
+  f.failSave();await page.getByRole('button',{name:resource==='journal'?'Save entry':'Save memory',exact:true}).tap()
+  await expect(page.getByRole('alert').filter({hasText:'couldn’t be saved'})).toBeVisible()
+  await page.getByRole('button',{name:resource==='journal'?'Save entry':'Save memory',exact:true}).tap()
+  await expect(page.getByRole('button',{name:resource==='journal'?'Edit journal':'Edit memory',exact:true})).toBeVisible()
+  expect(f.creates).toBe(1);expect(f.record.scrapbook_layout.pages.map((p:any)=>p.elements.length)).toEqual([1,1])
+  await page.reload()
+  await page.getByRole('tab',{name:'Keepsakes',exact:true}).tap()
+  await expect(right.locator('.photo')).toHaveAttribute('style',photoStyle!)
+  await expect(page.locator('.handle')).toHaveCount(0)
+ })
+ test('Memories archive: real filters, varied imagery, detail viewing, and responsive order',async({page})=>{
+  const f=await fixture(page,'memories');f.enableCustom();f.setCollection([])
+  await page.setViewportSize({width:390,height:844});await page.goto('/memories')
+  await expect(page.getByRole('heading',{name:'Your collection starts with a moment.'})).toBeVisible()
+  await expect(page.locator('.scrapbook')).toHaveCount(0)
+  await mkdir('test-results/evidence/adaptive',{recursive:true})
+  await capture(page,{path:'test-results/evidence/adaptive/collection-empty.png',fullPage:true})
+  const wide=await landscape(page)
+  const portrait=Buffer.from(await page.evaluate(()=>{const c=document.createElement('canvas');c.width=360;c.height=540;const x=c.getContext('2d')!;x.fillStyle='#d7c7ac';x.fillRect(0,0,360,540);x.fillStyle='#687c65';for(let i=0;i<7;i++){x.beginPath();x.ellipse(180+Math.sin(i)*65,80+i*55,35,70,i/3,0,Math.PI*2);x.fill()}return c.toDataURL('image/png').split(',')[1]}),'base64')
+  const rows=Array.from({length:5},(_,i)=>({id:i===0?recordId:'memory-'+i,user_id:owner,title:['An afternoon by the lake','Every shade of green in the old botanical garden, and the tiny paths we almost missed','A note for a slower day','The road home','Light through the window'][i],description:'A little detail from an ordinary day that I wanted to remember.',memory_date:i<3?'2026-10-'+(14-i):'2026-09-10',location_name:i%2===0?'Cebu':null,is_archived:false,scrapbook_layout:empty()}))
+  const files:Record<string,any[]>={}
+  rows.forEach((r,i)=>files[r.id]=i===2?[]:[{id:'photo-'+i,user_id:owner,memory_id:r.id,storage_path:owner+'/'+(i%2?'portrait.png':'wide.png'),file_name:'Original fixture image',mime_type:'image/png',sort_order:0}])
+  files[recordId].push({...files[recordId][0],id:'photo-second',storage_path:owner+'/portrait.png',sort_order:1})
+  f.setCollection(rows,files,{'wide.png':wide,'portrait.png':portrait});await page.reload()
+  await expect(page.locator('.memory-card')).toHaveCount(5)
+  const order=await page.locator('.card-copy h3').allTextContents()
+  for(const width of [360,390,430,768,1024,1440]){
+   await page.setViewportSize({width,height:900});await noOverflow(page)
+   expect(await page.locator('.card-copy h3').allTextContents()).toEqual(order)
+   await expect(page.locator('.card-visual img').first()).toBeVisible()
+   expect(await page.locator('.card-visual img').first().evaluate(i=>(i as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+   await capture(page,{path:'test-results/evidence/adaptive/collection-'+width+'.png',fullPage:true})
+  }
+  await page.setViewportSize({width:390,height:844})
+  await page.getByRole('button',{name:/^Filters/}).tap();await page.getByRole('button',{name:'Words only',exact:true}).tap()
+  await page.getByRole('button',{name:'Show 1 memories',exact:true}).tap()
+  await expect(page.locator('.memory-card')).toHaveCount(1)
+  await capture(page,{path:'test-results/evidence/adaptive/collection-filtered.png',fullPage:true})
+  await page.getByLabel('Search memories',{exact:true}).fill('not in this collection')
+  await expect(page.getByRole('heading',{name:'No moments found.'})).toBeVisible()
+  await capture(page,{path:'test-results/evidence/adaptive/collection-no-results.png',fullPage:true})
+  await page.getByRole('button',{name:'Clear filters',exact:true}).first().tap()
+  await page.getByLabel('Search memories',{exact:true}).fill('lake')
+  await page.locator('.memory-link').first().tap()
+  await expect(page.getByRole('button',{name:'View photo 1 full screen'})).toBeVisible()
+  await capture(page,{path:'test-results/evidence/adaptive/memory-detail-390.png',fullPage:true})
+  await page.getByRole('button',{name:'View photo 1 full screen'}).tap()
+  await page.getByRole('button',{name:'Next full-screen photo'}).tap()
+  await expect(page.getByRole('dialog',{name:'Photographs · 2 of 2'})).toBeVisible()
+  await capture(page,{path:'test-results/evidence/adaptive/memory-fullscreen.png',fullPage:true})
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button',{name:'View photo 2 full screen'})).toBeFocused()
+  await page.getByRole('link',{name:'All memories',exact:true}).tap()
+  await expect(page.getByLabel('Search memories',{exact:true})).toHaveValue('lake')
+  await page.getByRole('link',{name:'＋ Create memory',exact:true}).tap()
+  await expect(page.getByLabel('Title',{exact:true})).toBeVisible()
+  await expect(page.locator('.memory-card')).toHaveCount(0)
+ })
 })

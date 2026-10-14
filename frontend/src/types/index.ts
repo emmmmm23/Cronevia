@@ -125,6 +125,7 @@ export interface Media {
 }
 
 export interface Memory {
+  location_name?: string | null
   scrapbook_layout?: import('./scrapbook').ScrapbookLayout | null
   id: string
   user_id: string

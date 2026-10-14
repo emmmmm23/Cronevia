@@ -88,6 +88,8 @@ const routes: RouteRecordRaw[] = [
         name: 'memories',
         component: () => import('@/pages/MemoriesPage.vue'),
       },
+      {path:'memories/new',name:'memories.create',component:()=>import('@/pages/MemoryDetailPage.vue')},
+      {path:'memories/:id/edit',name:'memories.edit',component:()=>import('@/pages/MemoryDetailPage.vue')},
       {
         path: 'memories/:id',
         name: 'memories.show',

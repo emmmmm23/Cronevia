@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter, useRoute, RouterLink, onBeforeRouteLeave } from 'vue-router'
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
 import { useJournalStore } from '@/stores/journal'
 import { useAuthStore } from '@/stores/auth'
+import NotebookHeader from '@/components/shared/NotebookHeader.vue'
+import AppSheet from '@/components/shared/AppSheet.vue'
 import ScrapbookNotebook from '@/components/journal/ScrapbookNotebook.vue'
 import { emptyLayout } from '@/types/scrapbook'
 import { journalLayout } from '@/services/scrapbook.service'
@@ -20,6 +22,7 @@ const locationSource=ref<JournalEntry['location_source']>(null), visibility=ref<
 const layout=ref(emptyLayout()), existingPhotos=ref<Media[]>([])
 const notebook=ref<InstanceType<typeof ScrapbookNotebook>|null>(null)
 const ready=ref(false), loading=ref(false), loadFailed=ref(false), saving=ref(false), uploadBusy=ref(false), viewMode=ref(!!entryId)
+const detailsOpen=ref(false)
 const saveError=ref(''), locationError=ref(''), locationLoading=ref(false), savedDraft=ref('')
 function snapshot() { return JSON.stringify({title:title.value,content:content.value,date:date.value,tags:tags.value,moodEmoji:moodEmoji.value,moodLabel:moodLabel.value,locationName:locationName.value,latitude:latitude.value,longitude:longitude.value,locationSource:locationSource.value,visibility:visibility.value,layout:layout.value}) }
 const dirty=computed(()=>ready.value && !!savedDraft.value && snapshot()!==savedDraft.value)
@@ -186,19 +189,9 @@ const moodCategories: MoodCategory[] = [
 </script>
 <template>
   <main class="journal-desk">
-    <header class="entry-header">
-      <RouterLink :to="{name:'journal'}" class="back-link"><span aria-hidden="true">←</span> My journal</RouterLink>
-      <span class="entry-status" role="status">{{saving?'Saving your page…':uploadBusy?'Adding your keepsake…':dirty?'Unsaved changes':savedEntryId?'All changes saved':'A fresh page'}}</span>
-      <div class="entry-actions">
-        <button v-if="viewMode && ready" class="save-button" @click="viewMode=false">Edit journal</button>
-        <template v-if="!viewMode"><button class="cancel-button" :disabled="saving || uploadBusy" @click="cancelEdit">Cancel</button><button class="save-button" :disabled="!canSave" @click="handleSave">{{saving?'Saving…':'Save entry'}} <span aria-hidden="true">↗</span></button></template>
-      </div>
-    </header>
-    <div class="entry-meta" v-if="ready">
-      <span class="entry-date">{{dateLabel}}</span>
-      <details class="entry-details">
-        <summary>{{viewMode?'Entry details':'Add details'}} <span aria-hidden="true">⌄</span></summary>
-        <div class="details-panel">
+    <NotebookHeader back-to="/journal" back-label="My journal" :status="saving?'Saving…':uploadBusy?'Uploading…':dirty?'Unsaved changes':savedEntryId?'All changes saved':'New entry'" save-label="Save entry" edit-label="Edit journal" :view-mode="viewMode" :ready="ready" :disabled="!canSave" :busy="saving || uploadBusy" @save="handleSave" @edit="viewMode=false" @cancel="cancelEdit" @details="detailsOpen=true" />
+    <p class="compact-date" v-if="ready">{{dateLabel}}</p>
+    <AppSheet v-model="detailsOpen" title="Entry details"><div class="details-fields">
           <template v-if="!viewMode">
             <label>Date<input v-model="date" type="date" :disabled="saving" /></label>
             <label>Mood<select :value="moodEmoji" @change="selectMood" :disabled="saving"><option value="">How did it feel?</option><optgroup v-for="group in moodCategories" :key="group.name" :label="group.name"><option v-for="m in group.moods" :key="m.label" :value="m.emoji">{{m.emoji}} {{m.label}}</option></optgroup></select></label>
@@ -209,9 +202,8 @@ const moodCategories: MoodCategory[] = [
             <div class="tag-list"><button v-for="tag in tags" :key="tag" :aria-label="'Remove tag '+tag" @click="tags=tags.filter(t=>t!==tag)">{{tag}} ×</button></div>
           </template>
           <template v-else><p>{{moodEmoji}} {{moodLabel || 'No mood added'}}</p><p>{{locationName || 'No place added'}}</p><p>{{tags.join(' · ') || 'No tags added'}}</p></template>
-        </div>
-      </details>
-    </div>
+
+    </div></AppSheet>
     <div v-if="saveError" class="entry-notice" role="alert"><span>{{saveError}}</span><button v-if="loadFailed" @click="load">Retry loading</button></div>
     <ScrapbookNotebook v-if="ready" ref="notebook" v-model="layout" v-model:title="title" v-model:text="content" :entry-id="savedEntryId || null" resource="journal" :media="existingPhotos" :user-id="auth.user?.id" :view-mode="viewMode" :disabled="saving" @busy-change="uploadBusy=$event" />
     <div v-else-if="loading" class="loading-page">Opening your journal…</div>
@@ -222,4 +214,6 @@ const moodCategories: MoodCategory[] = [
 .entry-header,.entry-meta,.entry-notice{max-width:1320px;margin:auto;display:flex;align-items:center}
 .entry-header{gap:20px;min-height:48px}.back-link{font-size:13px;color:#6a665d;display:flex;gap:10px;align-items:center}.back-link span{font-size:20px}.entry-status{font-size:11px;color:#7d8175;margin-left:auto}.entry-actions{display:flex;gap:12px;align-items:center}button{font:inherit;cursor:pointer}.save-button{border:0;border-radius:7px;background:#74283c;color:#fff7ee;padding:12px 19px;font-size:13px;font-weight:500;box-shadow:0 3px 5px #74283c14}.save-button span{margin-left:14px}.save-button:disabled{opacity:.45;cursor:default}.cancel-button{background:none;border:0;padding:12px;color:#787368;font-size:13px}.entry-meta{justify-content:center;gap:18px;margin-top:13px;margin-bottom:16px}.entry-date{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#756f63}.entry-details{position:relative;font-size:12px}.entry-details summary{cursor:pointer;color:#71695b;padding:8px;list-style:none}.entry-details summary::-webkit-details-marker{display:none}.details-panel{position:absolute;top:36px;right:0;z-index:35;background:#fffaf1;border:1px solid #ddd4c6;border-radius:10px;padding:20px;box-shadow:0 12px 35px #45352420;width:300px;display:grid;gap:12px}.details-panel label{display:grid;gap:6px;font-size:12px;color:#6c6253}.details-panel input,.details-panel select{width:100%;padding:9px;border:1px solid #ded4c3;border-radius:5px;background:#fffcf7;color:#51483a}.location-button{background:#edf0e6;border:0;padding:9px;color:#5e6d56;border-radius:5px}.tag-list{display:flex;gap:6px;flex-wrap:wrap}.tag-list button{background:#ece8dc;border:0;border-radius:4px;padding:5px 8px}.entry-notice{margin:14px auto;gap:12px;background:#f8edda;border:1px solid #e2d5be;border-radius:8px;padding:14px 18px;font-size:13px;max-width:960px}.entry-notice button{border:0;background:transparent;color:#74283c;text-decoration:underline;white-space:nowrap}.loading-page{text-align:center;padding:150px 0;font:italic 24px Georgia,serif;color:#827663}button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #8b4859;outline-offset:4px}
 @media(max-width:767px){.journal-desk{padding:12px 14px 36px}.entry-header{gap:8px;flex-wrap:wrap}.entry-status{order:3;width:100%;text-align:center;font-size:10px}.entry-actions{margin-left:auto;gap:4px}.save-button{padding:11px 14px}.entry-meta{margin:8px 0 14px;gap:5px}.details-panel{right:-5px;width:280px}.entry-notice{font-size:12px}.back-link{font-size:12px}}
+.compact-date{text-align:center;color:#7d735f;font-size:12px;letter-spacing:.07em;margin:0 0 18px}.details-fields{display:grid;gap:18px}.details-fields label{display:grid;gap:7px;font-size:14px}.details-fields input,.details-fields select{width:100%;font-size:16px;min-height:48px;padding:10px;border:1px solid #d7ccba;border-radius:6px;background:#fffaf1}.details-fields button{min-height:44px}
+@media(max-width:959px){.journal-desk{padding:12px;min-height:100dvh}.compact-date{display:none}}
 </style>
