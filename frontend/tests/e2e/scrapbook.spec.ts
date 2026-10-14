@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type CDPSession } from '@playwright/test'
 import { loadEnv } from 'vite'
 import { mkdir } from 'node:fs/promises'
 
@@ -48,6 +48,7 @@ export async function fixture(page: Page, resource: 'journal'|'memories') {
       return json(mediaByParent[parent] || media)
     }
     if(url.pathname.endsWith('/rest/v1/'+table)) {
+      if(collection && ['PATCH','DELETE'].includes(method)){const id=url.searchParams.get('id')?.slice(3);if(failSave){failSave=false;return json({message:'Fixture save rejected'},500)}const index=collection.findIndex(m=>m.id===id);if(method==='DELETE'){collection=collection.filter(m=>m.id!==id);return json(null)}collection[index]={...collection[index],...route.request().postDataJSON()};return json(collection[index])}
       if(collection && method==='GET'){const id=url.searchParams.get('id')?.slice(3);return json(id?collection.find(m=>m.id===id):collection.filter(m=>!!m.is_archived===(url.searchParams.get('is_archived')==='eq.true')))}
       if(method==='PATCH' || method==='POST') {
         if(failSave) {failSave=false;return json({message:'Fixture save rejected',code:'23514'},400)}
@@ -288,12 +289,12 @@ test('long writing keeps stable paper geometry and keyboard editing respects tex
   expect(await page.getByLabel('Your story',{exact:true}).evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true)
 })
 
+const touchSessions=new WeakMap<Page,CDPSession>()
+async function touchClient(page:Page){let client=touchSessions.get(page);if(!client){client=await page.context().newCDPSession(page);touchSessions.set(page,client)}return client}
 async function touchDrag(page:Page,locator:ReturnType<Page['locator']>,dx:number,dy:number){
  await locator.scrollIntoViewIfNeeded();const b=(await locator.boundingBox())!,x=b.x+b.width/2,y=b.y+b.height/2
- const cdp=await page.context().newCDPSession(page)
- await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1,radiusX:10,radiusY:10}]})
- for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/8,y:y+dy*i/8,id:1,radiusX:10,radiusY:10}]})
- await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach()
+ const cdp=await touchClient(page)
+ await cdp.send('Input.synthesizeScrollGesture',{x,y,xDistance:-dx,yDistance:-dy,speed:250,gestureSourceType:'touch',preventFling:true})
 }
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)}
 test.describe('Adaptive touch experiences (mock API)',()=>{
@@ -332,6 +333,7 @@ test.describe('Adaptive touch experiences (mock API)',()=>{
   await touchDrag(page,sticker,40,32)
   expect(await sticker.getAttribute('style')).not.toBe(first)
   await page.getByRole('button',{name:'Adjust sticker',exact:true}).tap()
+   await expect(page.getByRole('dialog',{name:'Adjust decoration'})).toBeVisible()
   await page.getByLabel('Decoration rotation',{exact:true}).fill('25')
   await page.getByLabel('Decoration size',{exact:true}).focus();await page.keyboard.press('ArrowRight')
   await page.getByRole('button',{name:'Duplicate',exact:true}).tap();await expect(left.locator('.decoration')).toHaveCount(2)
@@ -355,7 +357,7 @@ test.describe('Adaptive touch experiences (mock API)',()=>{
   await page.getByRole('tab',{name:'Keepsakes',exact:true}).tap()
   const photoStyle=await right.locator('.photo').getAttribute('style')
   for(const width of [360,390,430,768,1024,1440]){
-   await page.setViewportSize({width,height:900});await noOverflow(page)
+   await page.setViewportSize({width,height:900});await noOverflow(page);expect(await page.evaluate(()=>innerWidth)).toBe(width)
    await expect(right.locator('.photo')).toHaveAttribute('style',photoStyle!)
    await expect(right.locator('.photo')).toHaveClass(/selected/)
    if(width<960){await expect(left).toBeHidden();await expect(right).toBeVisible()}
@@ -374,6 +376,44 @@ test.describe('Adaptive touch experiences (mock API)',()=>{
   await page.getByRole('tab',{name:'Keepsakes',exact:true}).tap()
   await expect(right.locator('.photo')).toHaveAttribute('style',photoStyle!)
   await expect(page.locator('.handle')).toHaveCount(0)
+ })
+ test('phone custom upload recovery, accessible sheets, and long writing',async({page})=>{
+  const f=await fixture(page,'journal');f.enableCustom()
+  await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/journal/new')
+  await page.getByLabel('Title',{exact:true}).fill('A growing collection')
+  await page.getByLabel('Your story',{exact:true}).fill('A small beginning.')
+  await page.getByRole('button',{name:'Decorate',exact:true}).tap()
+  expect(await page.locator('.thumbnails button').first().evaluate(e=>parseFloat(getComputedStyle(e).transitionDuration))).toBeLessThanOrEqual(.001)
+  await page.getByRole('tab',{name:'My stickers',exact:true}).tap()
+  const png=Buffer.from(await page.evaluate(()=>{const c=document.createElement('canvas');c.width=200;c.height=200;const x=c.getContext('2d')!;x.fillStyle='#7d9272';x.beginPath();x.ellipse(100,100,40,75,.4,0,Math.PI*2);x.fill();return c.toDataURL('image/png').split(',')[1]}),'base64');f.setImage(png);f.failUpload()
+  await page.getByLabel('Upload custom sticker',{exact:true}).setInputFiles({name:'my-keepsake.png',mimeType:'image/png',buffer:png})
+  await expect(page.locator('.decoration')).toHaveCount(1)
+  await expect(page.getByRole('button',{name:'Review uploads'})).toBeVisible()
+  await capture(page,{path:'test-results/evidence/adaptive/custom-upload-failure-390.png',fullPage:true})
+  await page.getByRole('button',{name:'Review uploads'}).tap()
+  await page.getByRole('button',{name:'Retry upload',exact:true}).tap()
+  await expect(page.getByRole('button',{name:'Retry upload',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'Place custom sticker',exact:true})).toBeEnabled()
+  await capture(page,{path:'test-results/evidence/adaptive/custom-upload-success-390.png',fullPage:true})
+  await page.getByRole('button',{name:'Close sheet',exact:true}).tap()
+  await page.getByRole('button',{name:'Adjust sticker',exact:true}).tap()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button',{name:'Adjust sticker',exact:true})).toBeFocused()
+  const item=page.locator('#page-left .decoration'),geometry=await item.getAttribute('style')
+  await page.getByRole('tab',{name:'Story',exact:true}).focus();await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab',{name:'Keepsakes',exact:true})).toBeFocused()
+  await page.keyboard.press('Home');await expect(item).toHaveAttribute('style',geometry!)
+  await page.getByRole('button',{name:'Write',exact:true}).tap()
+  const reference=await page.locator('#page-left .decoration-layer').boundingBox()
+  const text=Array.from({length:35},(_,i)=>'Moment '+(i+1)+': The light through the leaves, a quiet detail worth keeping.').join('\n\n')
+  const story=page.getByLabel('Your story',{exact:true});await story.fill(text)
+  expect(await story.evaluate(e=>e.scrollHeight<=e.clientHeight+2)).toBe(true)
+  expect((await page.locator('#page-left .decoration-layer').boundingBox())!.height).toBe(reference!.height)
+  await expect(item).toHaveAttribute('style',geometry!)
+  await page.getByRole('button',{name:'Save entry',exact:true}).tap()
+  await expect(page.getByRole('button',{name:'Edit journal',exact:true})).toBeVisible();await page.reload()
+  await expect(page.getByLabel('Your story',{exact:true})).toHaveText(text)
+  await expect(item).toHaveAttribute('style',geometry!)
  })
  test('Memories archive: real filters, varied imagery, detail viewing, and responsive order',async({page})=>{
   const f=await fixture(page,'memories');f.enableCustom();f.setCollection([])
@@ -400,7 +440,7 @@ test.describe('Adaptive touch experiences (mock API)',()=>{
   }
   await page.setViewportSize({width:390,height:844})
   await page.getByRole('button',{name:/^Filters/}).tap();await page.getByRole('button',{name:'Words only',exact:true}).tap()
-  await page.getByRole('button',{name:'Show 1 memories',exact:true}).tap()
+  await page.getByRole('button',{name:'Show 1 memory',exact:true}).tap()
   await expect(page.locator('.memory-card')).toHaveCount(1)
   await capture(page,{path:'test-results/evidence/adaptive/collection-filtered.png',fullPage:true})
   await page.getByLabel('Search memories',{exact:true}).fill('not in this collection')

@@ -18,7 +18,7 @@
           </div>
 
           <!-- Desktop navigation -->
-          <div class="hidden md:flex md:items-center md:space-x-1 lg:space-x-2">
+          <div class="hidden xl:flex xl:items-center xl:space-x-2">
             <RouterLink
               v-for="link in mainNavLinks"
               :key="link.path"
@@ -49,7 +49,7 @@
           </div>
 
           <!-- Right side: Search icon + Profile -->
-          <div class="hidden md:flex md:items-center md:space-x-3">
+          <div class="hidden xl:flex xl:items-center xl:space-x-3">
             <!-- Search icon -->
             <RouterLink
               to="/search"
@@ -118,7 +118,7 @@
           <button
             type="button"
             @click="toggleMobileMenu"
-            class="md:hidden p-2 text-[#6b4423] hover:text-[#7B0323] hover:bg-[#f5ebdd] rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B0323]"
+            class="xl:hidden min-w-[44px] min-h-[44px] p-2 text-[#6b4423] hover:text-[#7B0323] hover:bg-[#f5ebdd] rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B0323]"
             :aria-expanded="mobileMenuOpen"
             :aria-label="mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'"
             aria-controls="mobile-menu"
@@ -142,7 +142,7 @@
           <div
             v-if="mobileMenuOpen"
             id="mobile-menu"
-            class="md:hidden border-t border-[#e5d4bb]"
+            class="xl:hidden border-t border-[#e5d4bb]"
             role="navigation"
             aria-label="Mobile navigation"
           >

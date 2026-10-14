@@ -189,7 +189,7 @@ const moodCategories: MoodCategory[] = [
 </script>
 <template>
   <main class="journal-desk">
-    <NotebookHeader back-to="/journal" back-label="My journal" :status="saving?'Saving…':uploadBusy?'Uploading…':dirty?'Unsaved changes':savedEntryId?'All changes saved':'New entry'" save-label="Save entry" edit-label="Edit journal" :view-mode="viewMode" :ready="ready" :disabled="!canSave" :busy="saving || uploadBusy" @save="handleSave" @edit="viewMode=false" @cancel="cancelEdit" @details="detailsOpen=true" />
+    <NotebookHeader back-to="/journal" back-label="My journal" :status="loading?'Opening…':!ready?'Couldn’t load':saving?'Saving…':uploadBusy?'Uploading…':dirty?'Unsaved changes':savedEntryId?'All changes saved':'New entry'" save-label="Save entry" edit-label="Edit journal" :view-mode="viewMode" :ready="ready" :disabled="!canSave" :busy="saving || uploadBusy" @save="handleSave" @edit="viewMode=false" @cancel="cancelEdit" @details="detailsOpen=true" />
     <p class="compact-date" v-if="ready">{{dateLabel}}</p>
     <AppSheet v-model="detailsOpen" title="Entry details"><div class="details-fields">
           <template v-if="!viewMode">

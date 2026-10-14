@@ -1,5 +1,7 @@
 # Scrapbook implementation and verification
 
+> The subsequent adaptive Journal and Memories redesign supersedes the mobile stacking and inline memory form described here. See [ADAPTIVE_SCRAPBOOK_REDESIGN.md](ADAPTIVE_SCRAPBOOK_REDESIGN.md) for current routes, responsive behavior, and validation. The hosted setup instructions below still apply.
+
 ## Actual application and preserved work
 
 Inspected branch `main` and the existing uncommitted scrapbook draft before editing. No work was reset or discarded. The repository's Vercel configuration builds `frontend` into `frontend/dist`. Its entry point is `frontend/index.html → src/main.ts → router → JournalEditorPage.vue`. The backend's older editor is not the editor selected by that deployment configuration. An authenticated live deployment/version was not available to inspect.

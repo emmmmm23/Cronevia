@@ -15,7 +15,7 @@ function backdrop(event:MouseEvent){if(props.docked||event.target!==dialog.value
 onBeforeUnmount(()=>{if(dialog.value?.open)dialog.value.close()})
 </script>
 <template>
- <dialog ref="dialog" class="app-sheet" :class="{docked,fullscreen}" :aria-label="title" @cancel.prevent="close" @click="backdrop">
+ <dialog ref="dialog" class="app-sheet" :class="{docked,fullscreen}" :aria-label="title" @keydown.esc.stop @cancel.prevent="close" @click="backdrop">
   <header v-if="!docked" class="sheet-header"><h2>{{title}}</h2><button aria-label="Close sheet" @click="close">×</button></header>
   <div class="sheet-content"><slot /></div>
  </dialog>

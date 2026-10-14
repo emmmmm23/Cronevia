@@ -2,7 +2,7 @@
 import { useMediaQuery } from '@vueuse/core'
 import AppSheet from '@/components/shared/AppSheet.vue'
 import { useEditingViewport } from '@/composables/useEditingViewport'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { fetchBuiltinAssets, fetchUserAssets, uploadStickerAsset } from '@/services/sticker.service'
 import api from '@/services/api.service'
 import { scrapbookError } from '@/services/scrapbook-errors'
@@ -19,6 +19,15 @@ const wideTools=useMediaQuery('(min-width:1280px)')
 const libraryOpen=ref(false), panelSection=ref<'library'|'selection'>('library')
 const pageSelections:Record<string,string|null>={}
 function selectPage(id:string){pageSelections[activePage.value]=selectedId.value;activePage.value=id;selectedId.value=pageSelections[id] || null}
+async function pageTabKey(event:KeyboardEvent,id:string){
+ if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return
+ event.preventDefault();event.stopPropagation()
+ const pages=layout.value.pages,index=pages.findIndex(p=>p.id===id)
+ const next=event.key==='Home'?0:event.key==='End'?pages.length-1:(index+(event.key==='ArrowRight'?1:-1)+pages.length)%pages.length
+ const parent=(event.currentTarget as HTMLElement).parentElement
+ selectPage(pages[next].id);await nextTick()
+ const tabs=parent?.querySelectorAll<HTMLButtonElement>('[role=tab]');tabs?.[next]?.focus()
+}
 function openTools(section:'library'|'selection'='library'){panelSection.value=section;libraryOpen.value=true}
 function startDecorating(){decorate.value=true;if(!wideTools.value)openTools()}
 const showHelp = ref(false)
@@ -29,6 +38,8 @@ const urls = ref<Record<string,string>>({})
 const history = ref<ScrapbookLayout[]>([clone(layout.value)]), cursor = ref(0)
 const pending = ref<Record<string, { file: File; url: string; type: 'photo' | 'sticker'; status: 'pending' | 'uploading' | 'failed'; error?: string }>>({})
 watch(pending, value => emit('busy-change', Object.values(value).some(p => p.status === 'uploading')), {deep:true})
+const pendingItems=computed(()=>Object.values(pending.value))
+const failedUploadCount=computed(()=>pendingItems.value.filter(p=>p.status==='failed').length)
 const uploading = new Map<string, Promise<void>>()
 const selected = computed(() => layout.value.pages.flatMap(p => p.elements).find(e => e.id === selectedId.value))
 const selectedPage = computed(() => layout.value.pages.find(p => p.elements.some(e => e.id === selectedId.value)))
@@ -108,7 +119,7 @@ function movePage() {
   if (!selected.value || !selectedPage.value) return
   const source = selectedPage.value, target = layout.value.pages.find(p => p.id !== source.id)!
   if (target.elements.length >= 100) return
-  const e = selected.value; source.elements = source.elements.filter(v => v.id !== e.id); e.zIndex = Math.max(-1,...target.elements.map(e=>e.zIndex))+1; target.elements.push(e); activePage.value = target.id; commit()
+  const e = selected.value; source.elements = source.elements.filter(v => v.id !== e.id); e.zIndex = Math.max(-1,...target.elements.map(e=>e.zIndex))+1; target.elements.push(e); pageSelections[source.id]=null;pageSelections[target.id]=e.id;activePage.value = target.id; commit()
 }
 let gesture: { id: string; mode: string; start: ScrapbookElement; px: number; py: number; rect: DOMRect; angle: number; distance: number; target: HTMLElement; pointer: number } | null = null
 function startGesture(event: PointerEvent, e: ScrapbookElement, page: string, mode = 'drag') {
@@ -218,7 +229,7 @@ defineExpose({ prepareSave, markSaved, reset })
 
 <template>
   <section class="scrapbook" tabindex="-1" @keydown="keydown">
-    <div class="page-tabs" role="tablist" aria-label="Notebook pages"><button v-for="p in layout.pages" :key="p.id" role="tab" :aria-selected="activePage===p.id" :aria-controls="p.id" @click="selectPage(p.id)">{{p.id==='page-left'?'Story':'Keepsakes'}}</button></div>
+    <div class="page-tabs" role="tablist" aria-label="Notebook pages"><button v-for="p in layout.pages" :key="p.id" role="tab" :aria-selected="activePage===p.id" :aria-controls="p.id" :tabindex="activePage===p.id?0:-1" @keydown="pageTabKey($event,p.id)" @click="selectPage(p.id)">{{p.id==='page-left'?'Story':'Keepsakes'}}</button></div>
     <div v-if="!viewMode" class="workbench">
       <div class="mode-switch" role="group" aria-label="Notebook mode">
         <button :disabled="disabled" :aria-pressed="!decorate" @click="decorate=false;selectedId=null">Write</button>
@@ -231,12 +242,13 @@ defineExpose({ prepareSave, markSaved, reset })
         <button class="icon-button help-button" aria-label="Keyboard help" :aria-expanded="showHelp" @click="showHelp=!showHelp">?</button>
       </div>
     </div>
-    <div v-if="decorate && !viewMode" class="compact-decoration-actions"><button @click="openTools()">Stickers</button><button v-if="selected" class="selection-button" @click="openTools('selection')">Adjust {{selected.type}}</button><button aria-label="Undo" :disabled="!canUndo || disabled" @click="undo">↶</button><button aria-label="Redo" :disabled="!canRedo || disabled" @click="redo">↷</button><button aria-label="Keyboard help" @click="showHelp=!showHelp">?</button></div>
+    <div v-if="decorate && !viewMode" class="compact-decoration-actions"><button @click="openTools()">Stickers</button><button v-if="selected" class="selection-button" @click="openTools('selection')">Adjust {{selected.type}}</button><button aria-label="Undo" :disabled="!canUndo || disabled" @click="undo">↶</button><button aria-label="Redo" :disabled="!canRedo || disabled" @click="redo">↷</button></div>
     <div v-if="showHelp && !viewMode" class="keyboard-help">
       <strong>A few helpful shortcuts</strong>
       <p>Arrow keys move · + / − resize · [ / ] rotate · Delete removes a placement · Ctrl/Cmd Z undoes · Shift Ctrl/Cmd Z redoes · Page Up/Down changes layers (Shift for front/back) · Escape clears selection.</p>
       <p>Long writing continues below the decorated area on smaller screens. Choose Decorate to move anything covering it. Switch pages with the page selector or “Move to left/right page”.</p>
     </div>
+    <div v-if="pendingItems.length && !viewMode" class="pending-summary" :role="failedUploadCount?'alert':undefined"><span>{{failedUploadCount?'An image couldn’t upload. Your preview is safe here.':pendingItems.some(p=>p.status==='uploading')?'Uploading your image…':'Your photos will upload when you save.'}}</span><button v-if="failedUploadCount" @click="openTools()">Review uploads</button></div>
     <p v-if="photoError" class="friendly-notice" role="alert">{{photoError}}</p>
     <div class="workspace" :class="{'with-tools':decorate && !viewMode}">
       <div class="book-area">
@@ -261,12 +273,12 @@ defineExpose({ prepareSave, markSaved, reset })
               <div v-for="e in page.elements" :key="e.id" class="decoration" :class="[{selected:decorate && selectedId===e.id,photo:e.type==='photo'},e.type==='photo'?'frame-'+e.frame:'']" :style="style(e)" :tabindex="decorate && !viewMode?0:undefined" :role="decorate && !viewMode?'button':undefined" :aria-label="e.type+' decoration'" @focus="selectedId=e.id;activePage=page.id" @pointerdown="startGesture($event,e,page.id)" @pointermove="moveGesture" @pointerup="endGesture" @pointercancel="endGesture" @lostpointercapture="endGesture">
                 <div class="asset-surface"><img v-if="src(e)" :src="src(e)" :alt="e.type==='photo'?'Placed photo':'Placed sticker'" draggable="false" /><span v-else class="unavailable">Image unavailable</span></div>
                 <template v-if="decorate && selectedId===e.id && !viewMode"><button class="handle resize" aria-label="Resize decoration" @pointerdown.stop="startGesture($event,e,page.id,'resize')">↔</button><button class="handle rotate" aria-label="Rotate decoration" @pointerdown.stop="startGesture($event,e,page.id,'rotate')">↻</button></template>
-                <span v-if="pending[e.assetId] && !viewMode" class="placement-status">{{pending[e.assetId].status==='failed'?'Retry needed':'Adding…'}}</span>
+                <span v-if="pending[e.assetId] && !viewMode" class="placement-status">{{pending[e.assetId].status==='failed'?'Retry needed':pending[e.assetId].status==='pending'?'Ready to save':'Uploading…'}}</span>
               </div>
             </div>
           </article>
         </div>
-        <p class="book-caption" v-if="!viewMode">{{decorate?'Small details, your own way.':'No perfect words needed. Just yours.'}}</p>
+        <div v-if="!viewMode" class="book-footer"><p class="book-caption">{{decorate?'Small details, your own way.':'No perfect words needed. Just yours.'}}</p><button class="compact-help" aria-label="Keyboard help" :aria-expanded="showHelp" @click="showHelp=!showHelp">Shortcuts</button></div>
       </div>
       <AppSheet v-if="decorate && !viewMode" v-model="libraryOpen" :docked="wideTools" :title="panelSection==='selection'?'Adjust decoration':'Sticker collection'"><div class="tools-panel" aria-label="Decorating tools">
         <div class="panel-heading"><span class="eyebrow">A little collection</span><h2>Make it yours</h2></div>
@@ -329,11 +341,14 @@ textarea:not(.title)::placeholder{color:#b0a48e;opacity:1}textarea:focus,.title:
 @media(prefers-reduced-motion:reduce){.thumbnails button{transition:none}}
 
 /* Adaptive presentation; the decoration reference remains a 3:4 sheet at every width. */
-.page-tabs,.compact-decoration-actions{display:none}.tools-panel{position:static;border:0;box-shadow:none;background:transparent;margin:0}
+.page-tabs,.compact-decoration-actions,.pending-summary,.compact-help{display:none}.book-footer{display:flex;justify-content:center;align-items:center;gap:18px}.tools-panel{position:static;border:0;box-shadow:none;background:transparent;margin:0}
+button,.upload-button{touch-action:manipulation}
 .context-tools button,.page-picker button,.library [role=tab],.done-decorating{min-height:44px}.transform-fields input[type=number],.frame-field select{font-size:16px;min-height:44px}
 .decoration-layer{inset:0 0 auto;aspect-ratio:3/4;height:auto;touch-action:pan-y}.workspace.with-tools{grid-template-columns:minmax(0,1fr) 252px}
 @media(min-width:960px) and (max-width:1279px){.workspace.with-tools{grid-template-columns:1fr;max-width:1020px}.compact-decoration-actions{display:flex}}
 @media(max-width:1279px){
+ .compact-help{display:inline-flex;align-items:center;min-height:44px;background:none;border:0;color:#74283c;font-size:13px;text-decoration:underline}.transform-fields input[type=range]{min-height:44px}
+ .pending-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f7ecd8;padding:10px 12px;margin:0 auto 12px;max-width:1020px;font-size:14px;border-radius:8px}.pending-summary button{min-height:44px;flex-shrink:0;border:0;background:none;color:#74283c;text-decoration:underline}
  .bench-actions>.icon-button{display:none}.compact-decoration-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:1020px;margin:0 auto 12px}
  .compact-decoration-actions button{min-width:44px;min-height:44px;border:1px solid #d4cbbb;background:#fbf7ec;padding:8px 12px;border-radius:8px;font-size:14px;color:#74283c}
  .compact-decoration-actions .selection-button{background:#e7ebdf;border-color:#c6ccba;margin-right:auto}.tools-panel{padding:0;max-height:none;overflow:visible}
