@@ -70,6 +70,9 @@ export interface Location {
 }
 
 export interface ItineraryItem {
+  end_time?: string | null
+  end_day_offset?: number
+  item_type?: string | null
   location_name?: string | null
   time_label?: string | null
   booking_reference?: string | null

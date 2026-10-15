@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {dateError,localClock,tripGroup,outsideRange,overlapping,nextActivity,directions} from './tripPlanner'
+import {dateError,localClock,tripGroup,outsideRange,overlapping,nextActivity,directions,orderedActivities,activityTimeError,activityDuration,timeLabel,plannerError} from './tripPlanner'
 import type {Trip,TripDay,ItineraryItem} from '@/types'
 const trip=(values:Partial<Trip>={})=>({status:'planning',start_date:null,end_date:null,timezone:'Asia/Manila',...values}) as Trip
 const item=(id:string,time:string|null,duration:number|null,status='planned')=>({id,scheduled_time:time,duration_minutes:duration,status}) as ItineraryItem
@@ -12,4 +12,11 @@ const item=(id:string,time:string|null,duration:number|null,status='planned')=>(
  it('warns only for overlapping known intervals; preserves flexible plans',()=>{const rows=[item('a','09:00',60),item('b','09:30',30),item('c',null,60),item('d','10:00',30)];expect([...overlapping(rows)]).toEqual(['a','b']);expect(rows[2].scheduled_time).toBeNull()})
  it('finds the next planned timed item without completing past ones',()=>{const rows=[item('a','09:00',60),item('b','10:00',30,'visited'),item('c','11:00',20),item('d',null,null)];expect(nextActivity(rows,'09:30')?.id).toBe('c');expect(rows[0].status).toBe('planned')})
  it('offers directions only with a place or valid coordinates',()=>{expect(directions(item('a',null,null))).toBeNull();expect(directions({...item('a',null,null),location_name:'Café & garden'})).toContain('Caf%C3%A9%20%26%20garden')})
+})
+
+describe('timeline semantics',()=>{
+ it('sorts times chronologically and keeps flexible manual order without mutating records',()=>{const rows=[{...item('later','14:00',null),sort_order:0},{...item('flex-b',null,null),sort_order:4},{...item('early','08:00',null),sort_order:3},{...item('flex-a',null,null),sort_order:2}];expect(orderedActivities(rows).map(i=>i.id)).toEqual(['early','later','flex-a','flex-b']);expect(rows[0].id).toBe('later')})
+ it('requires explicit next-day ending and formats the interval consistently',()=>{const overnight={...item('night','23:00',null),end_time:'01:00',end_day_offset:0};expect(activityTimeError(overnight)).toContain('Next day');overnight.end_day_offset=1;expect(activityTimeError(overnight)).toBe('');expect(activityDuration(overnight)).toBe(120);expect(timeLabel(overnight)).toBe('23:00 – 01:00 (+1 day)');expect(activityTimeError({...overnight,scheduled_time:null})).toContain('start time')})
+ it('detects overnight conflicts on the following numbered day but ignores Ideas',()=>{const days=[{id:'d1',day_number:1},{id:'d2',day_number:2},{id:'ideas',day_number:0,is_ideas:true}] as TripDay[];const rows=[{...item('a','23:00',null),trip_day_id:'d1',end_time:'01:00',end_day_offset:1},{...item('b','00:30',30),trip_day_id:'d2'},{...item('c','00:30',30),trip_day_id:'ideas'}];expect([...overlapping(rows,days)]).toEqual(['a','b'])})
+ it('separates missing setup from a temporary save failure',()=>{expect(plannerError(new Error('Could not find create_trip_draft in the schema cache'))).toContain('service update');expect(plannerError(new Error('Network error'))).toContain('please retry')})
 })

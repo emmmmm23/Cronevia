@@ -176,7 +176,7 @@ async function request(method: string, path: string, body?: RecordData | FormDat
     if (!String(payload.title || '').trim()) failure('A title is required.', 422)
     if (table === 'trips') payload.slug = `${String(payload.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0,100)}-${crypto.randomUUID()}`
     const row = table === 'trips' && input.draft_key
-      ? check(await supabase.rpc('create_trip_draft',{draft_id:String(input.draft_key),details:payload}))
+      ? check(await supabase.rpc('create_trip_draft',{draft_id:String(input.draft_key),details:{...payload,draft_ideas:input.draft_ideas||[]}}))
       : table === 'journal_entries' && input.draft_key
       ? check(await supabase.rpc('create_journal_draft', {
         draft_id: String(input.draft_key), draft_title: String(payload.title),

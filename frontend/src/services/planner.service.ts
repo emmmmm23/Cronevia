@@ -25,3 +25,5 @@ export async function saveActivity(tripId:string,dayId:string,id:string,details:
  return {...result.data,category:result.data.item_type,converted_to_memory:false,scheduled_time:result.data.start_time,status:result.data.status==='completed'?'visited':result.data.status} as ItineraryItem
 }
 export async function moveActivity(id:string,dayId:string){const result=await supabase.rpc('move_trip_activity',{activity_id:id,target_day_id:dayId});if(result.error)throw result.error}
+
+export async function nameDay(tripId:string,dayId:string,title:string){const r=await supabase.rpc('name_trip_day',{target_trip_id:tripId,target_day_id:dayId,day_title:title});if(r.error)throw r.error;return r.data as TripDay}

@@ -155,6 +155,31 @@ await rejected('SELECT move_trip_activity($1,$2)',[activity,dayOne])
 await rejected('UPDATE memories SET trip_id=$1,itinerary_item_id=$2 WHERE id=$3',[plannedTrip,activity,bobsMemory])
 await rejected('UPDATE memories SET journal_entry_id=$1 WHERE id=$2',[journal,bobsMemory])
 assert.equal((await db.query('UPDATE trips SET preparation=$1 WHERE id=$2 RETURNING id',['[]',plannedTrip])).rows.length,0)
+await asUser(alice)
+await db.query('SELECT name_trip_day($1,$2,$3)',[plannedTrip,dayOne,'Exploring Intramuros'])
+assert.equal((await db.query('SELECT title FROM trip_days WHERE id=$1',[dayOne])).rows[0].title,'Exploring Intramuros')
+await rejected('SELECT name_trip_day($1,$2,$3)',[plannedTrip,ideas,'Not a numbered day'])
+await rejected('SELECT name_trip_day($1,$2,$3)',[plannedTrip,dayOne,'x'.repeat(121)])
+const night='99999999-9999-4999-8999-999999999999'
+await db.query('SELECT save_trip_activity($1,$2,$3,$4)',[plannedTrip,dayOne,night,JSON.stringify({title:'Night ferry',scheduled_time:'23:30',end_time:'01:15',end_day_offset:1,item_type:'transport'})])
+let interval=(await db.query('SELECT end_time::text,end_day_offset,duration_minutes,item_type FROM itinerary_items WHERE id=$1',[night])).rows[0]
+assert.deepEqual(interval,{end_time:'01:15:00',end_day_offset:1,duration_minutes:105,item_type:'transport'})
+await rejected('SELECT save_trip_activity($1,$2,$3,$4)',[plannedTrip,dayOne,night,JSON.stringify({title:'Invalid replacement',scheduled_time:'23:30',end_time:'01:15',end_day_offset:0})])
+assert.equal((await db.query('SELECT title FROM itinerary_items WHERE id=$1',[night])).rows[0].title,'Night ferry')
+await rejected("UPDATE itinerary_items SET end_day_offset=2 WHERE id=$1",[night])
+const draftWithIdeas='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',ideaId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const draftDetails={title:'Draft with possibilities',draft_ideas:[{id:ideaId,title:'Try a local breakfast'}]}
+await db.query('SELECT create_trip_draft($1,$2)',[draftWithIdeas,JSON.stringify(draftDetails)])
+await db.query('SELECT create_trip_draft($1,$2)',[draftWithIdeas,JSON.stringify(draftDetails)])
+assert.equal((await db.query('SELECT count(*) AS n FROM itinerary_items WHERE id=$1',[ideaId])).rows[0].n,1)
+assert.equal((await db.query('SELECT d.is_ideas FROM itinerary_items i JOIN trip_days d ON d.id=i.trip_day_id WHERE i.id=$1',[ideaId])).rows[0].is_ideas,true)
+const rejectedDraft='cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+await rejected('SELECT create_trip_draft($1,$2)',[rejectedDraft,JSON.stringify({title:'Must roll back',draft_ideas:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',title:''}]})])
+assert.equal((await db.query('SELECT count(*) AS n FROM trips WHERE id=$1',[rejectedDraft])).rows[0].n,0)
+await asUser(bob)
+await rejected('SELECT name_trip_day($1,$2,$3)',[plannedTrip,dayOne,'Stolen'])
+await rejected('SELECT save_trip_activity($1,$2,$3,$4)',[plannedTrip,dayOne,night,JSON.stringify({title:'Stolen',scheduled_time:'22:00',end_time:'01:00',end_day_offset:1})])
+console.log('PASS: named days, explicit overnight intervals, failed-update rollback, atomic draft ideas and cross-user rejection.')
 console.log('PASS: planner repeatable upgrade, idempotent creation, flexible activity retries, date preservation/rollback, Ideas moves, preparation validation, linked records and cross-user rejection.')
 
 await asUser(admin)

@@ -231,6 +231,7 @@ Row: {
   title: string
   description: string | null
   start_time: string | null
+  end_day_offset: number
   end_time: string | null
   duration_minutes: number | null
   item_type: 'activity' | 'transport' | 'meal' | 'lodging' | 'other' | null
@@ -251,6 +252,7 @@ Insert: {
   title: string
   description?: string | null
   start_time?: string | null
+  end_day_offset?: number
   end_time?: string | null
   duration_minutes?: number | null
   item_type?: 'activity' | 'transport' | 'meal' | 'lodging' | 'other' | null
@@ -271,6 +273,7 @@ Update: {
   title?: string
   description?: string | null
   start_time?: string | null
+  end_day_offset?: number
   end_time?: string | null
   duration_minutes?: number | null
   item_type?: 'activity' | 'transport' | 'meal' | 'lodging' | 'other' | null
@@ -981,6 +984,8 @@ Update: {
 Relationships: []
 }
 }; Views: { [_ in never]: never }; Functions: {
+name_trip_day: {Args:{target_trip_id:string;target_day_id:string;day_title:string};Returns:Database['public']['Tables']['trip_days']['Row']}
+
 ensure_trip_days: {Args:{target_trip_id:string};Returns:undefined}
 create_trip_draft: {Args:{draft_id:string;details:Json};Returns:Database['public']['Tables']['trips']['Row']}
 save_trip_activity: {Args:{target_trip_id:string;target_day_id:string;activity_id:string;details:Json};Returns:Database['public']['Tables']['itinerary_items']['Row']}
