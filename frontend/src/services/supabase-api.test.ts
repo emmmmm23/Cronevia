@@ -6,6 +6,13 @@ import api, { preparePayload } from './supabase-api'
 import { deleteAsset, savePlacements } from './sticker.service'
 beforeEach(() => vi.clearAllMocks())
 describe('Supabase data boundary', () => {
+  it('persists complete pins and clears text-only destinations', () => {
+    const pin = {destination:'Manila',destination_latitude:14.6,destination_longitude:120.98,destination_source:'search'}
+    expect(preparePayload('trips',pin)).toEqual(pin)
+    expect(preparePayload('trips',{destination:'Somewhere'})).toEqual({destination:'Somewhere',destination_latitude:null,destination_longitude:null,destination_source:null})
+    for(const invalid of [{destination_latitude:14}, {...pin,destination_longitude:181}, {...pin,destination_latitude:NaN}, {...pin,destination_source:'other'}, {...pin,destination_longitude:null}]) expect(()=>preparePayload('trips',invalid)).toThrow()
+    expect(preparePayload('trips',{title:'Unrelated edit'})).toEqual({title:'Unrelated edit'})
+  })
   it('rejects unauthenticated writes before any database call', async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null }, error: null })
     await expect(api.post('/journal', { title: 'Private', content: 'Entry' })).rejects.toMatchObject({ response: { status: 401 } })

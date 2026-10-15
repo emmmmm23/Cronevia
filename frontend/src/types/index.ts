@@ -31,6 +31,9 @@ export interface Trip {
   id: string
   user_id: string
   title: string
+  destination_latitude?: number | null
+  destination_longitude?: number | null
+  destination_source?: 'search' | 'map' | 'gps' | null
   destination?: string | null
   slug: string
   description: string | null

@@ -18,7 +18,8 @@ No hosted writes or migrations were performed. There is no authorized Supabase d
 1. Confirm the deployed VITE_SUPABASE_URL points to the intended project. The local project identifier is above.
 2. In that project's authorized SQL editor, review and execute **supabase/apply-trip-planner-upgrade.sql** as one transaction. This now includes both 20261015000001_trip_planner.sql and 20261016000001_itinerary_timeline.sql. It is additive and safe to reapply; it does not replace days, activities, media, memories, or journal content.
 3. Execute **supabase/verify-trip-planner.sql** and confirm the functions, columns and triggers. If using CLI migrations, reconcile any prior SQL-editor installations with the migration ledger through the established deployment process.
-4. Deploy the frontend build. Retry the retained form, then perform authenticated hosted save/reload checks using authorized test data.
+4. From `frontend`, run `npm run check:planner`. Missing columns/functions, invalid credentials and network failures now produce a nonzero exit code, suitable for a deployment gate. A successful unauthenticated schema probe is not proof of authenticated persistence.
+5. Deploy the frontend build. Retry the retained form, then perform authenticated hosted save/reload checks using authorized test data. Keep the failed form open while applying the upgrade so its in-memory draft remains available.
 
 For a base installation, regenerate the complete apply-once bundle with npm run supabase:bundle. Existing installations should use the targeted upgrade above. Regenerate it with node scripts/build-trip-planner-upgrade.mjs from frontend. Neither generator deploys SQL.
 

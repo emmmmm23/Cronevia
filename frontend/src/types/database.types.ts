@@ -132,6 +132,9 @@ Row: {
   user_id: string
   title: string
   slug: string
+  destination_latitude?: number | null
+  destination_longitude?: number | null
+  destination_source?: 'search' | 'map' | 'gps' | null
   destination: string | null
   description: string | null
   start_date: string | null
@@ -151,6 +154,9 @@ Insert: {
   user_id: string
   title: string
   slug: string
+  destination_latitude?: number | null
+  destination_longitude?: number | null
+  destination_source?: 'search' | 'map' | 'gps' | null
   destination?: string | null
   description?: string | null
   start_date?: string | null
@@ -170,6 +176,9 @@ Update: {
   user_id?: string
   title?: string
   slug?: string
+  destination_latitude?: number | null
+  destination_longitude?: number | null
+  destination_source?: 'search' | 'map' | 'gps' | null
   destination?: string | null
   description?: string | null
   start_date?: string | null

@@ -1,4 +1,5 @@
 /** Adapts the existing screens to Supabase Auth, Postgres and private Storage. */
+import { destinationFields } from '@/types/destination'
 import { validateScrapbook } from '@/types/scrapbook'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
@@ -8,12 +9,17 @@ type RecordData = Record<string, any>
 type Options = { params?: Record<string, string | number>; headers?: Record<string, string> }
 const tables: Record<string, Table> = { trips: 'trips', journal: 'journal_entries', memories: 'memories' }
 const writable: Record<Table, string[]> = {
-  trips: ['timezone', 'preparation', 'title', 'description', 'destination', 'start_date', 'end_date', 'status', 'budget', 'currency', 'visibility'],
+  trips: ['destination_latitude', 'destination_longitude', 'destination_source', 'timezone', 'preparation', 'title', 'description', 'destination', 'start_date', 'end_date', 'status', 'budget', 'currency', 'visibility'],
   journal_entries: ['scrapbook_layout', 'title', 'content', 'entry_date', 'trip_id', 'trip_day_id', 'itinerary_item_id', 'memory_id', 'mood_emoji', 'mood_name', 'mood_enum', 'location_name', 'latitude', 'longitude', 'weather', 'visibility', 'status', 'is_archived', 'location_source', 'tags'],
   memories: ['itinerary_item_id', 'journal_entry_id', 'scrapbook_layout', 'title', 'description', 'trip_id', 'memory_date', 'location_name', 'latitude', 'longitude', 'is_archived'],
 }
 export function preparePayload(table: Table, input: RecordData) {
   const source = { ...input }
+  if (table === 'trips') {
+    const hasLocation = ['destination_latitude','destination_longitude','destination_source'].some(key => key in source)
+    if (hasLocation) Object.assign(source, destinationFields(source))
+    else if ('destination' in source) Object.assign(source, destinationFields({}))
+  }
   if (source.scrapbook_layout) validateScrapbook(source.scrapbook_layout)
   if ('mood_label' in source) source.mood_name = source.mood_label
   if ('mood' in source) source.mood_enum = source.mood

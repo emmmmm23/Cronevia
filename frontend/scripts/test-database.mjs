@@ -182,6 +182,24 @@ await rejected('SELECT save_trip_activity($1,$2,$3,$4)',[plannedTrip,dayOne,nigh
 console.log('PASS: named days, explicit overnight intervals, failed-update rollback, atomic draft ideas and cross-user rejection.')
 console.log('PASS: planner repeatable upgrade, idempotent creation, flexible activity retries, date preservation/rollback, Ideas moves, preparation validation, linked records and cross-user rejection.')
 
+await db.exec('RESET ROLE')
+const destinationMigration=await readFile(new URL('../../supabase/migrations/20261017000001_trip_destination.sql',import.meta.url),'utf8')
+await db.exec(destinationMigration)
+await db.exec(destinationMigration)
+await asUser(alice)
+const pinned='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+await db.query('SELECT create_trip_draft($1,$2)',[pinned,JSON.stringify({title:'Pinned trip',destination:'Manila',destination_latitude:14.6,destination_longitude:120.98,destination_source:'search'})])
+let saved=(await db.query('SELECT destination,destination_latitude,destination_longitude,destination_source FROM trips WHERE id=$1',[pinned])).rows[0]
+assert.deepEqual(saved,{destination:'Manila',destination_latitude:14.6,destination_longitude:120.98,destination_source:'search'})
+for(const values of [[91,120,'map'],[14,181,'gps'],[14,null,'map'],[null,null,'gps'],[14,120,'other'],['NaN',120,'map']]) await rejected('UPDATE trips SET destination_latitude=$1,destination_longitude=$2,destination_source=$3 WHERE id=$4',[...values,pinned])
+await asUser(bob)
+assert.equal((await db.query('SELECT * FROM trips WHERE id=$1',[pinned])).rows.length,0)
+assert.equal((await db.query("UPDATE trips SET destination_latitude=0,destination_longitude=0,destination_source='map' WHERE id=$1 RETURNING id",[pinned])).rows.length,0)
+await asUser(alice)
+await db.query('UPDATE trips SET destination_latitude=null,destination_longitude=null,destination_source=null WHERE id=$1',[pinned])
+saved=(await db.query('SELECT destination,destination_latitude,destination_longitude,destination_source FROM trips WHERE id=$1',[pinned])).rows[0]
+assert.deepEqual(saved,{destination:'Manila',destination_latitude:null,destination_longitude:null,destination_source:null})
+console.log('PASS: destination RPC persistence, paired/range/source constraints, text-only clearing, repeatable migration and ownership isolation.')
 await asUser(admin)
 assert.equal((await db.query('SELECT * FROM get_user_statistics()')).rows[0].total_users,3)
 assert.equal((await db.query(`SELECT * FROM admin_user_details($1)`,[alice])).rows[0].email,'alice@example.test')

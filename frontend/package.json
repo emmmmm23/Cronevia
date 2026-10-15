@@ -13,6 +13,7 @@
     "lint": "eslint . --ext .vue,.ts",
     "test:database": "node scripts/test-database.mjs",
     "check:supabase": "node scripts/check-supabase.mjs",
+    "check:planner": "node scripts/check-trip-planner.mjs",
     "supabase:bundle": "node scripts/build-migration-bundle.mjs"
   },
   "dependencies": {
