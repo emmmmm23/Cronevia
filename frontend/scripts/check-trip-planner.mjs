@@ -4,7 +4,7 @@ console.log('Project:',new URL(base).hostname)
 const headers={apikey:env.VITE_SUPABASE_ANON_KEY,'Content-Type':'application/json'}
 let failures=0
 for(const [path,body] of [
- ['/rest/v1/trips?select=timezone,preparation&limit=0',null],
+ ['/rest/v1/trips?select=timezone,preparation,destination_latitude,destination_longitude,destination_source&limit=0',null],
  ['/rest/v1/itinerary_items?select=end_time,end_day_offset&limit=0',null],
  ['/rest/v1/rpc/create_trip_draft',{draft_id:'00000000-0000-4000-8000-000000000000',details:{}}],
  ['/rest/v1/rpc/ensure_trip_days',{target_trip_id:'00000000-0000-4000-8000-000000000000'}]

@@ -1,0 +1,41 @@
+import {readFileSync,writeFileSync} from 'node:fs'
+function edit(path,fn){const old=readFileSync(path,'utf8'),next=fn(old);if(next===old)throw new Error('No edit: '+path);writeFileSync(path,next)}
+edit('src/components/trips/TripBasicsForm.vue',s=>s.replace("import DestinationPicker", "import TimezonePicker from './TimezonePicker.vue'\nimport DestinationPicker")
+ .replace('<summary>Add details</summary>','<summary>Optional details · notes & timezone</summary>')
+ .replace(/<label>Trip timezone[\s\S]*?<label v-if="editing">Trip status/,'<TimezonePicker v-model="model.timezone" :disabled="disabled" /><label v-if="editing">Trip status'))
+edit('src/pages/TripCreatePage.vue',s=>s
+ .replace(/const ideas=ref<[\s\S]*?const snapshot=\(\)=>JSON.stringify\(\{details:draft.value,ideas:ideas.value\}\)/,'const snapshot=()=>JSON.stringify(draft.value)')
+ .replace(',draft_ideas:ideas.value.filter(i=>i.title.trim())','')
+ .replace(/<details v-if="!id" class="draft-ideas">[\s\S]*?<\/details>/,'')
+ .replace("'Create trip'","'Create itinerary'")
+ .replace('The rest can unfold along the way.','A few details. A world of possibilities.')
+ .replace('<p class="eyebrow">A travel field notebook</p>','<p class="eyebrow">Your personal travel itinerary</p>')
+ .replace('.setup .page-heading{margin-bottom:30px}', '.setup .page-heading{margin-bottom:22px}.setup h1{font-size:clamp(30px,4vw,42px);margin:6px 0}.setup .handnote{font-size:20px}.setup .paper-card{border-top:4px solid #74283c}.setup{max-width:680px;padding-top:22px}'))
+edit('src/pages/TripDetailPage.vue',s=>s
+ .replace("import ItineraryBoard", "import TripCover from '@/components/trips/TripCover.vue'\nimport TripMap from '@/components/trips/TripMap.vue'\nimport ItineraryBoard")
+ .replace("function openMenu(item:ItineraryItem)", "function planIdea(item:ItineraryItem){openMenu(item);moveTarget.value=activeDay.value||normalDays.value[0]?.id||''}\nfunction openMenu(item:ItineraryItem)")
+ .replace("message||'Your travel notebook'", "message||'All changes saved'")
+ .replace(/<template v-if="trip"><header class="page-heading travel-heading">[\s\S]*?<\/header>/,`<template v-if="trip"><TripCover :trip="trip" :days="normalDays.length" :activities="items.filter(i=>i.trip_day_id!==ideasDay?.id).length" :busy="busy" @edit="openDetails" @photos="photoOpen=true" />`)
+ .replace("{id:'prepare',label:'Prepare'}", "{id:'map',label:'Map'},{id:'prepare',label:'Prepare'}")
+ .replace('@options="openMenu"', '@options="openMenu" @plan="planIdea"')
+ .replace(" <section v-if=\"tab==='prepare'\">", ` <TripMap v-if="tab==='map'" :trip="trip" :items="items" @edit-destination="openDetails" @edit="openActivity($event)" />
+ <section v-if="tab==='prepare'" class="prepare-area">`)
+ .replace('<p class="muted">{{prep.filter(p=>p.done).length}} of {{prep.length}} ready.', '<progress class="prep-progress" :value="prep.filter(p=>p.done).length" :max="prep.length||1" aria-label="Preparation complete" /><p class="muted">{{prep.filter(p=>p.done).length}} of {{prep.length}} ready.')
+ .replace(/<aside class="trip-summary">[\s\S]*?<\/aside>/,`<aside class="trip-summary"><section class="inspiration-pocket"><p class="eyebrow">Leave room for discovery</p><h3>A little inspiration</h3><p class="muted" v-if="!items.some(i=>i.trip_day_id===ideasDay?.id)">A café, a view, something someone recommended. Keep it here until it finds its day.</p><article v-for="idea in items.filter(i=>i.trip_day_id===ideasDay?.id).slice(0,3)" :key="idea.id" class="pocket-note"><p>{{idea.title}}</p><small v-if="idea.location_name">{{idea.location_name}}</small><button :disabled="busy" @click="planIdea(idea)">Plan this</button></article><button :disabled="busy||!ideasDay" @click="openActivity(undefined,ideasDay?.id)">Capture an idea</button><button v-if="items.filter(i=>i.trip_day_id===ideasDay?.id).length>3" @click="tab='ideas'">See all ideas</button></section><section class="locator-note"><p class="eyebrow">Your destination</p><h3>{{trip.destination||'An open possibility'}}</h3><p v-if="trip.destination_latitude!=null" class="pin-coordinates">{{trip.destination_latitude.toFixed(4)}}, {{trip.destination_longitude?.toFixed(4)}}</p><p v-else class="muted">Give your journey a place on the map.</p><button @click="tab='map'">Open map ↗</button></section><p v-if="trip.description" class="summary-notes">{{trip.description}}</p><p v-if="outside.length" class="muted">{{outside.length}} days kept outside your travel dates.</p></aside>`))
+edit('src/components/trips/ItineraryBoard.vue',s=>s
+ .replace('outsideRange,timeLabel,directions','outsideRange,timeLabel,directions,activityDuration')
+ .replace('options:[ItineraryItem];','options:[ItineraryItem];plan:[ItineraryItem];')
+ .replace(':class="{overview}"', ':class="{overview,\'ideas-mode\':mode===\'ideas\'}"')
+ .replace('Places for another moment.','A few lovely possibilities.')
+ .replace('Save a possibility here. Use More → Move to day when you’re ready.','Collect places, meals and little reminders. Choose Plan this when one finds its day.')
+ .replace('class="event-paper"', 'class="event-paper" :data-category="item.item_type||item.category||\'activity\'"')
+ .replace("{{item.item_type||item.category||'Activity'}}", "{{({transport:'Transport',meal:'Food & drink',lodging:'Stay',activity:'Explore',other:'Personal'} as Record<string,string>)[item.item_type||item.category||'activity']||'Explore'}}")
+ .replace('<span v-if="item.status', '<span v-if="activityDuration(item)">{{activityDuration(item)}} min</span><span v-if="item.status')
+ .replace("{{item.time_label||'No fixed time'}}", "{{item.time_label||'Flexible'}}")
+ .replace('<div class="activity-actions"><button', '<div class="activity-actions"><button v-if="day.is_ideas" class="plan-idea" :disabled="busy" @click="emit(\'plan\',item)">Plan this</button><button'))
+// Match the intentional product copy and cover placement in existing browser coverage.
+edit('tests/e2e/planner.spec.ts',s=>s.replaceAll("name:'Create trip'", "name:'Create itinerary'").replace("page.locator('.trip-summary>img')", "page.locator('.cover-photo')")
+ .replace("test('missing hosted planner setup explains the failure and keeps pending trip ideas'", "test('missing hosted planner setup explains the failure and keeps trip details'")
+ .replace("await page.getByText('Start an ideas list · optional',{exact:true}).click();await page.getByRole('button',{name:'Add idea'}).click();await page.getByLabel('Idea 1',{exact:true}).fill('A quiet museum');", "await page.getByLabel('Destination',{exact:true}).fill('Manila');")
+ .replace("await expect(page.getByLabel('Idea 1',{exact:true})).toHaveValue('A quiet museum');", "await expect(page.getByLabel('Destination',{exact:true})).toHaveValue('Manila');")
+ .replace("expect(f.db.itinerary_items.filter(i=>i.title==='A quiet museum')).toHaveLength(1)", "expect(f.db.trips.find(t=>t.title==='Keep this trip').destination).toBe('Manila')"))

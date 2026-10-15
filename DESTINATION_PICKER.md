@@ -10,7 +10,7 @@ Creation and both trip edit entry points share `DestinationPicker.vue`. Text rem
 4. Verify with `SELECT destination,destination_latitude,destination_longitude,destination_source FROM public.trips LIMIT 0;` and inspect `SELECT pg_get_functiondef('public.create_trip_draft(uuid,jsonb)'::regprocedure);` for all three new INSERT fields.
 5. Deploy the frontend after the migration. In an authenticated test account, create a pinned trip, reload, reopen Edit trip details → Choose on map and compare coordinates. Save a changed pin and repeat. Edit the destination text and save: all three pin columns must become NULL. Verify another account cannot access the trip.
 
-Do not reapply an older planner-only bundle after this migration: it would restore the old creation function. Reapply the destination migration last if that happens. The full migration-bundle generator discovers migrations in order. No hosted migration has been applied by this task.
+If `create_trip_draft` returns HTTP 404, the hosted API cannot resolve the creation RPC. For an existing October 14 schema, apply the current `supabase/apply-trip-planner-upgrade.sql`: it now includes planner, timeline and destination migrations in one transaction. Then run `supabase/verify-trip-planner.sql` and `npm run check:planner` from `frontend`. The bundle ends with a schema-cache reload notification. Keep a failed form open and retry after migration so its draft is retained. Do not use an older copy of the planner-only bundle, which would restore the old creation function. No hosted migration has been applied by this task.
 
 ## Place lookup and map configuration
 
