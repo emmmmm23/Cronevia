@@ -6,7 +6,7 @@ const query=ref(''),picker=ref<HTMLDetailsElement>()
 const fallback=['UTC','Asia/Manila','Asia/Tokyo','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','Australia/Sydney']
 const supported=(Intl as typeof Intl & {supportedValuesOf?:(key:string)=>string[]}).supportedValuesOf
 const zones=[...new Set([...fallback,...(supported?supported('timeZone'):[])])].sort()
-const friendly=(zone:string)=>zone==='UTC'?'Universal time · UTC':zone.split('/').at(-1)!.replaceAll('_',' ')+' · '+zone
+const friendly=(zone:string)=>zone==='UTC'?'Universal time · UTC':zone.split('/').at(-1)!.replace(/_/g,' ')+' · '+zone
 const matches=computed(()=>zones.filter(z=>friendly(z).toLowerCase().includes(query.value.toLowerCase())).slice(0,40))
 function select(zone:string){model.value=zone;if(picker.value)picker.value.open=false;query.value=''}
 </script>
