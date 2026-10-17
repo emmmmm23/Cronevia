@@ -27,3 +27,12 @@ export async function saveActivity(tripId:string,dayId:string,id:string,details:
 export async function moveActivity(id:string,dayId:string){const result=await supabase.rpc('move_trip_activity',{activity_id:id,target_day_id:dayId});if(result.error)throw result.error}
 
 export async function nameDay(tripId:string,dayId:string,title:string){const r=await supabase.rpc('name_trip_day',{target_trip_id:tripId,target_day_id:dayId,day_title:title});if(r.error)throw r.error;return r.data as TripDay}
+
+export async function savePlace(tripId:string,id:string,date:string,details:Partial<ItineraryItem>){
+ const result=await supabase.rpc('save_trip_place',{target_trip_id:tripId,activity_id:id,place_date:date||null,details:{...details,status:details.status==='visited'?'completed':details.status} as Json})
+ if(result.error)throw result.error
+ const data=result.data as unknown as {item:ItineraryItem & {start_time:string|null};day:TripDay}
+ return {day:data.day,item:{...data.item,location:data.item.location_id&&data.item.location_id===details.location_id?details.location:undefined,scheduled_time:data.item.start_time,category:data.item.item_type,converted_to_memory:false,status:data.item.status as string==='completed'?'visited':data.item.status} as ItineraryItem}
+}
+export async function folderSummaries(){const r=await supabase.rpc('trip_folder_summaries');if(r.error)throw r.error;return r.data}
+export async function reorderPlaces(tripId:string,date:string|null,ids:string[]){const r=await supabase.rpc('reorder_trip_places',{target_trip_id:tripId,place_date:date,item_ids:ids});if(r.error)throw r.error}

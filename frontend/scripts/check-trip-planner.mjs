@@ -5,8 +5,11 @@ const headers={apikey:env.VITE_SUPABASE_ANON_KEY,'Content-Type':'application/jso
 let failures=0
 for(const [path,body] of [
  ['/rest/v1/trips?select=timezone,preparation,destination_latitude,destination_longitude,destination_source&limit=0',null],
- ['/rest/v1/itinerary_items?select=end_time,end_day_offset&limit=0',null],
+ ['/rest/v1/itinerary_items?select=end_time,end_day_offset,latitude,longitude,location_source&limit=0',null],
  ['/rest/v1/rpc/create_trip_draft',{draft_id:'00000000-0000-4000-8000-000000000000',details:{}}],
+ ['/rest/v1/rpc/save_trip_place',{target_trip_id:'00000000-0000-4000-8000-000000000000',activity_id:'00000000-0000-4000-8000-000000000000',place_date:null,details:{}}],
+ ['/rest/v1/rpc/trip_folder_summaries',{}],
+ ['/rest/v1/rpc/reorder_trip_places',{target_trip_id:'00000000-0000-4000-8000-000000000000',place_date:null,item_ids:[]}],
  ['/rest/v1/rpc/ensure_trip_days',{target_trip_id:'00000000-0000-4000-8000-000000000000'}]
 ]){try{const r=await fetch(base+path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(15000)});const d=await r.json();console.log(r.status,path,d.code||'',d.message||'');
  // Private RPCs should reject this unauthenticated request after resolution.

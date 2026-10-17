@@ -92,7 +92,7 @@ async function upload(table: Table, parentId: string, body: FormData, userId: st
   return { data: result.data }
 }
 function itineraryPayload(input: RecordData) {
-  const keys = ['location_name', 'time_label', 'booking_reference', 'title', 'description', 'location_id', 'duration_minutes', 'sort_order', 'start_time', 'end_time', 'cost', 'currency', 'item_type', 'status']
+  const keys = ['latitude', 'longitude', 'location_source', 'end_day_offset', 'location_name', 'time_label', 'booking_reference', 'title', 'description', 'location_id', 'duration_minutes', 'sort_order', 'start_time', 'end_time', 'cost', 'currency', 'item_type', 'status']
   const source = { ...input }
   if ('scheduled_time' in source) source.start_time = source.scheduled_time
   if (source.status === 'visited') source.status = 'completed'

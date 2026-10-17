@@ -16,7 +16,7 @@ export function dayLabel(day:TripDay){return day.is_ideas?'Ideas':'Day '+day.day
 export function outsideRange(day:TripDay,trip:Trip){return !!(day.date && trip.start_date && (day.date<trip.start_date || (trip.end_date && day.date>trip.end_date)))}
 export function timeMinutes(time:string){const [h,m]=time.split(':').map(Number);return h*60+m}
 export function overlapping(items:ItineraryItem[],days:TripDay[]=[]){
- const ordinal=new Map(days.map(d=>[d.id,d.day_number]));const ids=new Set<string>()
+ const ordinal=new Map(days.map(d=>[d.id,d.date?Date.parse(d.date+'T00:00:00Z')/86400000:d.day_number]));const ids=new Set<string>()
  for(const a of items)for(const b of items){if(a.id>=b.id||!a.scheduled_time||!b.scheduled_time||['cancelled','skipped'].includes(a.status)||['cancelled','skipped'].includes(b.status))continue
   const ad=activityDuration(a),bd=activityDuration(b);if(!ad||!bd)continue
   // Without day metadata, compare only within a day. Ideas are not dated intervals.
@@ -27,7 +27,7 @@ export function overlapping(items:ItineraryItem[],days:TripDay[]=[]){
  }return ids
 }
 export function nextActivity(items:ItineraryItem[],time:string){return [...items].filter(i=>i.status==='planned'&&i.scheduled_time&&timeMinutes(i.scheduled_time)>=timeMinutes(time)).sort((a,b)=>a.scheduled_time!.localeCompare(b.scheduled_time!))[0]}
-export function directions(item:ItineraryItem){const l=item.location;return l&&Number.isFinite(l.latitude)&&Number.isFinite(l.longitude)&&Math.abs(l.latitude)<=90&&Math.abs(l.longitude)<=180?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(l.latitude+','+l.longitude):item.location_name?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(item.location_name):null}
+export function directions(item:ItineraryItem){const l=item.latitude!=null&&item.longitude!=null?{latitude:item.latitude,longitude:item.longitude}:item.location;return l&&Number.isFinite(l.latitude)&&Number.isFinite(l.longitude)&&Math.abs(l.latitude)<=90&&Math.abs(l.longitude)<=180?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(l.latitude+','+l.longitude):item.location_name?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(item.location_name):null}
 
 /** Timed rows are chronological; flexible rows keep their persisted manual order. */
 export function orderedActivities(items:ItineraryItem[]){return [...items].sort((a,b)=>{
@@ -46,6 +46,4 @@ export function activityTimeError(item:Partial<ItineraryItem>){
  return ''
 }
 export function timeLabel(item:ItineraryItem){return item.scheduled_time?item.scheduled_time.slice(0,5)+(item.end_time?' – '+item.end_time.slice(0,5)+(item.end_day_offset?' (+1 day)':''):''):item.time_label||'Any time'}
-export function plannerError(error:unknown){const e=error as {message?:string;response?:{data?:{message?:string}}};const message=e?.response?.data?.message||e?.message||''
- return /create_trip_draft|ensure_trip_days|save_trip_activity|schema cache|column .* does not exist/i.test(message)?'Trip planning needs a one-time service update. Your details are kept. Contact the app owner, then retry saving.':'Your changes couldn’t be saved. They are still here; please retry.'
-}
+export function plannerError(_error:unknown){return 'We couldn’t save your trip. Your details are still here.'}

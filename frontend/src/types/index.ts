@@ -50,6 +50,7 @@ export interface Trip {
 }
 
 export interface TripDay {
+  explicit_date?: boolean
   is_ideas?: boolean
   id: string
   trip_id: string
@@ -73,6 +74,9 @@ export interface Location {
 }
 
 export interface ItineraryItem {
+  latitude?: number | null
+  longitude?: number | null
+  location_source?: 'search' | 'map' | 'gps' | null
   end_time?: string | null
   end_day_offset?: number
   item_type?: string | null
