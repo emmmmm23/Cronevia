@@ -39,3 +39,9 @@ See `FOLDER_PLANNER.md` for the full migration review and optional place-provide
 ## Verification scope
 
 Unit coverage includes navigation failure after confirmed creation, uncertain-response retries using the same UUID, duplicate submission blocking, blank-name validation, HTTP/database error preservation and authentication outage classification. Browser coverage uses mocked Supabase responses for first-time desktop/phone flows, genuine load failure, missing summary service, post-create load failure, and expired-session recovery. The local PostgreSQL/PGlite suite executes the actual migrations, constraints and RLS with fixture auth/storage schemas; it is not a hosted save test.
+
+## Follow-up after the user ran the upgrade
+
+The user reported `Success, No rows returned` after running the upgrade in the SQL Editor. A subsequent live production-mode probe against the same project no longer returned `PGRST202` or `42703`. All seven requests returned HTTP 401 / `42501` (permission denied for the respective private table/function). This is expected for the unsigned probe and does not establish that a signed-in save or the full SQL verification succeeded.
+
+The release checker previously accepted those denials only for RPCs; it now accepts them for private table probes too, without granting anonymous access. Missing schema, invalid API keys/JWTs and server errors still fail. Run `node --test scripts/test-planner-probe.mjs` from `frontend` for the focused regression checks. The remaining verification is the SQL verification script and an authenticated create/add-place/reload flow in Cronevia.
