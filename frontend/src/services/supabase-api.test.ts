@@ -6,6 +6,30 @@ import api, { preparePayload } from './supabase-api'
 import { deleteAsset, savePlacements } from './sticker.service'
 beforeEach(() => vi.clearAllMocks())
 describe('Supabase data boundary', () => {
+  it('returns a confirmed trip ID without an optional media lookup',async()=>{
+    mocks.getUser.mockResolvedValue({data:{user:{id:'owner'}},error:null})
+    mocks.rpc.mockResolvedValue({data:{id:'stable-id',title:'Name only',user_id:'owner'},error:null,status:200})
+    mocks.from.mockImplementation(()=>{throw new Error('Media unavailable')})
+    const result=await api.post('/trips',{title:'Name only',draft_key:'stable-id'})
+    expect(result.data).toEqual({data:{id:'stable-id',title:'Name only',user_id:'owner'}})
+    expect(mocks.rpc).toHaveBeenCalledWith('create_trip_draft',expect.objectContaining({draft_id:'stable-id',details:expect.objectContaining({title:'Name only'})}))
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it('preserves the failing HTTP status and database code',async()=>{
+    mocks.getUser.mockResolvedValue({data:{user:{id:'owner'}},error:null})
+    mocks.rpc.mockResolvedValue({data:null,error:{message:'Could not find create_trip_draft in the schema cache',code:'PGRST202'},status:404})
+    await expect(api.post('/trips',{title:'Name only',draft_key:'stable-id'})).rejects.toMatchObject({status:404,code:'PGRST202',response:{status:404}})
+  })
+  it('does not mistake an auth-service outage for an expired session',async()=>{
+    mocks.getUser.mockResolvedValue({data:{user:null},error:{status:503,message:'Unavailable'}})
+    await expect(api.get('/trips')).rejects.toMatchObject({response:{status:503}})
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it('classifies rejected credentials as requiring sign-in',async()=>{
+    mocks.getUser.mockResolvedValue({data:{user:null},error:{status:401,code:'bad_jwt',message:'JWT invalid'}})
+    await expect(api.post('/trips',{title:'Name only'})).rejects.toMatchObject({status:401,code:'bad_jwt'})
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
   it('persists complete pins and clears text-only destinations', () => {
     const pin = {destination:'Manila',destination_latitude:14.6,destination_longitude:120.98,destination_source:'search'}
     expect(preparePayload('trips',pin)).toEqual(pin)

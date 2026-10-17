@@ -14,6 +14,8 @@
     "test:database": "node scripts/test-database.mjs",
     "check:supabase": "node scripts/check-supabase.mjs",
     "check:planner": "node scripts/check-trip-planner.mjs",
+    "planner:bundle": "node scripts/build-trip-planner-upgrade.mjs",
+    "check:planner-release": "node scripts/check-trip-planner.mjs --production && npm run build",
     "supabase:bundle": "node scripts/build-migration-bundle.mjs"
   },
   "dependencies": {

@@ -4,7 +4,7 @@ import type * as MapLibre from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { validCoordinates, type DestinationFields, type DestinationSource } from '@/types/destination'
 import { lookupPlaces, locateOnce, placeProvider, type Place } from '@/services/places'
-const props = defineProps<{ destination: string; location: DestinationFields; disabled?: boolean }>()
+const props = defineProps<{ destination: string; location: DestinationFields; disabled?: boolean; fieldLabel?:string }>()
 const inputId = 'destination-' + crypto.randomUUID()
 const emit = defineEmits<{ change: [name: string, location: DestinationFields] }>()
 const empty = () => ({ destination_latitude: null, destination_longitude: null, destination_source: null })
@@ -95,12 +95,12 @@ onBeforeUnmount(() => { invalidateSearch(); close() })
 </script>
 <template>
   <div class="destination-picker">
-    <label :for="inputId">Destination</label><div class="search-row"><input :id="inputId" ref="input" :value="destination" maxlength="255" placeholder="City, region, landmark, or address" :disabled="disabled" @input="edit(($event.target as HTMLInputElement).value)" @keydown.enter.prevent="search" /><button type="button" :disabled="disabled || searchBusy || !destination.trim()" @click="search">{{searchBusy ? 'Searching…' : 'Search'}}</button></div>
+    <label :for="inputId">{{fieldLabel || 'Destination'}}</label><div class="search-row"><input :id="inputId" ref="input" :value="destination" maxlength="255" placeholder="City, region, landmark, or address" :disabled="disabled" @input="edit(($event.target as HTMLInputElement).value)" @keydown.enter.prevent="search" /><button type="button" :disabled="disabled || searchBusy || !destination.trim()" @click="search">{{searchBusy ? 'Searching…' : 'Search'}}</button></div>
     <p role="status" aria-live="polite" class="hint">{{searchState}}</p>
     <ul v-if="results.length" class="results" aria-label="Destination search results"><li v-for="(place,index) in results" :key="index"><button type="button" @click="select(place)">{{place.name}}</button></li></ul>
     <div class="location-actions"><button type="button" :disabled="disabled" @click="show()">Choose on map</button><button type="button" :disabled="disabled" @click="show(true)">Use my current location</button></div>
     <div v-if="pin" class="pin-note"><span>Pin attached · {{location.destination_latitude?.toFixed(5)}}, {{location.destination_longitude?.toFixed(5)}}</span><button type="button" :disabled="disabled" @click="emit('change', destination, empty())">Remove pin</button></div>
-    <p class="hint">A destination name is enough. Pins are optional.</p>
+    <p class="hint">A name or address is enough. Pins are optional.</p>
     <details class="location-disclosure"><summary>Search via {{placeProvider}} · location privacy</summary><p class="hint">Current location may be approximate; review it before choosing your destination. Search and GPS name lookup send the query or coordinates to {{placeProvider}}. <a href="https://www.geoapify.com/" target="_blank" rel="noopener">Place lookup</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></p></details>
     <Teleport to="body"><dialog ref="dialog" class="destination-dialog" aria-label="Choose destination location" @cancel.prevent="close" @keydown.esc.stop>
       <header><h2>Find your destination</h2><button type="button" aria-label="Close location picker" @click="close">×</button></header>

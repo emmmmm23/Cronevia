@@ -4,6 +4,7 @@ const props=withDefaults(defineProps<{modelValue:boolean;title:string;docked?:bo
 const emit=defineEmits<{'update:modelValue':[boolean]}>()
 const dialog=ref<HTMLDialogElement|null>(null)
 let previous:HTMLElement|null=null
+let backdropPressed=false
 watch(()=>[props.modelValue,props.docked,dialog.value],async()=>{
  await nextTick();const el=dialog.value;if(!el)return
  if(props.docked){if(el.open)el.close();el.show();return}
@@ -11,13 +12,15 @@ watch(()=>[props.modelValue,props.docked,dialog.value],async()=>{
  else if(el.open){el.close();if(previous?.isConnected)previous.focus({preventScroll:true})}
 },{immediate:true})
 function close(){emit('update:modelValue',false)}
-function backdrop(event:MouseEvent){if(props.docked||event.target!==dialog.value)return;const r=dialog.value!.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)close()}
+function isBackdrop(event:MouseEvent){if(props.docked||event.target!==dialog.value)return false;const r=dialog.value!.getBoundingClientRect();return event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom}
+function backdrop(event:MouseEvent){if(backdropPressed&&isBackdrop(event))close();backdropPressed=false}
 onBeforeUnmount(()=>{if(dialog.value?.open)dialog.value.close()})
 </script>
 <template>
- <dialog ref="dialog" class="app-sheet" :class="{docked,fullscreen}" :aria-label="title" @keydown.esc.stop @cancel.prevent="close" @click="backdrop">
+ <dialog ref="dialog" class="app-sheet" :class="{docked,fullscreen,'with-footer':!!$slots.footer}" :aria-label="title" @keydown.esc.stop @cancel.prevent="close" @pointerdown="backdropPressed=isBackdrop($event)" @click="backdrop">
   <header v-if="!docked" class="sheet-header"><h2>{{title}}</h2><button aria-label="Close sheet" @click="close">×</button></header>
   <div class="sheet-content"><slot /></div>
+  <footer v-if="$slots.footer" class="sheet-footer"><slot name="footer" /></footer>
  </dialog>
 </template>
 <style scoped>
@@ -27,5 +30,6 @@ onBeforeUnmount(()=>{if(dialog.value?.open)dialog.value.close()})
 .sheet-content{padding:20px 20px max(24px,env(safe-area-inset-bottom))}.app-sheet.docked{display:block;position:sticky;inset:auto;top:20px;width:auto;max-height:none;margin:0;border-radius:12px;box-shadow:0 8px 28px #54483a08;overflow:visible}.docked .sheet-content{padding:0}
 .app-sheet.fullscreen{inset:0;width:100%;height:var(--visual-height,100dvh);max-height:100dvh;border-radius:0;background:#292927;color:#faf6ed}.fullscreen .sheet-header{background:#292927;border-color:#4d4b45}.fullscreen .sheet-content{height:calc(100% - 72px);display:flex;flex-direction:column}
 button:focus-visible{outline:2px solid #74283c;outline-offset:3px}
+.app-sheet.with-footer[open]{display:flex;flex-direction:column}.with-footer .sheet-content{overflow-y:auto;min-height:0;overscroll-behavior:contain}.with-footer .sheet-header{flex-shrink:0}.sheet-footer{flex-shrink:0;padding:12px 20px max(12px,env(safe-area-inset-bottom));background:#faf6ed;border-top:1px solid #e2dbcd}
 @media(min-width:960px){.app-sheet:not(.docked):not(.fullscreen){inset:10dvh 0 auto;border-radius:16px}}
 </style>

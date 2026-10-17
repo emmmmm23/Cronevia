@@ -33,6 +33,29 @@ await db.query(`INSERT INTO auth.users(id,email) VALUES($1,'alice@example.test')
 await db.query(`UPDATE public.profiles SET role='super_admin' WHERE user_id=$1`,[admin])
 async function asUser(id){await db.exec('RESET ROLE');await db.query(`SELECT set_config('request.jwt.claim.sub',$1,false)`,[id]);await db.exec('SET ROLE authenticated')}
 async function rejected(sql,params=[]){await assert.rejects(()=>db.query(sql,params))}
+// A newly bootstrapped, ordinary account can create its very first private trip.
+const firstOwner='12121212-1212-4212-8212-121212121212',firstTrip='13131313-1313-4313-8313-131313131313',firstStop='14141414-1414-4414-8414-141414141414'
+await db.query("INSERT INTO auth.users(id,email) VALUES($1,'first-trip@example.test')",[firstOwner])
+await asUser(firstOwner)
+assert.equal((await db.query('SELECT * FROM trips')).rows.length,0)
+assert.equal((await db.query('SELECT * FROM trip_folder_summaries()')).rows.length,0)
+assert.equal((await db.query('SELECT account_status FROM profiles WHERE user_id=$1',[firstOwner])).rows[0].account_status,'active')
+for(let attempt=0;attempt<2;attempt++)await db.query('SELECT create_trip_draft($1,$2)',[firstTrip,JSON.stringify({title:'  My very first trip  '})])
+let first=(await db.query('SELECT * FROM trips WHERE id=$1',[firstTrip])).rows[0]
+assert.equal(first.title,'My very first trip');assert.equal(first.user_id,firstOwner);assert.equal(first.visibility,'private')
+for(const key of ['destination','start_date','end_date','description','destination_latitude','destination_longitude'])assert.equal(first[key],null)
+assert.equal((await db.query('SELECT count(*) AS n FROM trips')).rows[0].n,1)
+assert.equal((await db.query('SELECT count(*) AS n FROM itinerary_items')).rows[0].n,0)
+await db.query('SELECT save_trip_place($1,$2,NULL,$3)',[firstTrip,firstStop,JSON.stringify({title:'A first manual stop'})])
+assert.equal((await db.query('SELECT title FROM itinerary_items WHERE id=$1',[firstStop])).rows[0].title,'A first manual stop')
+await asUser(bob)
+assert.equal((await db.query('SELECT * FROM trips WHERE id=$1',[firstTrip])).rows.length,0)
+assert.equal((await db.query("UPDATE trips SET title='Not mine' WHERE id=$1 RETURNING id",[firstTrip])).rows.length,0)
+assert.equal((await db.query('SELECT * FROM itinerary_items WHERE id=$1',[firstStop])).rows.length,0)
+await rejected('SELECT create_trip_draft($1,$2)',[firstTrip,JSON.stringify({title:'Not mine'})])
+await rejected('SELECT save_trip_place($1,$2,NULL,$3)',[firstTrip,firstStop,JSON.stringify({title:'Not mine'})])
+await db.exec('RESET ROLE');await db.query('DELETE FROM auth.users WHERE id=$1',[firstOwner])
+console.log('PASS: newly bootstrapped account, zero-trip summary, trimmed name-only creation/retry, optional fields, first manual place, and cross-user read/write rejection.')
 await asUser(alice)
 const trip=(await db.query(`INSERT INTO trips(title,slug) VALUES('Alice trip','alice-trip') RETURNING id`)).rows[0].id
 const journal=(await db.query(`INSERT INTO journal_entries(title,content,entry_date,trip_id) VALUES('Private entry','Only Alice',current_date,$1) RETURNING id`,[trip])).rows[0].id
@@ -200,6 +223,42 @@ await db.query('UPDATE trips SET destination_latitude=null,destination_longitude
 saved=(await db.query('SELECT destination,destination_latitude,destination_longitude,destination_source FROM trips WHERE id=$1',[pinned])).rows[0]
 assert.deepEqual(saved,{destination:'Manila',destination_latitude:null,destination_longitude:null,destination_source:null})
 console.log('PASS: destination RPC persistence, paired/range/source constraints, text-only clearing, repeatable migration and ownership isolation.')
+await db.exec('RESET ROLE')
+const folderMigration=await readFile(new URL('../../supabase/migrations/20261018000001_folder_planner.sql',import.meta.url),'utf8')
+await db.exec(folderMigration);await db.exec(folderMigration)
+await asUser(alice)
+const folder='abcdefab-abcd-4abc-8abc-abcdefabcdef',stop='abcdefab-abcd-4abc-8abc-abcdefabcdee'
+await db.query('SELECT create_trip_draft($1,$2)',[folder,JSON.stringify({title:'Name only folder',timezone:'Asia/Manila'})])
+assert.equal((await db.query('SELECT count(*) AS n FROM itinerary_items i JOIN trip_days d ON d.id=i.trip_day_id WHERE d.trip_id=$1',[folder])).rows[0].n,0)
+const place={title:'Night picnic',location_name:'A manually entered place',scheduled_time:'23:30',end_time:'01:00',end_day_offset:1,latitude:14.1,longitude:120.9,location_source:'map'}
+const savePlace=(date,details=place)=>db.query('SELECT save_trip_place($1,$2,$3,$4) AS saved',[folder,stop,date,JSON.stringify(details)])
+await savePlace('2026-10-24');await savePlace('2026-10-24')
+assert.equal((await db.query('SELECT count(*) AS n FROM itinerary_items WHERE id=$1',[stop])).rows[0].n,1)
+let stopRow=(await db.query('SELECT i.*,d.date::text FROM itinerary_items i JOIN trip_days d ON d.id=i.trip_day_id WHERE i.id=$1',[stop])).rows[0]
+assert.equal(stopRow.latitude,14.1);assert.equal(stopRow.longitude,120.9);assert.equal(stopRow.location_source,'map');assert.equal(stopRow.date,'2026-10-24');assert.equal(stopRow.duration_minutes,90)
+for(const invalid of [{latitude:91},{longitude:181},{longitude:null},{location_source:null},{location_source:'invalid'},{latitude:'NaN'},{end_day_offset:0}])await assert.rejects(()=>savePlace('2026-11-11',{...place,...invalid}))
+assert.equal((await db.query("SELECT count(*) AS n FROM trip_days WHERE trip_id=$1 AND date='2026-11-11'",[folder])).rows[0].n,0)
+await db.query("UPDATE trips SET start_date='2026-12-01',end_date='2026-12-03' WHERE id=$1",[folder])
+assert.equal((await db.query('SELECT d.date::text FROM itinerary_items i JOIN trip_days d ON d.id=i.trip_day_id WHERE i.id=$1',[stop])).rows[0].date,'2026-10-24')
+await savePlace('2026-10-25');await savePlace(null,{title:'Unscheduled manual place',latitude:null,longitude:null,location_source:null})
+stopRow=(await db.query('SELECT i.*,d.date FROM itinerary_items i JOIN trip_days d ON d.id=i.trip_day_id WHERE i.id=$1',[stop])).rows[0]
+assert.equal(stopRow.date,null);assert.equal(stopRow.latitude,null);assert.equal(stopRow.longitude,null);assert.equal(stopRow.start_time,null)
+assert.equal((await db.query('SELECT * FROM trip_folder_summaries() WHERE trip_id=$1',[folder])).rows[0].place_count,1)
+const legacyDay='abcdefab-abcd-4abc-8abc-abcdefabcd01',legacyStop='abcdefab-abcd-4abc-8abc-abcdefabcd02'
+await db.query('INSERT INTO trip_days(id,trip_id,day_number,date) VALUES($1,$2,50,NULL)',[legacyDay,folder])
+await db.query('SELECT save_trip_activity($1,$2,$3,$4)',[folder,legacyDay,legacyStop,JSON.stringify({title:'Legacy undated place'})])
+await db.query('SELECT reorder_trip_places($1,NULL,$2)',[folder,[legacyStop,stop]])
+assert.equal((await db.query('SELECT sort_order FROM itinerary_items WHERE id=$1',[legacyStop])).rows[0].sort_order,1)
+assert.equal((await db.query('SELECT sort_order FROM itinerary_items WHERE id=$1',[stop])).rows[0].sort_order,2)
+await rejected('SELECT reorder_trip_places($1,NULL,$2)',[folder,[stop,stop]])
+await rejected('SELECT reorder_trip_places($1,NULL,$2)',[folder,[stop]])
+await rejected('SELECT reorder_trip_places($1,$2,$3)',[folder,'2026-10-25',[stop,legacyStop]])
+await asUser(bob)
+await assert.rejects(()=>savePlace('2026-10-26'))
+await rejected('SELECT reorder_trip_places($1,NULL,$2)',[folder,[stop,legacyStop]])
+assert.equal((await db.query('SELECT * FROM trip_folder_summaries() WHERE trip_id=$1',[folder])).rows.length,0)
+assert.equal((await db.query('SELECT * FROM itinerary_items WHERE id=$1',[stop])).rows.length,0)
+console.log('PASS: name-only empty folder, idempotent place saves, date moves, overnight pins, atomic invalid-date rollback, unscheduled/manual clearing, summary counts and private ownership.')
 await asUser(admin)
 assert.equal((await db.query('SELECT * FROM get_user_statistics()')).rows[0].total_users,3)
 assert.equal((await db.query(`SELECT * FROM admin_user_details($1)`,[alice])).rows[0].email,'alice@example.test')

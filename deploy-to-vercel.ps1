@@ -34,7 +34,7 @@ Write-Host ""
 Write-Host "🔨 Testing local build..." -ForegroundColor Yellow
 Push-Location frontend
 try {
-    npm run build 2>&1 | Select-Object -Last 5
+    npm run check:planner-release 2>&1 | Select-Object -Last 5
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Local build successful!" -ForegroundColor Green
     } else {

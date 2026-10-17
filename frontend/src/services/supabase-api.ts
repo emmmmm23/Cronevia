@@ -3,6 +3,7 @@ import { destinationFields } from '@/types/destination'
 import { validateScrapbook } from '@/types/scrapbook'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
+import {requestError} from './request-errors'
 
 type Table = 'trips' | 'journal_entries' | 'memories'
 type RecordData = Record<string, any>
@@ -26,16 +27,21 @@ export function preparePayload(table: Table, input: RecordData) {
   if (source.visibility === 'shared') source.visibility = 'friends'
   return Object.fromEntries(writable[table].filter(key => source[key] !== undefined).map(key => [key, source[key]]))
 }
-function failure(message: string, status = 400): never {
-  throw Object.assign(new Error(message), { response: { status, data: { message } } })
+function failure(message: string, status = 400, code?:string): never {
+  throw requestError(message,status,code)
 }
-function check<T>(result: { data: T; error: { message: string } | null; status?: number }): NonNullable<T> {
-  if (result.error) failure(result.error.message, result.status || 400)
+function check<T>(result: { data: T; error: { message: string;code?:string } | null; status?: number }): NonNullable<T> {
+  if (result.error) failure(result.error.message, result.status || 400,result.error.code)
   return result.data as NonNullable<T>
 }
 export async function requireUser() {
   const result = await supabase.auth.getUser()
-  if (result.error || !result.data.user) failure('Please sign in to continue.', 401)
+  if(result.error){
+    const status=result.error.status
+    if(!status||status>=500||status===429)failure('Sign-in verification is temporarily unavailable.',503,result.error.code)
+    failure('Please sign in to continue.',401,result.error.code)
+  }
+  if (!result.data.user) failure('Please sign in to continue.', 401)
   return result.data.user
 }
 async function mediaFor(table: Table, id: string) {
@@ -92,7 +98,7 @@ async function upload(table: Table, parentId: string, body: FormData, userId: st
   return { data: result.data }
 }
 function itineraryPayload(input: RecordData) {
-  const keys = ['location_name', 'time_label', 'booking_reference', 'title', 'description', 'location_id', 'duration_minutes', 'sort_order', 'start_time', 'end_time', 'cost', 'currency', 'item_type', 'status']
+  const keys = ['latitude', 'longitude', 'location_source', 'end_day_offset', 'location_name', 'time_label', 'booking_reference', 'title', 'description', 'location_id', 'duration_minutes', 'sort_order', 'start_time', 'end_time', 'cost', 'currency', 'item_type', 'status']
   const source = { ...input }
   if ('scheduled_time' in source) source.start_time = source.scheduled_time
   if (source.status === 'visited') source.status = 'completed'
@@ -191,6 +197,8 @@ async function request(method: string, path: string, body?: RecordData | FormDat
       : table === 'memories' && input.draft_key
         ? check(await supabase.rpc('create_memory_draft', {draft_id:String(input.draft_key),draft_title:String(payload.title),draft_description:String(payload.description || ''),draft_date:String(payload.memory_date)}))
         : await writeRecord(table, { ...payload, user_id: user.id })
+    // Confirm creation independently of optional media hydration on the trip page.
+    if(table==='trips'&&input.draft_key)return {data:row}
     return { data: await present(table, row) }
   }
   if ((method === 'PUT' || method === 'PATCH') && id) {
