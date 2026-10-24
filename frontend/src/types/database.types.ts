@@ -240,6 +240,8 @@ Row: {
   location_name?: string | null
   time_label?: string | null
   booking_reference?: string | null
+  place_provider?: string | null
+  provider_place_id?: string | null
   id: string
   trip_day_id: string
   location_id: string | null
@@ -264,6 +266,8 @@ Insert: {
   location_name?: string | null
   time_label?: string | null
   booking_reference?: string | null
+  place_provider?: string | null
+  provider_place_id?: string | null
   id?: string
   trip_day_id: string
   location_id?: string | null
@@ -288,6 +292,8 @@ Update: {
   location_name?: string | null
   time_label?: string | null
   booking_reference?: string | null
+  place_provider?: string | null
+  provider_place_id?: string | null
   id?: string
   trip_day_id?: string
   location_id?: string | null
@@ -1010,6 +1016,7 @@ name_trip_day: {Args:{target_trip_id:string;target_day_id:string;day_title:strin
 ensure_trip_days: {Args:{target_trip_id:string};Returns:undefined}
 create_trip_draft: {Args:{draft_id:string;details:Json};Returns:Database['public']['Tables']['trips']['Row']}
 save_trip_place: {Args:{target_trip_id:string;activity_id:string;place_date:string|null;details:Json};Returns:Json}
+save_discovered_trip_place: {Args:{target_trip_id:string;activity_id:string;place_date:string|null;details:Json};Returns:Json}
 reorder_trip_places: {Args:{target_trip_id:string;place_date:string|null;item_ids:string[]};Returns:undefined}
 trip_folder_summaries: {Args:Record<string, never>;Returns:{trip_id:string;place_count:number;first_date:string|null;last_date:string|null}[]}
 save_trip_activity: {Args:{target_trip_id:string;target_day_id:string;activity_id:string;details:Json};Returns:Database['public']['Tables']['itinerary_items']['Row']}

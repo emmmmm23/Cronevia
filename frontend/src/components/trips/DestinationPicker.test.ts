@@ -1,12 +1,12 @@
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import DestinationPicker from './DestinationPicker.vue'
-const mocks=vi.hoisted(()=>({lookup:vi.fn(),gps:vi.fn(),events:{} as Record<string,Function>}))
+const mocks=vi.hoisted(()=>({lookup:vi.fn(),gps:vi.fn(),fit:vi.fn(),options:vi.fn(),events:{} as Record<string,Function>}))
 vi.mock('@/services/places',()=>({lookupPlaces:mocks.lookup,locateOnce:mocks.gps,placeProvider:'Fixture'}))
-vi.mock('maplibre-gl',()=>({default:{Map:class {addControl(){} on(name:string,fn:Function){mocks.events[name]=fn} jumpTo(){} remove(){}},NavigationControl:class {},Marker:class {setLngLat(){return this}addTo(){return this}on(){}remove(){}}}}))
+vi.mock('maplibre-gl',()=>({default:{Map:class {constructor(options:unknown){mocks.options(options)}addControl(){} on(name:string,fn:Function){mocks.events[name]=fn} jumpTo(){} fitBounds(...args:unknown[]){mocks.fit(...args)} resize(){} flyTo(){} remove(){} queryRenderedFeatures(){return []}},NavigationControl:class {},Marker:class {setLngLat(){return this}addTo(){return this}on(){}remove(){}}}}))
 let wrapper:VueWrapper<InstanceType<typeof DestinationPicker>>
 beforeEach(()=>{
- vi.clearAllMocks(); mocks.events={}
+ vi.clearAllMocks();mocks.lookup.mockReset().mockResolvedValue([]);mocks.gps.mockReset();mocks.events={}
  HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','')}
  HTMLDialogElement.prototype.close=function(){this.removeAttribute('open')}
  wrapper=mount(DestinationPicker,{attachTo:document.body,props:{destination:'Manila',location:{},onChange:(name:string,location:any)=>wrapper.setProps({destination:name,location})}})
@@ -16,12 +16,15 @@ const click=async(text:string)=>{await wrapper.findAll('button').find(b=>b.text(
 const dialog=()=>document.querySelector('dialog')!
 async function dialogClick(text:string){(Array.from(dialog().querySelectorAll('button')).find(b=>b.textContent===text) as HTMLButtonElement).click();await flushPromises()}
 async function field(name:string,value:string){const input=Array.from(dialog().querySelectorAll('label')).find(l=>l.textContent===name)!.querySelector('input')!;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));await flushPromises()}
+it('frames the Philippines with padded navigation limits and never requests GPS on opening',async()=>{await click('Choose on map');expect(mocks.fit).toHaveBeenCalledWith([[116.7,4.4],[127.2,21.3]],expect.objectContaining({duration:0}));expect(mocks.options.mock.calls[0]![0]).toHaveProperty('maxBounds');expect(mocks.gps).not.toHaveBeenCalled();expect(wrapper.emitted('change')).toBeUndefined()})
+it('keeps an outside GPS position as a rejected draft instead of moving it into the country',async()=>{mocks.gps.mockResolvedValue({coords:{latitude:35.68,longitude:139.69,accuracy:50}});await click('Use my current location');expect(dialog().textContent).toContain('Philippine destinations are supported for now');expect((Array.from(dialog().querySelectorAll('button')).find(b=>b.textContent==='Use this location') as HTMLButtonElement).disabled).toBe(true);await dialogClick('Cancel');expect(wrapper.props('location')).toEqual({})})
 it('selects a result; manual edits clear its coordinates; remove keeps the name',async()=>{
  mocks.lookup.mockResolvedValue([{name:'Manila, Philippines',latitude:14.6,longitude:120.98}])
  await click('Search');await click('Manila, Philippines')
+ await dialogClick('Cancel')
  expect(wrapper.props('location')).toMatchObject({destination_latitude:14.6,destination_source:'search'})
  await click('Remove pin');expect(wrapper.props('destination')).toBe('Manila, Philippines');expect(wrapper.props('location').destination_latitude).toBeNull()
- await click('Search');await click('Manila, Philippines');await wrapper.get('input').setValue('Tokyo')
+ await click('Search');await click('Manila, Philippines');await dialogClick('Cancel');await wrapper.get('input').setValue('Tokyo')
  expect(wrapper.props('location').destination_longitude).toBeNull()
 })
 it('ignores stale search responses after an edit',async()=>{
@@ -39,7 +42,10 @@ it('keeps map edits draft until confirmation and preserves the old pin on cancel
  await click('Choose on map');await field('Latitude','35');await field('Longitude','139');await field('Place label','Tokyo');await dialogClick('Cancel')
  expect(wrapper.props('destination')).toBe('Manila');expect(wrapper.props('location').destination_latitude).toBe(14)
  await click('Choose on map');mocks.events.click({lngLat:{lat:35,lng:139}});await field('Place label','Tokyo');await dialogClick('Use this location')
- expect(wrapper.props('location')).toMatchObject({destination_latitude:35,destination_longitude:139,destination_source:'map'})
+ expect(wrapper.props('location').destination_latitude).toBe(14)
+ expect(dialog().textContent).toContain('Philippine destinations are supported for now')
+ mocks.lookup.mockResolvedValue([]);mocks.events.click({lngLat:{lat:14.6,lng:120.98}});await field('Place label','Manila');await dialogClick('Use this location')
+ expect(wrapper.props('location')).toMatchObject({destination_latitude:14.6,destination_longitude:120.98,destination_source:'map'})
 })
 it('keeps GPS coordinates after reverse lookup failure and requires confirmation',async()=>{
  mocks.gps.mockResolvedValue({coords:{latitude:14.6,longitude:120.98,accuracy:45}});mocks.lookup.mockRejectedValue(new Error('offline'))

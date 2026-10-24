@@ -1,130 +1,100 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
+import {ref,computed,nextTick,onBeforeUnmount} from 'vue'
 import type * as MapLibre from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { validCoordinates, type DestinationFields, type DestinationSource } from '@/types/destination'
-import { lookupPlaces, locateOnce, placeProvider, type Place } from '@/services/places'
-const props = defineProps<{ destination: string; location: DestinationFields; disabled?: boolean; fieldLabel?:string }>()
-const inputId = 'destination-' + crypto.randomUUID()
-const emit = defineEmits<{ change: [name: string, location: DestinationFields] }>()
-const empty = () => ({ destination_latitude: null, destination_longitude: null, destination_source: null })
-const input = ref<HTMLInputElement>(), dialog = ref<HTMLDialogElement>(), mapElement = ref<HTMLDivElement>()
-const results = ref<Place[]>([]), searchState = ref(''), searchBusy = ref(false)
-const open = ref(false), label = ref(''), latitude = ref(''), longitude = ref(''), source = ref<DestinationSource>('map')
-const notice = ref(''), mapError = ref(''), locating = ref(false), accuracy = ref<number | null>(null)
-let searchRequest: AbortController | undefined, draftRequest: AbortController | undefined
-let maplibregl: typeof MapLibre.default
-let map: MapLibre.Map | undefined, marker: MapLibre.Marker | undefined, previous: HTMLElement | null = null
-let generation = 0, searchGeneration = 0, mapGeneration = 0, mapTimer: ReturnType<typeof setTimeout> | undefined
-const pin = computed(() => validCoordinates(props.location.destination_latitude, props.location.destination_longitude))
-const draftValid = computed(() => latitude.value.trim() !== '' && longitude.value.trim() !== '' && validCoordinates(Number(latitude.value), Number(longitude.value)))
-function invalidateSearch() { searchRequest?.abort(); searchGeneration++; searchBusy.value = false; results.value = []; searchState.value = '' }
-function edit(text: string) { invalidateSearch(); emit('change', text, empty()) }
-async function search() {
-  if (!props.destination.trim() || props.disabled) return
-  invalidateSearch(); const token = searchGeneration; const controller = searchRequest = new AbortController()
-  searchBusy.value = true; searchState.value = 'Searching places…'
-  try {
-    const places = await lookupPlaces({ q: props.destination.trim() }, controller.signal)
-    if (token !== searchGeneration) return
-    results.value = places; searchState.value = places.length ? 'Choose a destination below.' : 'No places found. Try a fuller address, choose on the map, or keep your text.'
-  } catch { if (token === searchGeneration) searchState.value = 'Place lookup is unavailable. Retry Search, choose on the map, or keep your text.' }
-  finally { if (token === searchGeneration) searchBusy.value = false }
+import {validCoordinates,type DestinationFields,type DestinationSource} from '@/types/destination'
+import {lookupPlaces,locateOnce,placeProvider,type Place} from '@/services/places'
+import {inPhilippines,PH_BOUNDS,PH_NAVIGATION,OUTSIDE_PH} from '@/services/philippines'
+import NearbyPlaces from './NearbyPlaces.vue'
+import type {ItineraryItem,TripDay} from '@/types'
+import type {SuggestedVisit} from '@/composables/discovery'
+const props=defineProps<{destination:string;location:DestinationFields;disabled?:boolean;fieldLabel?:string;items?:ItineraryItem[];days?:TripDay[];date?:string;timezone?:string;savePlan?:(visits:SuggestedVisit[])=>Promise<void>}>()
+const emit=defineEmits<{change:[string,DestinationFields];recommend:[Place,string];plan:[SuggestedVisit[]];remember:[Place|null]}>()
+const inputId='destination-'+crypto.randomUUID(),empty=()=>({destination_latitude:null,destination_longitude:null,destination_source:null})
+const input=ref<HTMLInputElement>(),dialog=ref<HTMLDialogElement>(),mapElement=ref<HTMLDivElement>()
+const results=ref<Place[]>([]),searchState=ref(''),searchBusy=ref(false),mapQuery=ref(''),mobileTab=ref('map')
+const open=ref(false),label=ref(''),latitude=ref(''),longitude=ref(''),source=ref<DestinationSource>('map'),address=ref(''),country=ref(''),providerPlace=ref<Place|null>(null)
+const notice=ref(''),mapError=ref(''),locating=ref(false),accuracy=ref<number|null>(null),highlighted=ref<Place|null>(null)
+let searchRequest:AbortController|undefined,draftRequest:AbortController|undefined,maplibregl:typeof MapLibre.default,map:MapLibre.Map|undefined,marker:MapLibre.Marker|undefined,highlightMarker:MapLibre.Marker|undefined,previous:HTMLElement|null=null
+let generation=0,searchGeneration=0,mapGeneration=0,mapTimer:ReturnType<typeof setTimeout>|undefined,coordinateTimer:ReturnType<typeof setTimeout>|undefined
+let initialized=false,savedSnapshot=''
+const pin=computed(()=>validCoordinates(props.location.destination_latitude,props.location.destination_longitude))
+const draftValid=computed(()=>latitude.value.trim()!==''&&longitude.value.trim()!==''&&validCoordinates(Number(latitude.value),Number(longitude.value)))
+const supported=computed(()=>draftValid.value&&inPhilippines(Number(latitude.value),Number(longitude.value),country.value||undefined))
+const selected=computed<Place|null>(()=>supported.value?{...providerPlace.value,name:label.value||'Selected location',address:address.value,latitude:Number(latitude.value),longitude:Number(longitude.value),countryCode:country.value||'ph'}:null)
+function invalidateSearch(){searchRequest?.abort();searchGeneration++;searchBusy.value=false;results.value=[];searchState.value=''}
+function edit(text:string){invalidateSearch();emit('change',text,empty())}
+async function search(inMap=false){const query=(inMap?mapQuery.value:props.destination).trim();if(!query||props.disabled)return
+ invalidateSearch();const token=searchGeneration,controller=searchRequest=new AbortController();searchBusy.value=true;searchState.value='Searching places…'
+ try{const places=await lookupPlaces({q:query},controller.signal);if(token!==searchGeneration)return;results.value=places.filter(p=>inPhilippines(p.latitude,p.longitude,p.countryCode));searchState.value=results.value.length?'Choose a destination below.':'No places found in the Philippines. Try a fuller address or keep your text.'}
+ catch{if(token===searchGeneration)searchState.value='Place lookup is unavailable. Retry Search, choose on the map, or keep your text.'}finally{if(token===searchGeneration)searchBusy.value=false}
 }
-function select(place: Place) { invalidateSearch(); emit('change', place.name.slice(0, 255), { destination_latitude: place.latitude, destination_longitude: place.longitude, destination_source: 'search' }); input.value?.focus() }
-function syncMarker(center = false) {
-  if (!map || !draftValid.value) { marker?.remove(); marker = undefined; return }
-  const point: [number, number] = [Number(longitude.value), Number(latitude.value)]
-  if (!marker) { marker = new maplibregl.Marker({ color: '#74283c', draggable: true }).setLngLat(point).addTo(map); marker.on('dragend', () => { const p = marker!.getLngLat(); setPoint(p.lat, p.lng) }) }
-  else marker.setLngLat(point)
-  if (center) map.jumpTo({ center: point, zoom: 12 })
+function select(place:Place,inMap=false){if(!inPhilippines(place.latitude,place.longitude,place.countryCode)){searchState.value=OUTSIDE_PH;return}invalidateSearch();if(inMap){setPoint(place.latitude,place.longitude,'search',place);syncMarker(true)}else{emit('change',place.name.slice(0,255),{destination_latitude:place.latitude,destination_longitude:place.longitude,destination_source:'search'});input.value?.focus();void nextTick(()=>show(false,place))}}
+function syncMarker(center=false){
+ if(!map||!draftValid.value){marker?.remove();marker=undefined;return}
+ const point:[number,number]=[Number(longitude.value),Number(latitude.value)]
+ if(!marker){marker=new maplibregl.Marker({color:'#74283c',draggable:true}).setLngLat(point).addTo(map);marker.on('dragend',()=>{const p=marker!.getLngLat();setPoint(p.lat,p.lng)})}else marker.setLngLat(point)
+ if(center&&supported.value)map.jumpTo({center:point,zoom:12})
 }
-function setPoint(lat: number, lng: number) {
-  draftRequest?.abort(); generation++; locating.value = false; accuracy.value = null; notice.value = ''
-  latitude.value = lat.toFixed(6); longitude.value = (((lng + 180) % 360 + 360) % 360 - 180).toFixed(6); source.value = 'map'; syncMarker()
+function setPoint(lat:number,lng:number,kind:DestinationSource='map',place?:Place){
+ clearTimeout(coordinateTimer);draftRequest?.abort();const token=++generation;locating.value=false;accuracy.value=null;notice.value='';highlighted.value=null;highlightMarker?.remove();highlightMarker=undefined
+ latitude.value=lat.toFixed(6);longitude.value=lng.toFixed(6);source.value=kind;country.value=place?.countryCode||'';providerPlace.value=place||null;label.value=(place?.name||'Selected location').slice(0,255);address.value=place?.address||'';syncMarker()
+ if(!validCoordinates(lat,lng))return
+ if(place?.countryCode){notice.value=supported.value?'Review this place before confirming.':OUTSIDE_PH;return}
+ if(lng<115||lng>129||lat<3||lat>23){notice.value=OUTSIDE_PH;return}
+ void reverse(token,kind==='gps')
 }
-function coordinatesEdited() { draftRequest?.abort(); generation++; locating.value = false; accuracy.value = null; source.value = 'map'; notice.value = ''; syncMarker(true) }
-async function show(gps = false) {
-  if (props.disabled) return
-  invalidateSearch(); previous = document.activeElement as HTMLElement; open.value = true
-  label.value = props.destination; latitude.value = pin.value ? String(props.location.destination_latitude) : ''; longitude.value = pin.value ? String(props.location.destination_longitude) : ''
-  source.value = props.location.destination_source || 'map'; notice.value = ''; mapError.value = ''; accuracy.value = null
-  await nextTick(); dialog.value?.showModal()
-  const opening = ++mapGeneration
-  try {
-    maplibregl = (await import('maplibre-gl')).default
-    if (!open.value || opening !== mapGeneration) return
-    map = new maplibregl.Map({ container: mapElement.value!, center: draftValid.value ? [Number(longitude.value), Number(latitude.value)] : [0, 20], zoom: draftValid.value ? 10 : 1,
-      style: { version: 8, sources: { paper: { type: 'raster', tiles: [import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19, attribution: import.meta.env.VITE_MAP_ATTRIBUTION || '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' } }, layers: [{ id: 'paper', type: 'raster', source: 'paper' }] } })
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false })); map.on('click', e => setPoint(e.lngLat.lat, e.lngLat.lng))
-    map.on('error', () => { mapError.value = 'Map tiles are unavailable. You can still enter coordinates below.' })
-    mapTimer = setTimeout(() => { if (open.value) mapError.value = 'The map is taking longer than expected. Coordinate entry remains available.' }, 12000)
-    map.on('load', () => { clearTimeout(mapTimer); map?.resize() }); syncMarker()
-  } catch { mapError.value = 'This browser cannot display the map. Enter coordinates below or keep a text-only destination.' }
-  if (gps && open.value && opening === mapGeneration) await gpsLocation()
+async function reverse(token:number,center=false){const controller=draftRequest=new AbortController(),oldLabel=label.value;notice.value='Looking up this place…'
+ try{const places=await lookupPlaces({lat:latitude.value,lon:longitude.value},controller.signal);if(!open.value||token!==generation)return;const place=places[0];if(place){country.value=place.countryCode||'';address.value=place.address||place.name;if(label.value===oldLabel)label.value=place.name.slice(0,255)}syncMarker(center);notice.value=supported.value?'Review this place before confirming.':place?.countryCode?OUTSIDE_PH:'Country could not be confirmed. Try a nearby named place or keep a text-only destination.'}
+ catch{if(open.value&&token===generation)notice.value=supported.value?'Place name lookup failed. Your coordinates are kept; add a label.':'Country could not be confirmed. Your pin draft is kept. Retry or use a text-only destination.'}
 }
-async function gpsLocation() {
-  draftRequest?.abort(); const token = ++generation, controller = draftRequest = new AbortController()
-  locating.value = true; notice.value = 'Locating…'; accuracy.value = null
-  try {
-    const p = await locateOnce(controller.signal)
-    if (!open.value || token !== generation) return
-    if (!validCoordinates(p.coords.latitude, p.coords.longitude)) throw new Error('The device returned an invalid position. Try again.')
-    latitude.value = String(p.coords.latitude); longitude.value = String(p.coords.longitude); source.value = 'gps'; label.value = ''
-    accuracy.value = Number.isFinite(p.coords.accuracy) ? Math.round(p.coords.accuracy) : null; syncMarker(true)
-    locating.value = false; notice.value = 'Pin ready. Looking up its name…'
-    const originalLabel = label.value
-    try {
-      const places = await lookupPlaces({ lat: latitude.value, lon: longitude.value }, controller.signal)
-      if (!open.value || token !== generation) return
-      if (label.value === originalLabel && places[0]) label.value = places[0].name.slice(0, 255)
-      notice.value = places.length ? 'Review this place before using it as your destination.' : 'No place name found. Your coordinates are kept; add a label.'
-    } catch { if (open.value && token === generation) notice.value = 'Place name lookup failed. Your coordinates are kept; add a label.' }
-  } catch (e) { if (open.value && token === generation) notice.value = (e as Error).message }
-  finally { if (token === generation) locating.value = false }
+function coordinatesEdited(){draftRequest?.abort();generation++;locating.value=false;country.value='';providerPlace.value=null;source.value='map';accuracy.value=null;label.value='Selected location';syncMarker();clearTimeout(coordinateTimer);coordinateTimer=setTimeout(()=>{if(draftValid.value){const editedLabel=label.value;setPoint(Number(latitude.value),Number(longitude.value));if(editedLabel)label.value=editedLabel}},500)}
+async function show(gps=false,place?:Place){if(props.disabled||open.value)return;invalidateSearch();previous=document.activeElement as HTMLElement;open.value=true;mobileTab.value='map';mapQuery.value=props.destination
+ const snapshot=JSON.stringify([props.destination,props.location]);if(!initialized||snapshot!==savedSnapshot){label.value=props.destination;latitude.value=pin.value?String(props.location.destination_latitude):'';longitude.value=pin.value?String(props.location.destination_longitude):'';source.value=props.location.destination_source||'map';country.value='';providerPlace.value=null;address.value='';initialized=true;savedSnapshot=snapshot}notice.value='';mapError.value='';accuracy.value=null
+ if(place){label.value=place.name;latitude.value=String(place.latitude);longitude.value=String(place.longitude);country.value=place.countryCode||'';providerPlace.value=place;address.value=place.address||''}
+ await nextTick();dialog.value?.showModal();const opening=++mapGeneration
+ try{maplibregl=(await import('maplibre-gl')).default;if(!open.value||opening!==mapGeneration)return
+  map=new maplibregl.Map({container:mapElement.value!,center:supported.value?[Number(longitude.value),Number(latitude.value)]:[122,12],zoom:supported.value?10:4,maxBounds:PH_NAVIGATION,
+   style:{version:8,sources:{paper:{type:'raster',tiles:[import.meta.env.VITE_MAP_TILE_URL||'https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:19,attribution:import.meta.env.VITE_MAP_ATTRIBUTION||'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}},layers:[{id:'paper',type:'raster',source:'paper'}]}})
+  if(!supported.value)map.fitBounds(PH_BOUNDS,{padding:24,duration:0})
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}));map.on('click',e=>{const feature=map?.queryRenderedFeatures?.(e.point).find(f=>typeof f.properties?.name==='string');setPoint(e.lngLat.lat,e.lngLat.lng);if(feature)label.value=String(feature.properties?.name).slice(0,255)})
+  map.on('error',()=>{mapError.value='Map tiles are unavailable. Search and coordinate entry remain available.'});mapTimer=setTimeout(()=>{if(open.value)mapError.value='The map is taking longer than expected. Coordinate entry remains available.'},12000);map.on('load',()=>{clearTimeout(mapTimer);map?.resize()});syncMarker()
+ }catch{mapError.value='This browser cannot display the map. Search, enter coordinates, or keep a text-only destination.'}
+ if(pin.value&&!supported.value){notice.value='Checking this saved pin; its coordinates stay unchanged.';void reverse(++generation,true)}
+ if(gps&&open.value&&opening===mapGeneration)await gpsLocation()
 }
-function close() {
-  open.value = false; generation++; mapGeneration++; draftRequest?.abort(); locating.value = false; clearTimeout(mapTimer)
-  marker?.remove(); marker = undefined; map?.remove(); map = undefined; dialog.value?.close(); previous?.focus({ preventScroll: true })
+async function gpsLocation(){draftRequest?.abort();const token=++generation,controller=draftRequest=new AbortController();locating.value=true;notice.value='Locating…';accuracy.value=null
+ try{const p=await locateOnce(controller.signal);if(!open.value||token!==generation)return;if(!validCoordinates(p.coords.latitude,p.coords.longitude))throw new Error('The device returned an invalid position. Try again.');setPoint(p.coords.latitude,p.coords.longitude,'gps');accuracy.value=Number.isFinite(p.coords.accuracy)?Math.round(p.coords.accuracy):null;syncMarker(true)}catch(e){if(open.value&&token===generation)notice.value=(e as Error).message}finally{if(token===generation)locating.value=false}
 }
-function confirm() {
-  if (!draftValid.value || !label.value.trim() || locating.value) return
-  emit('change', label.value.trim(), { destination_latitude: Number(latitude.value), destination_longitude: Number(longitude.value), destination_source: source.value }); close()
-}
-onBeforeUnmount(() => { invalidateSearch(); close() })
+function highlight(p:Place){highlighted.value=p;mobileTab.value='map';void nextTick(()=>{map?.resize();highlightMarker?.remove();if(map){highlightMarker=new maplibregl.Marker({color:'#738668'}).setLngLat([p.longitude,p.latitude]).addTo(map);map.flyTo({center:[p.longitude,p.latitude],zoom:13,duration:0})}})}
+function changeTab(tab:string){mobileTab.value=tab;void nextTick(()=>map?.resize())}
+function close(keepDraft:unknown=false){if(keepDraft!==true)initialized=false;open.value=false;generation++;mapGeneration++;invalidateSearch();draftRequest?.abort();locating.value=false;clearTimeout(mapTimer);clearTimeout(coordinateTimer);marker?.remove();marker=undefined;highlightMarker?.remove();highlightMarker=undefined;map?.remove();map=undefined;dialog.value?.close();previous?.focus({preventScroll:true})}
+function confirm(){if(!supported.value||!label.value.trim()||locating.value)return;emit('change',label.value.trim(),{destination_latitude:Number(latitude.value),destination_longitude:Number(longitude.value),destination_source:source.value});close()}
+function recommend(p:Place,date:string){emit('remember',selected.value);emit('recommend',p,date);close(true)}
+defineExpose({show,close})
+onBeforeUnmount(()=>{invalidateSearch();close()})
 </script>
-<template>
-  <div class="destination-picker">
-    <label :for="inputId">{{fieldLabel || 'Destination'}}</label><div class="search-row"><input :id="inputId" ref="input" :value="destination" maxlength="255" placeholder="City, region, landmark, or address" :disabled="disabled" @input="edit(($event.target as HTMLInputElement).value)" @keydown.enter.prevent="search" /><button type="button" :disabled="disabled || searchBusy || !destination.trim()" @click="search">{{searchBusy ? 'Searching…' : 'Search'}}</button></div>
-    <p role="status" aria-live="polite" class="hint">{{searchState}}</p>
-    <ul v-if="results.length" class="results" aria-label="Destination search results"><li v-for="(place,index) in results" :key="index"><button type="button" @click="select(place)">{{place.name}}</button></li></ul>
-    <div class="location-actions"><button type="button" :disabled="disabled" @click="show()">Choose on map</button><button type="button" :disabled="disabled" @click="show(true)">Use my current location</button></div>
-    <div v-if="pin" class="pin-note"><span>Pin attached · {{location.destination_latitude?.toFixed(5)}}, {{location.destination_longitude?.toFixed(5)}}</span><button type="button" :disabled="disabled" @click="emit('change', destination, empty())">Remove pin</button></div>
-    <p class="hint">A name or address is enough. Pins are optional.</p>
-    <details class="location-disclosure"><summary>Search via {{placeProvider}} · location privacy</summary><p class="hint">Current location may be approximate; review it before choosing your destination. Search and GPS name lookup send the query or coordinates to {{placeProvider}}. <a href="https://www.geoapify.com/" target="_blank" rel="noopener">Place lookup</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></p></details>
-    <Teleport to="body"><dialog ref="dialog" class="destination-dialog" aria-label="Choose destination location" @cancel.prevent="close" @keydown.esc.stop>
-      <header><h2>Find your destination</h2><button type="button" aria-label="Close location picker" @click="close">×</button></header>
-      <div class="picker-body">
-        <p class="hint">Pan and zoom, then tap to place a pin. Drag the pin to refine it. The starting view is not your current location.</p>
-        <div ref="mapElement" class="destination-map" aria-label="Destination map" />
-        <p v-if="mapError" role="status" class="hint">{{mapError}}</p>
-        <button type="button" :disabled="locating" @click="gpsLocation">{{locating ? 'Locating…' : 'Use my current location'}}</button>
-        <p role="status" aria-live="polite" class="hint">{{notice}}</p><p v-if="accuracy !== null" class="hint">Approximate GPS accuracy: {{accuracy}} metres.</p>
-        <p class="hint">Current location may be approximate. Review the pin before confirming.</p>
-        <label>Place label<input v-model="label" maxlength="255" placeholder="Name this destination" /></label>
-        <div class="coordinates"><label>Latitude<input v-model="latitude" inputmode="decimal" placeholder="−90 to 90" @input="coordinatesEdited" /></label><label>Longitude<input v-model="longitude" inputmode="decimal" placeholder="−180 to 180" @input="coordinatesEdited" /></label></div>
-        <p v-if="(latitude || longitude) && !draftValid" role="status" class="hint">Enter both coordinates: latitude −90 to 90, longitude −180 to 180.</p>
-        <p class="hint">{{draftValid ? 'Review the pin and label, then confirm.' : 'No destination pin selected yet.'}}</p>
-      </div>
-      <footer><button type="button" @click="close">Cancel</button><button type="button" class="confirm" :disabled="!draftValid || !label.trim() || locating" @click="confirm">Use this location</button></footer>
-    </dialog></Teleport>
-  </div>
-</template>
+<template><div class="destination-picker">
+ <label :for="inputId">{{fieldLabel||'Destination'}}</label><div class="search-row"><input :id="inputId" ref="input" :value="destination" maxlength="255" placeholder="City, municipality, landmark, or address" :disabled="disabled" @input="edit(($event.target as HTMLInputElement).value)" @keydown.enter.prevent="search()" /><button type="button" :disabled="disabled||searchBusy||!destination.trim()" @click="search()">{{searchBusy?'Searching…':'Search'}}</button></div>
+ <p v-if="!open" role="status" class="hint">{{searchState}}</p><ul v-if="results.length&&!open" class="results" aria-label="Destination search results"><li v-for="p in results" :key="p.providerId||p.name"><button type="button" @click="select(p)">{{p.name}}</button></li></ul>
+ <div class="location-actions"><button type="button" :disabled="disabled" @click="show()">Choose on map</button><button type="button" :disabled="disabled" @click="show(true)">Use my current location</button></div>
+ <div v-if="pin" class="pin-note"><span>Pin attached</span><button type="button" :disabled="disabled" @click="emit('change',destination,empty())">Remove pin</button></div><p class="hint">A name or address is enough. Pins are optional.</p>
+ <details><summary>Search via {{placeProvider}} · location privacy</summary><p class="hint">Search and nearby discovery send your query or selected coordinates to {{placeProvider}}. GPS is requested once, only when you choose it. Current location may be approximate. <a href="https://www.geoapify.com/">Geoapify</a> · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a></p><p class="hint">Offline country check: <a href="https://www.geoboundaries.org/">geoBoundaries</a>, OCHA Philippines / NAMRIA, <a href="https://creativecommons.org/licenses/by/3.0/igo/">CC BY 3.0 IGO</a>. Coastal geometry may need provider confirmation.</p></details>
+ <Teleport to="body"><dialog ref="dialog" class="destination-dialog" aria-label="Explore the Philippines" @cancel.prevent="close" @keydown.esc.stop>
+ <header><div><h2>Explore the Philippines</h2><p class="hint">Search for a place or tap the map to explore nearby.</p></div><button type="button" aria-label="Close location picker" @click="close">×</button></header>
+ <div class="dialog-search"><div class="search-row"><label class="sr-only" :for="inputId+'-map'">Search Philippine places</label><input :id="inputId+'-map'" v-model="mapQuery" placeholder="Where in the Philippines?" @input="invalidateSearch" @keydown.enter.prevent="search(true)" /><button type="button" :disabled="searchBusy||!mapQuery.trim()" @click="search(true)">Search</button></div><p role="status" class="hint">{{searchState}}</p><ul v-if="results.length" class="results" aria-label="Philippine search results"><li v-for="p in results" :key="p.providerId||p.name"><button type="button" @click="select(p,true)">{{p.name}}</button></li></ul></div>
+ <nav class="mobile-tabs" aria-label="Discovery view"><button type="button" :aria-pressed="mobileTab==='map'" @click="changeTab('map')">Map</button><button type="button" :aria-pressed="mobileTab==='places'" @click="changeTab('places')">Places</button></nav>
+ <div class="picker-body"><section class="map-column" :class="{'mobile-hidden':mobileTab!=='map'}"><div ref="mapElement" class="destination-map" aria-label="Destination map" /><p class="hint map-credit"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></p><p v-if="mapError" role="status" class="hint">{{mapError}}</p><p class="hint">Tap to place a pin; drag to refine. The initial view is not your current location.</p>
+  <div v-if="highlighted" class="highlight"><strong>{{highlighted.name}}</strong><p class="hint">Highlighted only. Your destination has not changed.</p><button type="button" @click="setPoint(highlighted.latitude,highlighted.longitude,'search',highlighted)">Choose this destination</button></div>
+  <button type="button" :disabled="locating" @click="gpsLocation">{{locating?'Locating…':'Use my current location'}}</button><p v-if="accuracy!==null" class="hint">Approximate GPS accuracy: {{accuracy}} metres.</p><p role="status" class="hint">{{notice}}</p>
+  <label>Place label<input v-model="label" maxlength="255" placeholder="Selected location" /></label><p v-if="address" class="hint">{{address}}</p>
+  <details><summary>Enter coordinates</summary><div class="coordinates"><label>Latitude<input v-model="latitude" inputmode="decimal" placeholder="−90 to 90" @input="coordinatesEdited" /></label><label>Longitude<input v-model="longitude" inputmode="decimal" placeholder="−180 to 180" @input="coordinatesEdited" /></label></div><button type="button" :disabled="!draftValid" @click="setPoint(Number(latitude),Number(longitude))">Check coordinates</button></details>
+  <p v-if="(latitude||longitude)&&!draftValid" role="status" class="hint">Enter both valid latitude and longitude coordinates.</p><p v-if="draftValid&&!supported" class="hint">{{OUTSIDE_PH}}</p>
+ </section><section class="places-column" :class="{'mobile-hidden':mobileTab!=='places'}"><NearbyPlaces :origin="selected" :active="open" :items="items" :days="days" :date="date" :timezone="timezone" :save-plan="savePlan" @highlight="highlight" @add="recommend" @gps="gpsLocation" @plan="emit('plan',$event);close()" /></section></div>
+ <footer><div class="selected-summary"><strong>{{draftValid?label||'Selected location':'No destination selected'}}</strong><span v-if="supported">Ready to use · recommendations are optional</span></div><div class="footer-actions"><button type="button" @click="close">Cancel</button><button type="button" class="confirm" :disabled="!supported||!label.trim()||locating" @click="confirm">Use this location</button></div></footer>
+ </dialog></Teleport>
+</div></template>
 <style scoped>
-.location-actions{margin-top:8px}
-.location-disclosure summary{font-size:12px;color:#796f60;min-height:44px;cursor:pointer}.location-disclosure .hint{margin-top:0}
-.destination-picker{min-width:0}.search-row{display:flex;gap:8px}.search-row input{min-width:0;flex:1}.location-actions{display:flex;flex-wrap:wrap;gap:8px}.hint{font-size:13px;line-height:1.5;color:#716b60;margin:8px 0;overflow-wrap:anywhere}.hint:empty{display:none}.results{list-style:none;padding:0;margin:8px 0;border:1px solid #d8d0c0;border-radius:12px;overflow:hidden;max-height:260px;overflow-y:auto}.results button{width:100%;text-align:left;border-radius:0;white-space:normal;overflow-wrap:anywhere}.pin-note{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:8px;background:#e8ede2;padding:8px 12px;border-radius:10px;font-size:13px;margin-top:10px}
-button,input{font:inherit;min-height:44px;font-size:16px}button{cursor:pointer;padding:9px 12px;border:1px solid #d8d0c0;border-radius:9px;background:#faf6ed;color:#74283c}button:disabled{opacity:.55;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #74283c;outline-offset:3px}a{color:#74283c}label{display:block;font-size:14px;font-weight:600}input{box-sizing:border-box;width:100%;border:1px solid #d8d0c0;background:#fffdf7;color:#51493f;border-radius:8px;padding:10px;margin-top:5px}
-.destination-dialog{box-sizing:border-box;position:fixed;inset:8dvh 0 auto;margin:auto;width:min(680px,calc(100% - 32px));max-width:100%;max-height:84dvh;padding:0;border:1px solid #d8d0c0;border-radius:18px;background:#faf6ed;color:#51493f;overflow:auto;overscroll-behavior:contain}.destination-dialog::backdrop{background:#2e282966}.destination-dialog header,.destination-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;background:#faf6ed;position:sticky;z-index:3}.destination-dialog header{top:0;border-bottom:1px solid #e2dbcd}.destination-dialog h2{font:26px Georgia,serif;margin:0}.destination-dialog header button{min-width:44px}.picker-body{padding:0 18px 12px}.destination-map{height:280px;margin:12px 0;border-radius:10px;overflow:hidden;background:#e8ede2;touch-action:none}.coordinates{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.coordinates label{min-width:0}.destination-dialog footer{bottom:0;border-top:1px solid #e2dbcd;padding-bottom:max(12px,env(safe-area-inset-bottom))}.confirm{background:#74283c;color:#fffdf7}.destination-map :deep(.maplibregl-ctrl-group button){width:44px;height:44px}.destination-map :deep(.maplibregl-canvas):focus-visible{outline:3px solid #74283c}
-@media(max-width:600px){.destination-dialog{inset:auto 0 var(--keyboard-inset,0px);width:100%;max-height:calc(var(--visual-height,100dvh) * .92);border-radius:18px 18px 0 0}.destination-map{height:220px}.destination-dialog h2{font-size:23px}.search-row button{padding-inline:10px}}
+.destination-picker{min-width:0}.search-row{display:flex;gap:8px;align-items:center}.search-row input{flex:1;min-width:0}.location-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.hint{font-size:13px;line-height:1.5;color:#665e51;margin:8px 0;overflow-wrap:anywhere}.hint:empty{display:none}.results{list-style:none;padding:0;margin:8px 0;border:1px solid #d8d0c0;border-radius:12px;overflow:auto;max-height:220px}.results button{width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;border-radius:0}.pin-note{display:flex;align-items:center;justify-content:space-between;background:#e8ede2;padding:5px 12px;border-radius:10px;margin-top:10px;font-size:13px}.destination-picker summary{font-size:13px}summary{cursor:pointer;min-height:44px;padding:12px 0}button,input{font:inherit;font-size:16px;min-height:44px}button{min-width:44px;cursor:pointer;padding:9px 12px;border:1px solid #d8d0c0;border-radius:9px;background:#faf6ed;color:#74283c}button:disabled{opacity:.55;cursor:default}:is(button,input,summary):focus-visible{outline:2px solid #74283c;outline-offset:3px}a{color:#74283c}label{display:block;font-size:14px;font-weight:600}input{box-sizing:border-box;width:100%;min-width:0;border:1px solid #d8d0c0;background:#fffdf7;color:#51493f;border-radius:8px;padding:10px;margin-top:5px}.destination-dialog{box-sizing:border-box;position:fixed;inset:4dvh 0 auto;margin:auto;width:min(1160px,calc(100% - 32px));max-width:100%;height:92dvh;max-height:92dvh;padding:0;border:1px solid #d8d0c0;border-radius:18px;background:#faf6ed;color:#51493f;overflow:hidden}.destination-dialog[open]{display:flex;flex-direction:column}.destination-dialog::backdrop{background:#2e282977}.destination-dialog header,.destination-dialog footer{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;background:#faf6ed}.destination-dialog header{border-bottom:1px solid #e2dbcd}.destination-dialog h2{font:26px Georgia,serif;margin:0}.dialog-search{padding:8px 18px;flex-shrink:0}.picker-body{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);min-height:0;flex:1;overflow:hidden}.map-column,.places-column{padding:0 18px 18px;overflow-y:auto;overscroll-behavior:contain;min-width:0}.places-column{border-left:1px solid #e2dbcd}.destination-map{height:clamp(340px,42dvh,480px);margin:8px 0 12px;border-radius:10px;overflow:hidden;background:#e8ede2;touch-action:none}.coordinates{display:grid;grid-template-columns:1fr 1fr;gap:12px}.coordinates label{min-width:0}.destination-dialog footer{border-top:1px solid #e2dbcd;padding-bottom:max(12px,env(safe-area-inset-bottom))}.footer-actions{display:flex;gap:8px;flex-shrink:0}.confirm{background:#74283c;color:#fffdf7}.selected-summary{min-width:0;font-size:14px}.selected-summary strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}.selected-summary span{display:block;font-size:12px;margin-top:5px}.destination-map :deep(.maplibregl-ctrl-group button){width:44px;height:44px}.mobile-tabs{display:none}.highlight{background:#e8ede2;border-radius:10px;padding:12px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+@media(max-width:700px){.destination-dialog{inset:0 0 var(--keyboard-inset,0px);width:100%;height:var(--visual-height,100dvh);max-height:100dvh;border-radius:0}.destination-dialog header{padding-top:max(12px,env(safe-area-inset-top))}.destination-dialog h2{font-size:23px}.picker-body{display:block;overflow-y:auto;overscroll-behavior:contain}.map-column,.places-column{overflow:visible;border:0}.mobile-hidden{display:none}.mobile-tabs{display:flex;padding:0 18px 8px;gap:8px}.mobile-tabs button{flex:1}.mobile-tabs button[aria-pressed=true]{background:#e0e7d8}.destination-map{height:240px}.destination-dialog footer{display:block;padding-top:8px}.selected-summary{margin-bottom:8px}.selected-summary strong{-webkit-line-clamp:1}.selected-summary span{display:none}.footer-actions button{flex:1}.dialog-search .results{max-height:150px}.search-row button{padding-inline:10px}}
 </style>

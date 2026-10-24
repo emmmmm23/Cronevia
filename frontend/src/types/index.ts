@@ -74,6 +74,8 @@ export interface Location {
 }
 
 export interface ItineraryItem {
+  place_provider?: string | null
+  provider_place_id?: string | null
   latitude?: number | null
   longitude?: number | null
   location_source?: 'search' | 'map' | 'gps' | null

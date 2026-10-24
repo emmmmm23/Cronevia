@@ -11,6 +11,11 @@ import {useEditingViewport} from '@/composables/useEditingViewport'
 import '@/styles/field-notes.css'
 import SignInAgain from '@/components/shared/SignInAgain.vue'
 import {isSignInRequired} from '@/services/request-errors'
+import {discoveryHandoff} from '@/composables/discoverySession'
+import type {Place} from '@/types/discovery'
+import type {SuggestedVisit} from '@/composables/discovery'
+function recommend(place:Place,date:string){discoveryHandoff.value={place,date};void router.push('/trips/'+id+'?discover=1')}
+function review(visits:SuggestedVisit[]){discoveryHandoff.value={visits,date:''};void router.push('/trips/'+id+'?discover=1')}
 const route=useRoute(),router=useRouter(),id=route.params.id as string|undefined,draftKey=crypto.randomUUID()
 useEditingViewport()
 const draft=ref<TripDraft>({title:'',destination:'',start:'',end:'',undecided:true,description:'',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',status:'planning'})
@@ -29,7 +34,7 @@ async function save(){if(saving.value||needsSignIn.value||!ready.value||!draft.v
   }
   baseline.value=snapshot()
  }catch(e){needsSignIn.value=isSignInRequired(e);error.value=needsSignIn.value?'':plannerError(e);saving.value=false;return}
- try{const failure=await router.replace('/trips/'+(id||createdId.value));if(failure)throw failure}
+ try{const failure=await router.replace('/trips/'+(id||createdId.value)+(route.query?.from==='discovery'?'?discover=1':''));if(failure)throw failure}
  catch{error.value='Your trip is saved. We couldn’t open it yet. Retry opening your itinerary.'}
  finally{saving.value=false}
 }
@@ -38,7 +43,7 @@ function beforeUnload(e:BeforeUnloadEvent){if(dirty.value){e.preventDefault();e.
 onMounted(()=>window.addEventListener('beforeunload',beforeUnload));onBeforeUnmount(()=>window.removeEventListener('beforeunload',beforeUnload));onBeforeRouteLeave(()=>!dirty.value||confirm('Leave without saving your trip name?'))
 </script>
 <template><main class="field-notes setup"><RouterLink :to="id?'/trips/'+id:'/trips'" class="back">← Back to {{id?'trip':'Trips'}}</RouterLink>
- <template v-if="id"><h1>Trip details</h1><p v-if="loading" role="status">Opening your trip…</p><form v-else-if="ready" class="paper-card" @submit.prevent="save"><TripBasicsForm v-model="draft" editing :disabled="saving" /><SignInAgain v-if="needsSignIn" @restored="needsSignIn=false" /><p v-if="error" role="alert" class="notice">{{error}}</p><button class="primary" :disabled="saving">{{saving?'Saving…':error?'Retry':'Save details'}}</button></form><p v-else role="alert">{{error}}</p></template>
+ <template v-if="id"><h1>Trip details</h1><p v-if="loading" role="status">Opening your trip…</p><form v-else-if="ready" class="paper-card" @submit.prevent="save"><TripBasicsForm v-model="draft" @recommend="recommend" @plan="review" editing :disabled="saving" /><SignInAgain v-if="needsSignIn" @restored="needsSignIn=false" /><p v-if="error" role="alert" class="notice">{{error}}</p><button class="primary" :disabled="saving">{{saving?'Saving…':error?'Retry':'Save details'}}</button></form><p v-else role="alert">{{error}}</p></template>
  <template v-else><header class="creation-backdrop"><p class="eyebrow">Your personal travel collection</p><h1>A new folder.<br>A little possibility.</h1><p>Start with a name. Build the journey as you go.</p></header><AppSheet :model-value="true" title="Where are we going?" @update:model-value="close"><form class="form-grid" @submit.prevent="save"><p class="muted">Give your trip a name. Places and dates can come later.</p><label>Trip name<input v-model="draft.title" autofocus required maxlength="255" placeholder="A weekend in Tagaytay" :disabled="saving" /></label><SignInAgain v-if="needsSignIn" @restored="needsSignIn=false" /><p v-if="error" role="alert" class="notice">{{error}}</p><div class="create-actions"><button type="button" :disabled="saving" @click="close">Cancel</button><button class="primary" :disabled="saving||needsSignIn||!draft.title.trim()">{{saving?(createdId?'Opening…':'Creating…'):error?'Retry':createdId?'Open itinerary':'Create trip'}}</button></div></form></AppSheet></template>
 </main></template>
 <style scoped>.setup{max-width:720px}.creation-backdrop{padding:70px 0;color:#847662}.creation-backdrop h1{font-size:42px;line-height:1.15;margin:12px 0}.creation-backdrop p{line-height:1.7}.create-actions{display:flex;gap:10px;margin-top:8px}.create-actions .primary{flex:1}.setup input{font-size:16px}.setup .paper-card{margin-top:20px}@media(max-width:600px){.creation-backdrop{padding:35px 0}.creation-backdrop h1{font-size:32px}}</style>
