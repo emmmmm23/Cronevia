@@ -1,64 +1,90 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { requireUser } from '@/services/supabase-api'
-const props = defineProps<{ mode: 'timeline' | 'search' | 'anniversary' | 'map' }>()
-const route = useRoute()
-type Item = { id: string; title: string; date: string; type: string; to: string; latitude?: number | null; longitude?: number | null; location?: string | null }
-const items = ref<Item[]>([])
-const query = ref('')
-const error = ref('')
-const loading = ref(true)
-const titles = { timeline: 'Your timeline', search: 'Search your memories', anniversary: 'On this day', map: 'Your places' }
-const visible = computed(() => items.value.filter(item => {
-  const date = new Date()
-  const today = `${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
-  if (props.mode === 'anniversary' && (item.date.slice(5,10) !== today || Number(item.date.slice(0,4)) >= date.getFullYear())) return false
-  if (props.mode === 'map' && (item.latitude == null || item.longitude == null)) return false
-  return `${item.title} ${item.location || ''}`.toLowerCase().includes(query.value.toLowerCase())
+import SavedPlacesMap from '@/components/SavedPlacesMap.vue'
+
+type Kind = 'Journal' | 'Trip' | 'Memory'
+type Entry = { id:string; title:string; date:string; type:Kind; to:string; location:string; excerpt:string; year:number; latitude:number|null; longitude:number|null; emoji:string|null }
+const props=defineProps<{mode:'timeline'|'search'|'anniversary'|'map'}>()
+const route=useRoute()
+const entries=ref<Entry[]>([]),query=ref(''),kind=ref('All'),loading=ref(true),error=ref(''),selected=ref<string|null>(null)
+const copy={timeline:{eyebrow:'THE YEARS YOU HAVE LIVED',title:'A life in little moments.',description:'Every note, place, and journey—gathered along the way.'},search:{eyebrow:'YOUR PERSONAL ARCHIVE',title:'Find the feeling again.',description:'Search the words, places, and days you have kept.'},anniversary:{eyebrow:'A NOTE FROM THE PAST',title:'On this day.',description:'Small windows back into days that still matter.'},map:{eyebrow:'PLACES YOU HAVE KEPT',title:'The world, in your footsteps.',description:'A map of the places woven into your memories.'}} as const
+const title=computed(()=>copy[props.mode])
+const kinds=computed(()=>['All',...new Set(entries.value.map(e=>e.type))])
+const results=computed(()=>entries.value.filter(e=>{
+  const matchesKind=kind.value==='All'||e.type===kind.value
+  const term=query.value.trim().toLowerCase()
+  const matchesQuery=!term||`${e.title} ${e.location} ${e.excerpt}`.toLowerCase().includes(term)
+  if(props.mode==='anniversary'){
+    const now=new Date(), today=`${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+    return matchesKind&&e.date.slice(5,10)===today&&e.year<now.getFullYear()
+  }
+  if(props.mode==='map') return matchesKind&&e.latitude!==null&&e.longitude!==null&&matchesQuery
+  return matchesKind&&matchesQuery
 }))
-onMounted(async () => {
-  try {
-    const user = await requireUser()
-    // Fetch all pages; PostgREST caps each request, so a single select silently truncates timelines.
-    for (const table of ['journal_entries','trips','memories'] as const) {
-      for (let offset=0; ; offset+=500) {
-        let request = supabase.from(table).select('*').eq('user_id',user.id).is('deleted_at',null).order('id').range(offset,offset+499)
-        if (route.params.tripId) request = table === 'trips' ? request.eq('id',String(route.params.tripId)) : request.filter('trip_id','eq',String(route.params.tripId))
-        const { data, error: failure } = await request
-        if (failure) throw failure
-        for (const row of data || []) {
-          items.value.push({ id: row.id, title: row.title, type: table === 'journal_entries' ? 'Journal' : table === 'trips' ? 'Trip' : 'Memory',
-            date: ('entry_date' in row ? row.entry_date : 'start_date' in row ? row.start_date : 'memory_date' in row ? row.memory_date : null) || row.created_at.slice(0,10),
-            to: `/${table === 'journal_entries' ? 'journal' : table}/${row.id}`,
-            latitude: 'latitude' in row ? row.latitude : null, longitude: 'longitude' in row ? row.longitude : null,
-            location: 'location_name' in row ? row.location_name : 'destination' in row ? row.destination : null })
-        }
-        if (!data || data.length<500) break
-      }
+const years=computed(()=>[...new Set(results.value.map(e=>e.year))])
+const featured=computed(()=>results.value[0]??null)
+const selectedEntry=computed(()=>results.value.find(e=>e.id===selected.value)??null)
+function dateLabel(value:string){return new Date(`${value}T12:00:00`).toLocaleDateString('en-PH',{month:'long',day:'numeric',year:'numeric'})}
+function groupLabel(year:number){return `${year}`}
+function kindLabel(type:Kind){return type==='Journal'?'A page from your journal':type==='Trip'?'A journey you planned':'A memory you saved'}
+async function load(){loading.value=true;error.value='';entries.value=[]
+ try{
+  const user=await requireUser()
+  for(const table of ['journal_entries','trips','memories'] as const){
+   for(let offset=0;;offset+=500){
+    let request=supabase.from(table).select('*').eq('user_id',user.id).is('deleted_at',null).order('id').range(offset,offset+499)
+    if(route.params.tripId)request=table==='trips'?request.eq('id',String(route.params.tripId)):request.filter('trip_id','eq',String(route.params.tripId))
+    const {data,error:problem}=await request;if(problem)throw problem
+    for(const row of data||[]){
+      const date=('entry_date'in row?row.entry_date:'start_date'in row?row.start_date:'memory_date'in row?row.memory_date:null)||row.created_at.slice(0,10)
+      entries.value.push({id:row.id,title:row.title,date,type:table==='journal_entries'?'Journal':table==='trips'?'Trip':'Memory',to:`/${table==='journal_entries'?'journal':table}/${row.id}`,
+       location:'location_name'in row?row.location_name||'':'destination'in row?row.destination||'':'',excerpt:'content'in row?row.content:'description'in row?row.description||'':'',year:Number(date.slice(0,4)),
+       latitude:'latitude'in row?row.latitude:'destination_latitude'in row?row.destination_latitude:null,longitude:'longitude'in row?row.longitude:'destination_longitude'in row?row.destination_longitude:null,emoji:'mood_emoji'in row?row.mood_emoji:null})
     }
-    items.value.sort((a,b) => b.date.localeCompare(a.date))
-  } catch (e) { error.value = (e as Error).message }
-  finally { loading.value=false }
-})
+    if(!data||data.length<500)break
+   }
+  }
+  entries.value.sort((a,b)=>b.date.localeCompare(a.date))
+ }catch(e){error.value=(e as Error).message||'Your archive could not be loaded.'}finally{loading.value=false}
+}
+onMounted(()=>void load())
 </script>
 <template>
-  <section class="space-y-5">
-    <h1 class="text-3xl">{{ titles[mode] }}</h1>
-    <label class="block">Find a title or place<input v-model="query" type="search" class="block border rounded p-3 w-full mt-2" /></label>
-    <p v-if="error" role="alert" class="text-red-700">{{ error }}</p>
-    <p v-else-if="loading">Loading your memories…</p>
-    <template v-else>
-      <svg v-if="mode==='map' && visible.length" viewBox="0 0 720 360" role="img" aria-label="Locations by longitude and latitude" class="w-full bg-amber-50 border rounded">
-        <path d="M0 180H720M360 0V360" stroke="#d7c7b3" />
-        <a v-for="item in visible" :key="item.id" :href="item.to"><circle :cx="(item.longitude!+180)*2" :cy="(90-item.latitude!)*2" r="5" fill="#7b0323"><title>{{ item.title }} — {{ item.location }}</title></circle></a>
-      </svg>
-      <p v-if="!visible.length">No matching memories yet.</p>
-      <ul class="grid gap-4 md:grid-cols-2"><li v-for="item in visible" :key="item.id" class="p-5 border rounded bg-white/60">
-        <span class="text-sm">{{ item.type }} · {{ item.date }}</span>
-        <RouterLink :to="item.to" class="block text-xl underline mt-2">{{ item.title }}</RouterLink><p v-if="item.location">{{ item.location }}</p>
-      </li></ul>
-    </template>
+ <main class="archive-page" :class="`archive-${mode}`">
+  <section class="archive-hero"><div class="archive-wrap"><p class="archive-eyebrow">{{title.eyebrow}}</p><h1>{{title.title}}</h1><p class="archive-intro">{{title.description}}</p>
+   <div class="archive-toolbar" v-if="mode==='search'||mode==='timeline'||mode==='map'"><label class="archive-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 5 5"/></svg><input v-model="query" type="search" :placeholder="mode==='map'?'Find a saved place…':'Search your archive…'" :aria-label="mode==='map'?'Search saved places':'Search entries, places and notes'" /></label><RouterLink v-if="mode==='search'" class="archive-write" :to="{name:'journal.create'}">Write a page <span aria-hidden="true">↗</span></RouterLink></div>
+  </div></section>
+  <section class="archive-wrap archive-body">
+   <div v-if="loading" class="archive-loading" role="status"><span></span><p>Gathering your pages…</p></div>
+   <div v-else-if="error" class="archive-empty"><span class="empty-mark">↺</span><h2>Your archive is just out of reach.</h2><p>{{error}}</p><button class="archive-button" @click="load">Try again</button></div>
+   <template v-else-if="mode==='map'">
+    <div class="archive-countline"><span><strong>{{results.length}}</strong> places remembered</span><span v-if="results.length">Select a note to see where that moment lives.</span></div>
+    <SavedPlacesMap :places="results" :selected-id="selected" @select="selected=$event" />
+    <article v-if="selectedEntry" class="map-selected"><div><span class="archive-chip">{{selectedEntry.type}}</span><time>{{dateLabel(selectedEntry.date)}}</time></div><div><h2>{{selectedEntry.title}}</h2><p v-if="selectedEntry.location">{{selectedEntry.location}}</p></div><RouterLink :to="selectedEntry.to" aria-label="Open memory">Open memory <span aria-hidden="true">↗</span></RouterLink></article>
+    <div v-else-if="!results.length" class="archive-empty map-empty"><span class="empty-mark">✳</span><h2>Your map is waiting for its first pin.</h2><p>Add a place while writing a journal page, planning a trip, or saving a memory. Notes without saved coordinates stay off the map.</p><RouterLink class="archive-button" :to="{name:'journal.create'}">Write about a place</RouterLink></div>
+   </template>
+   <template v-else-if="mode==='anniversary'">
+    <div class="anniversary-date"><span>THE CALENDAR TURNED</span><strong>{{new Date().toLocaleDateString('en-PH',{month:'long',day:'numeric'})}}</strong><i></i></div>
+    <article v-if="featured" class="anniversary-feature"><div class="feature-copy"><p class="archive-eyebrow">{{kindLabel(featured.type)}} · {{featured.year}}</p><h2>{{featured.title}}</h2><time>{{dateLabel(featured.date)}}</time><p class="feature-excerpt">{{featured.excerpt||'You left this day a place in your story.'}}</p><p v-if="featured.location" class="feature-location">⌖ {{featured.location}}</p><RouterLink class="archive-button" :to="featured.to">Return to this day <span aria-hidden="true">↗</span></RouterLink></div><span class="feature-number" aria-hidden="true">{{featured.emoji||'✳'}}</span></article>
+    <div v-if="results.length>1" class="anniversary-more"><h2>And in the years around it</h2><article v-for="entry in results.slice(1)" :key="entry.id" class="anniversary-row"><time>{{entry.year}}</time><span class="archive-chip">{{entry.type}}</span><div><h3>{{entry.title}}</h3><p>{{entry.excerpt||entry.location||'A day you chose to remember.'}}</p></div><RouterLink :to="entry.to" :aria-label="`Open ${entry.title}`">↗</RouterLink></article></div>
+    <div v-else-if="!featured" class="archive-empty"><span class="empty-mark">☼</span><h2>No note from this date yet.</h2><p>Every good story starts somewhere. Leave a page for your future self to find.</p><RouterLink class="archive-button" :to="{name:'journal.create'}">Write today's page</RouterLink></div>
+   </template>
+   <template v-else-if="mode==='timeline'">
+    <div class="archive-countline"><span><strong>{{results.length}}</strong> moments across <strong>{{years.length}}</strong> {{years.length===1?'year':'years'}}</span><div class="kind-filters" aria-label="Filter timeline"><button v-for="option in kinds" :key="option" :aria-pressed="kind===option" @click="kind=option">{{option}}</button></div></div>
+    <div v-if="results.length" class="timeline"><section v-for="year in years" :key="year" class="timeline-year"><h2>{{groupLabel(year)}}</h2><div class="timeline-list"><article v-for="entry in results.filter(row=>row.year===year)" :key="entry.id" class="timeline-entry"><time>{{new Date(`${entry.date}T12:00:00`).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}}</time><span class="timeline-dot" aria-hidden="true"></span><div class="timeline-card"><div><span class="archive-chip">{{entry.type}}</span><span v-if="entry.location" class="timeline-place">⌖ {{entry.location}}</span></div><h3><span v-if="entry.emoji" aria-hidden="true">{{entry.emoji}} </span>{{entry.title}}</h3><p>{{entry.excerpt||'A page you chose to keep.'}}</p><RouterLink :to="entry.to">Return to this moment <span aria-hidden="true">↗</span></RouterLink></div></article></div></section></div>
+    <div v-else class="archive-empty"><span class="empty-mark">⌁</span><h2>A good story can start today.</h2><p>Your timeline will grow as you save journal pages, trips, and memories.</p><RouterLink class="archive-button" :to="{name:'journal.create'}">Write your first page</RouterLink></div>
+   </template>
+   <template v-else>
+    <div class="archive-countline"><span><strong>{{results.length}}</strong> {{results.length===1?'result':'results'}}</span><div class="kind-filters" aria-label="Filter search results"><button v-for="option in kinds" :key="option" :aria-pressed="kind===option" @click="kind=option">{{option}}</button></div></div>
+    <div v-if="results.length" class="search-results"><article v-for="entry in results" :key="entry.id" class="search-result"><time>{{dateLabel(entry.date)}}</time><div><div class="result-meta"><span class="archive-chip">{{entry.type}}</span><span v-if="entry.location">⌖ {{entry.location}}</span></div><h2><RouterLink :to="entry.to">{{entry.title}}</RouterLink></h2><p>{{entry.excerpt||'A day kept in your archive.'}}</p></div><RouterLink class="result-arrow" :to="entry.to" :aria-label="`Open ${entry.title}`">↗</RouterLink></article></div>
+    <div v-else class="archive-empty"><span class="empty-mark">⌕</span><h2>{{query?'Nothing in the archive matches that search.':'Start with a word, a place, or a feeling.'}}</h2><p>{{query?'Try another title or location, or clear the search.':'Your pages will be easy to find here whenever you need them.'}}</p><button v-if="query" class="archive-button" @click="query='';kind='All'">Clear search</button><RouterLink v-else class="archive-button" :to="{name:'journal.create'}">Write a page</RouterLink></div>
+   </template>
   </section>
+ </main>
 </template>
+<style scoped>
+.archive-page{--wine:#74283c;--wine-dark:#57202f;--ink:#34291f;--muted:#807566;--paper:#fbf7ef;--line:#e7ddcc;--olive:#73806a;min-height:75vh;color:var(--ink);padding-bottom:80px}.archive-wrap{width:min(100% - 40px,980px);margin:0 auto}.archive-hero{background:linear-gradient(110deg,#fffaf2 2%,#f4eddf 100%);border-bottom:1px solid var(--line);position:relative;overflow:hidden}.archive-hero:after{content:'✳';position:absolute;right:max(4vw,calc((100vw - 1160px)/2));top:-69px;font-size:290px;line-height:1;color:#74283c08;pointer-events:none}.archive-hero>.archive-wrap{position:relative;z-index:1;padding:61px 0 42px}.archive-eyebrow,.archive-search,.archive-chip,.anniversary-date span{font-size:10px;letter-spacing:.17em;text-transform:uppercase}.archive-eyebrow{color:var(--wine);font-weight:700;margin:0 0 14px}.archive-hero h1{font:clamp(36px,7vw,57px)/1.06 Georgia,'Times New Roman',serif;letter-spacing:-.04em;margin:0;max-width:700px}.archive-intro{color:#756857;font:16px/1.7 Georgia,serif;margin:13px 0 0;max-width:540px}.archive-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:28px;max-width:720px}.archive-search{display:flex;align-items:center;gap:10px;min-height:48px;width:min(100%,500px);padding:0 15px;border:1px solid #d9cebd;background:#fffdf9;border-radius:5px;letter-spacing:normal;text-transform:none}.archive-search:focus-within{outline:2px solid #74283c36;border-color:var(--wine)}.archive-search svg{height:18px;width:18px;fill:none;stroke:#95866f;stroke-width:1.7;flex-shrink:0}.archive-search input{width:100%;border:0!important;outline:0!important;background:none;color:var(--ink);font:15px Georgia,serif}.archive-search input::placeholder{color:#a69a87}.archive-write{color:var(--wine);font-weight:650;font-size:13px;white-space:nowrap}.archive-body{padding-top:30px}.archive-countline{display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--muted);font-size:13px;margin-bottom:23px}.archive-countline>span strong{color:var(--ink);font:20px Georgia,serif}.kind-filters{display:flex;gap:7px;flex-wrap:wrap}.kind-filters button,.archive-button{display:inline-flex;justify-content:center;align-items:center;gap:9px;min-height:42px;padding:0 15px;border:1px solid #d9cebd;background:#fffdf9;color:#614b40;border-radius:3px;font-size:12px;transition:background .16s,color .16s}.kind-filters button[aria-pressed=true],.archive-button{background:var(--wine);border-color:var(--wine);color:white}.archive-button:hover{background:var(--wine-dark);color:white}.archive-empty{margin:25px auto 0;max-width:550px;padding:65px 24px;text-align:center;background:linear-gradient(145deg,#fffdf9,#f5edde);border:1px solid var(--line);border-radius:6px}.empty-mark{display:grid;place-items:center;margin:0 auto 20px;width:54px;height:54px;border-radius:50%;border:1px solid #bca88a;color:var(--wine);font:28px Georgia,serif}.archive-empty h2{font:27px/1.2 Georgia,serif;margin:0 0 10px}.archive-empty p{color:var(--muted);font:15px/1.7 Georgia,serif;margin:0 auto 22px;max-width:395px}.archive-loading{text-align:center;padding:95px 10px;color:var(--muted);font:16px Georgia,serif}.archive-loading span{display:block;width:34px;height:34px;border:2px solid var(--line);border-top-color:var(--wine);border-radius:50%;margin:auto;animation:archive-spin .8s linear infinite}@keyframes archive-spin{to{transform:rotate(360deg)}}.search-results{border-top:1px solid var(--line)}.search-result{display:grid;grid-template-columns:124px minmax(0,1fr) 36px;gap:18px;align-items:start;padding:22px 10px;border-bottom:1px solid var(--line)}.search-result>time{font-size:12px;color:#827662;padding-top:5px}.result-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:#897a64}.archive-chip{display:inline-flex;align-items:center;padding:5px 8px;background:#eee8d9;color:#75634d;border-radius:2px;letter-spacing:.1em;font-size:9px;font-weight:700}.search-result h2{font:23px Georgia,serif;margin:7px 0}.search-result h2 a:hover,.timeline-card a:hover,.anniversary-row>a:hover{color:var(--wine);text-decoration:underline}.search-result p{color:var(--muted);font:14px/1.6 Georgia,serif;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.result-arrow{display:grid;place-items:center;width:36px;height:36px;color:var(--wine);border:1px solid var(--line);border-radius:50%}.timeline-year{display:grid;grid-template-columns:120px 1fr;gap:25px;padding-bottom:30px}.timeline-year>h2{font:34px Georgia,serif;color:var(--wine);margin:7px 0}.timeline-list{border-left:1px solid #c8b89e}.timeline-entry{position:relative;display:grid;grid-template-columns:64px 1fr;gap:18px;padding:0 0 20px 20px}.timeline-entry>time{text-align:right;color:#847763;font-size:12px;padding-top:8px}.timeline-dot{position:absolute;left:-6px;top:11px;width:11px;height:11px;border-radius:50%;background:#fbf7ef;border:2px solid var(--wine)}.timeline-card{background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:17px 19px}.timeline-card>div{display:flex;align-items:center;gap:11px;flex-wrap:wrap}.timeline-place{font-size:11px;color:var(--muted)}.timeline-card h3{font:21px Georgia,serif;margin:11px 0 5px}.timeline-card>p{font:13px/1.6 Georgia,serif;color:var(--muted);margin:0 0 13px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.timeline-card>a{font-size:11px;font-weight:650;color:var(--wine)}.anniversary-date{display:flex;align-items:center;gap:17px;color:#806e57;margin:5px 0 22px}.anniversary-date span{white-space:nowrap}.anniversary-date strong{font:italic 19px Georgia,serif;color:var(--wine);white-space:nowrap}.anniversary-date i{height:1px;background:var(--line);width:100%}.anniversary-feature{display:grid;grid-template-columns:1fr 130px;gap:24px;align-items:center;padding:clamp(24px,5vw,48px);background:#eee7d8;border:1px solid #dfd2be;border-radius:5px;position:relative;overflow:hidden}.feature-copy{position:relative;z-index:1}.feature-copy .archive-eyebrow{font-size:9px}.anniversary-feature h2{font:clamp(30px,5vw,47px)/1.1 Georgia,serif;margin:5px 0 10px;max-width:580px}.anniversary-feature time{color:var(--muted);font-size:12px}.feature-excerpt{font:16px/1.75 Georgia,serif;color:#695c4d;max-width:550px;margin:20px 0 6px}.feature-location{color:var(--olive);font-size:12px;margin:6px 0 23px}.anniversary-feature .archive-button{text-decoration:none}.feature-number{display:grid;place-items:center;width:118px;height:118px;border:1px solid #ad997b;border-radius:50%;font:48px Georgia,serif;color:var(--wine);background:#f7f1e5}.anniversary-more{margin:37px 0 0}.anniversary-more>h2{font:24px Georgia,serif;margin:0 0 14px}.anniversary-row{display:grid;grid-template-columns:68px auto minmax(0,1fr) 40px;gap:13px;align-items:center;padding:16px 6px;border-top:1px solid var(--line)}.anniversary-row>time{font:24px Georgia,serif;color:var(--wine)}.anniversary-row h3{font:18px Georgia,serif;margin:0 0 4px}.anniversary-row p{font-size:12px;color:var(--muted);margin:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.anniversary-row>a{color:var(--wine);font-size:20px}.map-selected{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 15px;align-items:center;border-top:1px solid var(--line);padding:16px 4px;margin-top:15px}.map-selected>div:first-child{grid-column:1/-1;display:flex;align-items:center;gap:11px}.map-selected time{font-size:11px;color:var(--muted)}.map-selected h2{font:21px Georgia,serif;margin:0 0 4px}.map-selected p{margin:0;font-size:12px;color:var(--muted)}.map-selected>a{color:var(--wine);font-size:12px;font-weight:650}.map-empty{margin-top:28px}@media(max-width:650px){.archive-wrap{width:min(100% - 30px,980px)}.archive-hero>.archive-wrap{padding:40px 0 30px}.archive-hero h1{font-size:39px}.archive-toolbar{align-items:stretch;flex-direction:column}.archive-countline{align-items:flex-start;flex-direction:column}.timeline-year{grid-template-columns:62px 1fr;gap:13px}.timeline-year>h2{font-size:24px}.timeline-entry{grid-template-columns:46px 1fr;gap:11px;padding-left:15px}.timeline-card{padding:14px}.timeline-card h3{font-size:18px}.search-result{grid-template-columns:1fr 34px;gap:5px}.search-result>time{grid-column:1/-1}.search-result>div:nth-child(2){grid-column:1;grid-row:2}.result-arrow{grid-column:2;grid-row:2}.anniversary-feature{grid-template-columns:1fr;gap:18px}.feature-number{position:absolute;right:16px;top:16px;width:48px;height:48px;font-size:23px;opacity:.6}.anniversary-feature h2{padding-right:30px}.anniversary-row{grid-template-columns:48px auto minmax(0,1fr) 30px;gap:7px}.anniversary-row .archive-chip{grid-column:2}.anniversary-row>div{grid-column:3;grid-row:1}.anniversary-row>a{grid-column:4;grid-row:1}.anniversary-row p{max-width:150px}}
+</style>
