@@ -43,3 +43,4 @@ frontend/.vercel/
 # Local browser regression artifacts
 frontend/test-results/
 frontend/playwright-report/
+frontend/.env.*.local

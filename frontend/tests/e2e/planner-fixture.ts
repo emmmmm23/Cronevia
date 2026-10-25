@@ -7,6 +7,8 @@ const uid=(n:number)=>'66666666-6666-4666-8666-'+String(n).padStart(12,'0')
 const blank=()=>({version:1,pages:[{id:'page-left',elements:[]},{id:'page-right',elements:[]}]})
 // These are local fixtures, never real account data or hosted persistence.
 export async function fixture(page:Page){
+ // Block paid basemap traffic in fixture tests; provider connectivity is checked separately.
+ await page.route('https://api.mapbox.com/**', route => route.abort())
  const user={id:owner,email:'planner@example.test',aud:'authenticated',role:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-10-14T00:00:00Z'}
  const session={access_token:Buffer.from(JSON.stringify({alg:'HS256'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated'})).toString('base64url')+'.fixture',refresh_token:'fixture',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}
  await page.addInitScript(({key,session})=>localStorage.setItem(key,JSON.stringify(session)),{key:'sb-'+host.split('.')[0]+'-auth-token',session})

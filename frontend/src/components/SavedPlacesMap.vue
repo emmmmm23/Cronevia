@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { mapStyle, addMapBranding } from '@/services/map-style'
 import { onBeforeUnmount,onMounted,ref,watch } from 'vue'
 import type * as MapLibre from 'maplibre-gl'
 import { validCoordinates } from '@/types/destination'
@@ -21,7 +22,7 @@ function draw(){if(!map)return;markers.forEach(marker=>marker.remove());markers=
 }
 function focus(){const point=props.places.find(item=>item.id===props.selectedId);if(point&&validCoordinates(point.latitude,point.longitude))map?.flyTo({center:[point.longitude!,point.latitude!],zoom:10,duration:450})}
 watch(()=>props.places,draw,{deep:true});watch(()=>props.selectedId,focus)
-onMounted(async()=>{try{maplibre=(await import('maplibre-gl')).default;if(disposed||!canvas.value)return;map=new maplibre.Map({container:canvas.value,center:[122,12],zoom:4,style:{version:8,sources:{paper:{type:'raster',tiles:[import.meta.env.VITE_MAP_TILE_URL||'https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:19,attribution:import.meta.env.VITE_MAP_ATTRIBUTION||'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}},layers:[{id:'paper',type:'raster',source:'paper'}]}});map.addControl(new maplibre.NavigationControl({showCompass:false}));map.on('load',draw)}catch{/* The accompanying place index remains usable when tiles are unavailable. */}})
+onMounted(async()=>{try{maplibre=(await import('maplibre-gl')).default;if(disposed||!canvas.value)return;map=new maplibre.Map({container:canvas.value,center:[122,12],zoom:4,style:mapStyle()});addMapBranding(map);map.addControl(new maplibre.NavigationControl({showCompass:false}));map.on('load',draw)}catch{/* The accompanying place index remains usable when tiles are unavailable. */}})
 onBeforeUnmount(()=>{disposed=true;markers.forEach(marker=>marker.remove());map?.remove()})
 </script>
 <template><div class="saved-map-frame"><div class="saved-map-heading"><div><span class="map-compass">N</span><span>YOUR PERSONAL ATLAS</span></div><small>{{places.length}} remembered {{places.length===1?'place':'places'}}</small></div><div ref="canvas" class="saved-map-canvas" role="img" aria-label="Map of the places you have saved"/><div class="map-imprint"><span>CRONEVIA · FIELD ATLAS</span><span>YOUR PLACES, KEPT CLOSE</span></div></div></template>
