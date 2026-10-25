@@ -11,6 +11,7 @@ const formError = ref(''), collectionError = ref(''), notice = ref('')
 const activeFilter = ref<Filter>('all')
 const titleInput = ref<HTMLInputElement>(), dateInput = ref<HTMLInputElement>()
 const readingDialog = ref<HTMLDialogElement>()
+const collectionHeading = ref<HTMLHeadingElement>()
 const opened = ref<{ title: string; message: string; date: string } | null>(null)
 const utcToday = () => new Date().toISOString().slice(0, 10)
 const tomorrow = computed(() => {
@@ -55,6 +56,12 @@ function chooseDate(months: number) {
 function startWriting() {
   titleInput.value?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' })
   titleInput.value?.focus({ preventScroll: true })
+}
+async function viewCollection(filter: Filter) {
+  activeFilter.value = filter
+  await nextTick()
+  collectionHeading.value?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })
+  collectionHeading.value?.focus({ preventScroll: true })
 }
 function errorMessage(error: unknown, fallback: string) {
   return error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
@@ -161,6 +168,12 @@ onMounted(() => void load())
         </div>
       </header>
 
+      <nav class="capsule-overview" aria-label="Capsule overview">
+        <div class="overview-intro"><span class="overview-mark" aria-hidden="true">C</span><div><p>A small archive of you</p><span>Written today. Rediscovered someday.</span></div></div>
+        <button type="button" @click="viewCollection('sealed')"><strong>{{ loading ? '—' : String(sealedCount).padStart(2, '0') }}</strong><span>Sealed for later</span></button>
+        <button type="button" class="ready-overview" @click="viewCollection('ready')"><strong>{{ loading ? '—' : String(readyCount).padStart(2, '0') }}</strong><span>Ready to open <span aria-hidden="true">↗</span></span></button>
+      </nav>
+
       <div v-if="notice" class="capsule-notice" role="status"><span aria-hidden="true">✓</span><p>{{ notice }}</p><button type="button" aria-label="Dismiss confirmation" @click="notice = ''">×</button></div>
 
       <div class="capsules-layout">
@@ -192,7 +205,7 @@ onMounted(() => void load())
         </section>
 
         <section class="capsule-collection" aria-labelledby="collection-title" :aria-busy="loading">
-          <div class="collection-heading"><div><p class="eyebrow">YOUR KEEPSAKE COLLECTION</p><h2 id="collection-title">Waiting for their moment.</h2></div><span class="collection-total">{{ loading ? '—' : String(capsules.length).padStart(2, '0') }}</span></div>
+          <div class="collection-heading"><div><p class="eyebrow">YOUR KEEPSAKE COLLECTION</p><h2 id="collection-title" ref="collectionHeading" tabindex="-1">{{ readyCount ? 'A moment has found you.' : 'Waiting for their moment.' }}</h2></div><span class="collection-total">{{ loading ? '—' : String(capsules.length).padStart(2, '0') }}</span></div>
           <p class="collection-description">Safely sealed. Patiently waiting. Always yours.</p>
           <div class="collection-filters" aria-label="Filter capsules">
             <button v-for="filter in filters" :key="filter.key" type="button" :aria-pressed="activeFilter === filter.key" @click="activeFilter = filter.key">{{ filter.label }} <span>{{ loading ? '—' : filter.count }}</span></button>
@@ -377,6 +390,28 @@ onMounted(() => void load())
 .reading-signature { color: #a18a69; font: italic 15px/1.7 'Crimson Text', Georgia, serif; }
 .reading-close { display: inline-flex; justify-content: center; align-items: center; gap: 22px; min-height: 44px; margin-top: 14px; padding: 11px 23px; border: 1px solid #c9b796; border-radius: 2px; color: var(--wine); font-size: 12px; cursor: pointer; }
 @keyframes capsule-breathe { from { opacity: .45; } to { opacity: 1; } }
+.capsule-overview { display: grid; grid-template-columns: 1fr auto auto; align-items: center; margin-top: 24px; border: 1px solid var(--line); background: #fbf7ed; border-radius: 5px; }
+.overview-intro { display: flex; align-items: center; gap: 14px; padding: 18px 22px; }
+.overview-mark { display: grid; place-items: center; width: 39px; height: 39px; border: 1px solid #c6b797; border-radius: 50%; color: var(--wine); font: italic 24px Georgia, serif; }
+.overview-intro p { margin: 0 0 4px; color: #675139; font: 20px 'Crimson Text', Georgia, serif; }
+.overview-intro div > span { color: #7b705f; font-size: 12px; }
+.capsule-overview > button { display: flex; align-items: center; gap: 14px; align-self: stretch; min-height: 76px; padding: 16px 25px; border-left: 1px solid var(--line); color: #705c40; text-align: left; cursor: pointer; }
+.capsule-overview > button:hover { background: #efe6d6; }
+.capsule-overview strong { font: 30px 'Crimson Text', Georgia, serif; }
+.capsule-overview > button > span { font-size: 12px; line-height: 1.5; }
+.capsule-overview > .ready-overview { color: #506144; background: #e9eddf; }
+#collection-title { scroll-margin-top: 90px; }
+.hero-description { color: #695e4e; }
+.field-label, .writing-heading > p:last-child { font-size: 14px; }
+.message-footer, .date-hint, .sealing-note { color: #796b55; font-size: 11px; }
+.date-shortcuts { color: #796b55; font-size: 11px; }
+.date-shortcuts button { min-height: 44px; font-size: 12px; color: #715d41; }
+.seal-button { min-height: 50px; font-size: 14px; }
+.collection-filters button { min-height: 44px; }
+.keepsake-footer time, .keepsake-footer button, .capsule-countdown { font-size: 12px; }
+.keepsake-content p { color: #7c684b; font-size: 16px; }
+.capsule-badge { font-size: 11px; }
+.reading-topline button, .capsule-notice button { min-width: 44px; min-height: 44px; }
 @media (min-width: 1400px) { .capsules-container { padding-top: 55px; } .capsules-hero { padding-bottom: 38px; } }
 @media (max-width: 1000px) { .capsules-container { padding: 35px 25px 25px; } .capsules-layout { gap: 25px; } .stationery { padding: 22px; } .collection-heading h2 { font-size: 24px; } .hero-copy h1 { font-size: 48px; } .hero-description { font-size: 17px; } .desktop-break { display: none; } .collection-filters button { gap: 4px; font-size: 10px; } }
 @media (max-width: 760px) {
@@ -400,5 +435,18 @@ onMounted(() => void load())
   .message-footer { font-size: 8px; }
 }
 @media (max-width: 370px) { .capsules-container { padding-inline: 13px; } .stationery { padding: 18px; } .collection-filters button { gap: 3px; font-size: 10px; } .keepsake-card { padding-inline: 14px; } .collection-heading h2 { font-size: 23px; } .capsule-category { font-size: 7px; } .opened-letter { padding-inline: 22px; } }
+@media (max-width: 760px) {
+  .capsule-overview { grid-template-columns: 1fr 1fr; margin-top: 20px; }
+  .overview-intro { grid-column: 1 / -1; padding: 16px; border-bottom: 1px solid var(--line); }
+  .capsule-overview > button { min-height: 70px; padding: 12px 16px; gap: 10px; }
+  .capsule-overview > button:first-of-type { border-left: 0; }
+  .title-input, .message-paper textarea { font-size: 18px; }
+  .date-shortcuts button, .collection-filters button { min-height: 44px; }
+  .message-footer { font-size: 10px; }
+  .keepsake-top { flex-wrap: wrap; }
+  .keepsake-footer { flex-wrap: wrap; gap: 4px 12px; }
+  .capsule-category { font-size: 9px; }
+  .collection-empty > button, .filtered-empty button { font-size: 14px; }
+}
 @media (prefers-reduced-motion: reduce) { .capsule-skeleton span { animation: none; } .seal-button { transition: none; } }
 </style>
