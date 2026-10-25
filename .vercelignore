@@ -9,7 +9,6 @@ frontend/node_modules
 frontend/dist
 frontend/.env
 frontend/.env.local
-frontend/scripts
 frontend/src/**/*.test.ts
 frontend/src/**/*.spec.ts
 *.md
