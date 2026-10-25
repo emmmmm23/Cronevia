@@ -42,7 +42,7 @@ async function load(){loading.value=true;error.value='';entries.value=[]
       const date=('entry_date'in row?row.entry_date:'start_date'in row?row.start_date:'memory_date'in row?row.memory_date:null)||row.created_at.slice(0,10)
       entries.value.push({id:row.id,title:row.title,date,type:table==='journal_entries'?'Journal':table==='trips'?'Trip':'Memory',to:`/${table==='journal_entries'?'journal':table}/${row.id}`,
        location:'location_name'in row?row.location_name||'':'destination'in row?row.destination||'':'',excerpt:'content'in row?row.content:'description'in row?row.description||'':'',year:Number(date.slice(0,4)),
-       latitude:'latitude'in row?row.latitude:'destination_latitude'in row?row.destination_latitude:null,longitude:'longitude'in row?row.longitude:'destination_longitude'in row?row.destination_longitude:null,emoji:'mood_emoji'in row?row.mood_emoji:null})
+       latitude:('latitude'in row?row.latitude:'destination_latitude'in row?row.destination_latitude:null)??null,longitude:('longitude'in row?row.longitude:'destination_longitude'in row?row.destination_longitude:null)??null,emoji:'mood_emoji'in row?row.mood_emoji:null})
     }
     if(!data||data.length<500)break
    }
