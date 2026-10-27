@@ -2,6 +2,7 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import DestinationPicker from './DestinationPicker.vue'
 const mocks=vi.hoisted(()=>({lookup:vi.fn(),gps:vi.fn(),fit:vi.fn(),options:vi.fn(),events:{} as Record<string,Function>}))
+vi.mock('@/services/google-map-tiles',()=>({usesGoogleMaps:false,mapSetupMessage:(_e:unknown,fallback:string)=>fallback}))
 vi.mock('@/services/places',()=>({lookupPlaces:mocks.lookup,locateOnce:mocks.gps,placeProvider:'Fixture'}))
 vi.mock('maplibre-gl',()=>({default:{Map:class {constructor(options:unknown){mocks.options(options)}addControl(){} on(name:string,fn:Function){mocks.events[name]=fn} jumpTo(){} fitBounds(...args:unknown[]){mocks.fit(...args)} resize(){} flyTo(){} remove(){} queryRenderedFeatures(){return []}},NavigationControl:class {},Marker:class {setLngLat(){return this}addTo(){return this}on(){}remove(){}}}}))
 let wrapper:VueWrapper<InstanceType<typeof DestinationPicker>>

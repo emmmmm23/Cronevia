@@ -1,11 +1,14 @@
 import type { IControl, Map, StyleSpecification } from 'maplibre-gl'
 import mapboxLogo from '@/assets/mapbox-logo.svg'
+import { usesGoogleMaps, googleMapStyle, addGoogleMapBranding } from './google-map-tiles'
+export { usesGoogleMaps, mapSetupMessage } from './google-map-tiles'
 
 const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim()
-export const usesMapbox = !!token
+export const usesMapbox = !usesGoogleMaps && !!token
 const mapboxAttribution = '© <a href="https://www.mapbox.com/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> <a href="https://apps.mapbox.com/feedback/">Improve this map</a>'
 
-export function mapStyle(): StyleSpecification {
+export async function mapStyle(): Promise<StyleSpecification> {
+  if (usesGoogleMaps) return googleMapStyle()
   return {
     version: 8,
     sources: {
@@ -24,6 +27,7 @@ export function mapStyle(): StyleSpecification {
 }
 
 export function addMapBranding(map: Map) {
+  if (usesGoogleMaps) return addGoogleMapBranding(map)
   if (!usesMapbox) return
   let element: HTMLAnchorElement | undefined
   const control: IControl = {

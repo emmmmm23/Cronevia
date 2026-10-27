@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { mapStyle, addMapBranding, usesMapbox } from '@/services/map-style'
+import { mapStyle, addMapBranding, usesMapbox, usesGoogleMaps, mapSetupMessage } from '@/services/map-style'
 import {ref,computed,nextTick,onBeforeUnmount} from 'vue'
 import type * as MapLibre from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -54,13 +54,13 @@ async function show(gps=false,place?:Place){if(props.disabled||open.value)return
  const snapshot=JSON.stringify([props.destination,props.location]);if(!initialized||snapshot!==savedSnapshot){label.value=props.destination;latitude.value=pin.value?String(props.location.destination_latitude):'';longitude.value=pin.value?String(props.location.destination_longitude):'';source.value=props.location.destination_source||'map';country.value='';providerPlace.value=null;address.value='';initialized=true;savedSnapshot=snapshot}notice.value='';mapError.value='';accuracy.value=null
  if(place){label.value=place.name;latitude.value=String(place.latitude);longitude.value=String(place.longitude);country.value=place.countryCode||'';providerPlace.value=place;address.value=place.address||''}
  await nextTick();dialog.value?.showModal();const opening=++mapGeneration
- try{maplibregl=(await import('maplibre-gl')).default;if(!open.value||opening!==mapGeneration)return
+ try{maplibregl=(await import('maplibre-gl')).default;const style=await mapStyle();if(!open.value||opening!==mapGeneration)return
   map=new maplibregl.Map({container:mapElement.value!,center:supported.value?[Number(longitude.value),Number(latitude.value)]:[122,12],zoom:supported.value?10:4,maxBounds:PH_NAVIGATION,
-   style:mapStyle()})
+   style})
   if(!supported.value)map.fitBounds(PH_BOUNDS,{padding:24,duration:0})
   addMapBranding(map);map.addControl(new maplibregl.NavigationControl({showCompass:false}));map.on('click',e=>{const feature=map?.queryRenderedFeatures?.(e.point).find(f=>typeof f.properties?.name==='string');setPoint(e.lngLat.lat,e.lngLat.lng);if(feature)label.value=String(feature.properties?.name).slice(0,255)})
   map.on('error',()=>{mapError.value='Map tiles are unavailable. Search and coordinate entry remain available.'});mapTimer=setTimeout(()=>{if(open.value)mapError.value='The map is taking longer than expected. Coordinate entry remains available.'},12000);map.on('load',()=>{clearTimeout(mapTimer);map?.resize()});syncMarker()
- }catch{mapError.value='This browser cannot display the map. Search, enter coordinates, or keep a text-only destination.'}
+ }catch(error){if(open.value&&opening===mapGeneration)mapError.value=mapSetupMessage(error,'This browser cannot display the map. Search, enter coordinates, or keep a text-only destination.')}
  if(pin.value&&!supported.value){notice.value='Checking this saved pin; its coordinates stay unchanged.';void reverse(++generation,true)}
  if(gps&&open.value&&opening===mapGeneration)await gpsLocation()
 }
@@ -85,7 +85,7 @@ onBeforeUnmount(()=>{invalidateSearch();close()})
  <header><div><h2>Explore the Philippines</h2><p class="hint">Search for a place or tap the map to explore nearby.</p></div><button type="button" aria-label="Close location picker" @click="close">×</button></header>
  <div class="dialog-search"><div class="search-row"><label class="sr-only" :for="inputId+'-map'">Search Philippine places</label><input :id="inputId+'-map'" v-model="mapQuery" placeholder="Where in the Philippines?" @input="invalidateSearch" @keydown.enter.prevent="search(true)" /><button type="button" :disabled="searchBusy||!mapQuery.trim()" @click="search(true)">Search</button></div><p role="status" class="hint">{{searchState}}</p><ul v-if="results.length" class="results" aria-label="Philippine search results"><li v-for="p in results" :key="p.providerId||p.name"><button type="button" @click="select(p,true)">{{p.name}}</button></li></ul></div>
  <nav class="mobile-tabs" aria-label="Discovery view"><button type="button" :aria-pressed="mobileTab==='map'" @click="changeTab('map')">Map</button><button type="button" :aria-pressed="mobileTab==='places'" @click="changeTab('places')">Places</button></nav>
- <div class="picker-body"><section class="map-column" :class="{'mobile-hidden':mobileTab!=='map'}"><div ref="mapElement" class="destination-map" aria-label="Destination map" /><p class="hint map-credit"><template v-if="usesMapbox"><a href="https://www.mapbox.com/" target="_blank" rel="noopener">? Mapbox</a> ? </template><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></p><p v-if="mapError" role="status" class="hint">{{mapError}}</p><p class="hint">Tap to place a pin; drag to refine. The initial view is not your current location.</p>
+ <div class="picker-body"><section class="map-column" :class="{'mobile-hidden':mobileTab!=='map'}"><div ref="mapElement" class="destination-map" aria-label="Destination map" /><p class="hint map-credit" v-if="!usesGoogleMaps"><template v-if="usesMapbox"><a href="https://www.mapbox.com/" target="_blank" rel="noopener">? Mapbox</a> ? </template><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></p><p v-if="mapError" role="status" class="hint">{{mapError}}</p><p class="hint">Tap to place a pin; drag to refine. The initial view is not your current location.</p>
   <div v-if="highlighted" class="highlight"><strong>{{highlighted.name}}</strong><p class="hint">Highlighted only. Your destination has not changed.</p><button type="button" @click="setPoint(highlighted.latitude,highlighted.longitude,'search',highlighted)">Choose this destination</button></div>
   <button type="button" :disabled="locating" @click="gpsLocation">{{locating?'Locating…':'Use my current location'}}</button><p v-if="accuracy!==null" class="hint">Approximate GPS accuracy: {{accuracy}} metres.</p><p role="status" class="hint">{{notice}}</p>
   <label>Place label<input v-model="label" maxlength="255" placeholder="Selected location" /></label><p v-if="address" class="hint">{{address}}</p>
