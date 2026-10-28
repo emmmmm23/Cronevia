@@ -13,6 +13,8 @@ declare module 'vue-router' {
 }
 
 const routes: RouteRecordRaw[] = [
+  // The public introduction must stay separate from the private app shell.
+  {path:'/',name:'landing',component:()=>import('@/pages/LandingPage.vue')},
   // Auth pages
   {
     path: '/login',
@@ -46,7 +48,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
     children: [
       {
-        path: '',
+        path: 'home',
         name: 'home',
         component: () => import('@/pages/HomePage.vue'),
       },
@@ -221,7 +223,7 @@ router.beforeEach(async (to) => {
   if(auth.isAuthenticated && (to.meta.requiresAuth||to.name==='verify-2fa'||to.name==='reset-password'))await auth.refreshSecurity()
   if(to.name==='verify-2fa'){
     if(!auth.isAuthenticated)return {name:'login'}
-    if(auth.securityChecked&&!auth.mfaRequired)return safeReturnPath(to.query.redirect)
+    if(auth.securityChecked&&!auth.mfaRequired)return safeReturnPath(to.query.redirect,'/home')
     return
   }
   if((to.meta.requiresAuth||to.name==='reset-password')&&!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.fullPath)}}

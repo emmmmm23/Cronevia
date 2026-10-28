@@ -27,5 +27,5 @@ const auth = useAuthStore()
  *   - Authenticated super admin: links to admin dashboard (/super-admin/dashboard)
  *   - Uses Vue Router RouterLink (no full page reload)
  */
-const logoRoute = computed(() => ({ name: !auth.isAuthenticated ? 'login' : auth.isSuperAdmin ? 'admin.dashboard' : 'home' }))
+const logoRoute = computed(() => ({ name: !auth.isAuthenticated ? 'landing' : auth.isSuperAdmin ? 'admin.dashboard' : 'home' }))
 </script>

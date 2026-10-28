@@ -3,7 +3,7 @@
     <div class="w-full max-w-md">
       <!-- Logo/Branding -->
       <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold text-[#8B4513] mb-2">Cronevia</h1>
+        <RouterLink :to="{name:'landing'}" aria-label="Cronevia home"><h1 class="text-4xl font-bold text-[#8B4513] mb-2">Cronevia</h1></RouterLink>
         <p class="text-gray-600 italic">Write today. Travel back anytime.</p>
       </div>
 
@@ -145,7 +145,7 @@ async function handleLogin() {
     if (result.success) {
       // Redirect to intended page or home
       password.value = ''
-      router.push(safeReturnPath(route.query.redirect))
+      router.push(safeReturnPath(route.query.redirect,'/home'))
     } else {
       errorMessage.value = result.error || 'Login failed. Please try again.'
     }

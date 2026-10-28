@@ -9,7 +9,7 @@
           <!-- Logo -->
           <div class="flex-shrink-0">
             <RouterLink 
-              to="/" 
+              :to="{name:'home'}"
               class="text-2xl font-bold text-[#7B0323] hover:opacity-80 transition-opacity"
               style="font-family: 'Playfair Display', Georgia, serif;"
             >

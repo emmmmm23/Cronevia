@@ -9,7 +9,7 @@ async function load(){
  busy.value=true;error.value=''
  try{
   await auth.refreshSecurity()
-  if(auth.securityChecked&&!auth.mfaRequired){await router.replace(safeReturnPath(route.query.redirect));return}
+  if(auth.securityChecked&&!auth.mfaRequired){await router.replace(safeReturnPath(route.query.redirect,'/home'));return}
   factors.value=await verifiedFactors();factor.value=factors.value[0]?.id||''
   if(!factors.value.length)error.value='Security verification could not finish. Retry, or sign out and sign in again.'
  }catch(e){error.value=accountError(e,'Your authenticator settings could not load. Please retry.')}
@@ -21,7 +21,7 @@ async function verify(){
  try{
   await verifyFactor(factor.value,code.value);code.value='';await auth.refreshSecurity()
   if(!auth.securityChecked||auth.mfaRequired)throw new Error('Security check incomplete')
-  await router.replace(safeReturnPath(route.query.redirect))
+  await router.replace(safeReturnPath(route.query.redirect,'/home'))
  }catch(e){code.value='';error.value=accountError(e,'That code could not be verified. Use the latest code from your authenticator app.')}
  finally{busy.value=false}
 }
