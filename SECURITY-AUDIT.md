@@ -47,7 +47,7 @@ Verification completed so far:
 - Legacy PHP changed files pass syntax checks. PHPUnit could not run because backend/vendor/autoload.php is absent. No backend database tests were run against a real database.
 - The existing npm lint command could not run because ESLint is not installed/configured in this checkout; vue-tsc passed. No unrelated lint tooling was added.
 
-Journal/memory regression: seven selected editing/archive/touch cases passed across the main run and targeted rerun, including six adaptive widths, custom-upload retry and long-writing save/reload. Live deployment/header verification is recorded below after completion.
+Journal/memory regression: seven selected editing/archive/touch cases passed across the main run and targeted rerun, including six adaptive widths, custom-upload retry and long-writing save/reload. Publication verification checks the live public HTTP headers and compiled account/theme markers. It does not exercise an actual user’s hosted authenticator or password; the authenticated browser scenarios use explicit local fixtures.
 
 ## Remaining risks and maintenance
 
