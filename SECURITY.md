@@ -32,7 +32,7 @@ The application keeps private image uploads in private buckets with existing MIM
 
 ## Hosting and secrets
 
-Only browser-safe values may use `VITE_`. Supabase publishable/anon keys rely on RLS and are public by design; browser map keys require referrer, API and quota restrictions. The Geoapify key stays server-side. Never place service-role keys in Vite configuration. The browser client rejects secret/service-role credentials. Example files contain placeholders. Environment/key files are ignored; `frontend/.env.production` is intentionally tracked public configuration and must never contain server secrets.
+Only browser-safe values may use `VITE_`. Supabase publishable/anon keys rely on RLS and are public by design; browser map keys require referrer, API and quota restrictions. The Geoapify key stays server-side. Never place service-role keys in Vite configuration. The build rejects server-only keys in public VITE_ variables before creating browser assets, and the browser client also rejects secret/service-role credentials. Example files contain placeholders. Environment/key files are ignored; `frontend/.env.production` is intentionally tracked public configuration and must never contain server secrets.
 
 Vercel headers enforce no framing, no object embedding, a self-only base URI, HTTPS upgrade, MIME sniffing prevention, a strict cross-origin referrer policy, limited browser permissions and non-caching of app responses. Versioned assets retain immutable caching. The fuller CSP begins in Report-Only mode to preserve existing fonts/maps/uploads; review actual violations before enforcing its script/style/connect restrictions. Report-Only is not an XSS enforcement boundary. No remote CSP reporting endpoint collecting private URLs has been added.
 

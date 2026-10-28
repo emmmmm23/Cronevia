@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import handler from '../api/places.js'
+import {validatePublicEnv} from './public-env.mjs'
 Object.assign(process.env,{GEOAPIFY_API_KEY:'server-fixture-only',SUPABASE_URL:'https://auth.example.test',SUPABASE_ANON_KEY:'public-fixture-only',APP_ORIGIN:'https://cronevia.vercel.app'})
 const original=globalThis.fetch
 async function request({method='GET',url='/api/places?q=Manila',origin,token=true,quota=true,quotaStatus=200,authStatus=200,providerStatus=200,rows}={}){
@@ -16,6 +17,11 @@ async function request({method='GET',url='/api/places?q=Manila',origin,token=tru
  return {...response,calls}
 }
 try{
+ validatePublicEnv({VITE_SUPABASE_ANON_KEY:'sb_publishable_fixture',VITE_GOOGLE_MAPS_API_KEY:'public-browser-fixture'})
+ assert.throws(()=>validatePublicEnv({VITE_SUPABASE_ANON_KEY:'sb_secret_fixture'}))
+ const serviceJwt='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url')+'.fixture'
+ assert.throws(()=>validatePublicEnv({VITE_SUPABASE_ANON_KEY:serviceJwt}))
+ assert.throws(()=>validatePublicEnv({VITE_GEOAPIFY_API_KEY:'fixture-server-key'}))
  assert.equal((await request({method:'POST'})).statusCode,405)
  assert.equal((await request({token:false})).statusCode,401)
  assert.equal((await request({origin:'https://untrusted.example'})).statusCode,403)

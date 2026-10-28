@@ -27,7 +27,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 if (supabaseAnonKey.startsWith('sb_secret_')) throw new Error('A server-only credential cannot be used by the browser.')
 try {
-  const payload = JSON.parse(atob(supabaseAnonKey.split('.')[1] || ''))
+  const payload = JSON.parse(atob((supabaseAnonKey.split('.')[1] || '').replace(/-/g,'+').replace(/_/g,'/')))
   if (payload.role === 'service_role') throw new Error('A server-only credential cannot be used by the browser.')
 } catch (error) {
   if (error instanceof Error && error.message.includes('server-only')) throw error

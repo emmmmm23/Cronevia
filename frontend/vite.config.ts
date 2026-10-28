@@ -1,10 +1,13 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 import themeColors from './scripts/theme-colors.mjs'
+import {validatePublicEnv} from './scripts/public-env.mjs'
 
-export default defineConfig({
+export default defineConfig(({mode})=>{
+  validatePublicEnv(loadEnv(mode,process.cwd(),'VITE_'))
+  return {
   base: '/',
   plugins: [
     vue(),
@@ -22,4 +25,5 @@ export default defineConfig({
   css: { postcss: { plugins: [themeColors()] } },
   build: { sourcemap: false },
   esbuild: { drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [] },
+  }
 })
