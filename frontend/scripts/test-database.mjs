@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { testTrackers } from './test-trackers-database.mjs'
 import { testAccountSecurity } from './test-account-security-database.mjs'
 import { testProfileAvatars } from './test-profile-avatars-database.mjs'
+import { testTrackerGrid } from './test-tracker-grid-database.mjs'
 
 async function main() {
 // Real PostgreSQL running locally in WASM; auth/storage platform schemas are test fixtures.
@@ -295,6 +296,7 @@ await rejected('SELECT * FROM profiles')
 await rejected('SELECT * FROM journal_entries')
 await rejected('SELECT * FROM get_user_statistics()')
 await testProfileAvatars(db,asUser,alice,bob,admin)
+await testTrackerGrid(db,asUser,alice,bob)
 await testAccountSecurity(db,asUser,alice,bob,admin)
 await db.close()
 console.log('PASS: migrations, profile bootstrap, CRUD, isolation, link ownership, admin authorization, private storage, suspension, ordering, and capsule locks.')

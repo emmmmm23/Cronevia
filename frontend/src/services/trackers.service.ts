@@ -47,6 +47,11 @@ export async function saveLog(trackerId:string,id:string,date:string,values:Trac
   return r.data as unknown as TrackerLog
 }
 export async function removeLog(id:string) { const r=await supabase.rpc('remove_tracker_log',{target_id:id});if(r.error)throw r.error }
+export async function saveGridDay(trackerId:string,date:string,previous:TrackerLog[],entries:import('@/types/tracker-grid').GridEntry[]){
+ const r=await supabase.rpc('save_tracker_grid_day',{target_tracker:trackerId,entry_date:date,expected_rows:asJson(previous.map(l=>({id:l.id,updated_at:l.updated_at}))),new_entries:asJson(entries)})
+ if(r.error){if(r.error.code==='40001')throw new Error('This day changed in another tab. Reload before editing.');throw r.error}
+ return r.data as unknown as TrackerLog[]
+}
 export async function removeTracker(id:string) { const r=await supabase.rpc('delete_creative_tracker',{target_id:id});if(r.error)throw r.error }
 export async function saveBoard(board:TrackerBoard) {
   const r=await supabase.rpc('save_tracker_board',{details:asJson(board)})

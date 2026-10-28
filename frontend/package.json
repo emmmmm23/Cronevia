@@ -15,7 +15,7 @@
     "check:supabase": "node scripts/check-supabase.mjs",
     "check:planner": "node scripts/check-trip-planner.mjs",
     "planner:bundle": "node scripts/build-trip-planner-upgrade.mjs",
-    "check:planner-release": "node scripts/check-trip-planner.mjs --production && node scripts/check-trackers.mjs --production && node scripts/check-account-security.mjs --production && node scripts/check-profile-avatars.mjs --production && npm run build",
+    "check:planner-release": "node scripts/check-trip-planner.mjs --production && node scripts/check-trackers.mjs --production && node scripts/check-account-security.mjs --production && node scripts/check-profile-avatars.mjs --production && node scripts/check-tracker-grid.mjs --production && npm run build",
     "check:trackers": "node scripts/check-trackers.mjs",
     "trackers:bundle": "node scripts/build-tracker-upgrade.mjs",
     "test:trackers": "vitest run src/types/trackers.test.ts",
@@ -23,7 +23,8 @@
     "check:security": "node scripts/check-security.mjs",
     "test:security": "node scripts/test-security-api.mjs && vitest run src/services/account-security.test.ts src/services/safe-attribution.test.ts",
     "check:account-security": "node scripts/check-account-security.mjs",
-    "check:profile-avatars": "node scripts/check-profile-avatars.mjs"
+    "check:profile-avatars": "node scripts/check-profile-avatars.mjs",
+    "check:tracker-grid": "node scripts/check-tracker-grid.mjs"
   },
   "dependencies": {
     "@sentry/vue": "^8.0.0",

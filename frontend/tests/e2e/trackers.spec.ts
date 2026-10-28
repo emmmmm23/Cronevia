@@ -1,33 +1,9 @@
 import { test, expect, type Page, type Locator } from '@playwright/test'
-import { fixture, noOverflow, landscape } from './planner-fixture'
+import { noOverflow, landscape } from './planner-fixture'
 import { mkdir } from 'node:fs/promises'
+import {trackersFixture} from './tracker-fixture'
 import { defaultConfig, defaultDesign } from '../../src/types/trackers'
 
-async function trackersFixture(page:Page){
- const core=await fixture(page)
- const trackers:any[]=[],logs:any[]=[]
- let board:any=null,failLog=false
- const json=(route:any,value:any,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)})
- await page.route('**/rest/v1/creative_trackers?**',route=>json(route,trackers))
- await page.route('**/rest/v1/tracker_logs?**',route=>json(route,logs))
- await page.route('**/rest/v1/tracker_boards?**',route=>json(route,board))
- await page.route('**/rest/v1/rpc/save_creative_tracker',route=>{
-  const p=route.request().postDataJSON(),old=trackers.find(t=>t.id===p.target_id)
-  const row={...p.details,id:p.target_id,user_id:'11111111-1111-4111-8111-111111111111',created_at:old?.created_at||new Date().toISOString()}
-  if(old)Object.assign(old,row);else trackers.push(row)
-  return json(route,row)
- })
- await page.route('**/rest/v1/rpc/save_tracker_log',route=>{
-  if(failLog){failLog=false;return json(route,{message:'The connection paused. Please retry.'},500)}
-  const p=route.request().postDataJSON(),t=trackers.find(t=>t.id===p.target_tracker)
-  const existing=logs.find(l=>l.tracker_id===t.id&&(t.kind==='sleep'||t.config.multiple?l.id===p.entry_id:l.log_date===p.entry_date))
-  const row={id:existing?.id||p.entry_id,tracker_id:t.id,user_id:t.user_id,log_date:p.entry_date,values:p.entry_values,started_at:p.session_start,ended_at:p.session_end,timezone:p.entry_timezone,config_snapshot:t.config,unit_snapshot:t.unit,created_at:new Date().toISOString(),updated_at:new Date().toISOString()}
-  if(existing)Object.assign(existing,row);else logs.push(row)
-  return json(route,row)
- })
- await page.route('**/rest/v1/rpc/save_tracker_board',route=>{board={...route.request().postDataJSON().details,user_id:'11111111-1111-4111-8111-111111111111'};return json(route,board)})
- return {trackers,logs,image:core.image,failNextLog(){failLog=true},setBoard(value:any){board=value}}
-}
 async function shot(page:Page,name:string){await mkdir('test-results/trackers',{recursive:true});await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0)});await page.screenshot({path:'test-results/trackers/'+name+'.png',fullPage:true})}
 for(const width of [390,1440])test('paper tracker journey at '+width+'px',async({page})=>{
  const f=await trackersFixture(page);await page.setViewportSize({width,height:1000})
@@ -45,30 +21,15 @@ for(const width of [390,1440])test('paper tracker journey at '+width+'px',async(
  await expect(page.getByRole('status')).toContainText('Your tracker is saved')
  await page.locator('.open-notebook').click()
  await page.getByRole('button',{name:'Log a day',exact:false}).click()
- const log=page.getByRole('dialog')
- await log.getByLabel('Daily total (cups)').fill('0')
- f.failNextLog()
- await log.getByRole('button',{name:'Keep this day'}).click()
- await expect(log.getByRole('alert')).toContainText('connection paused')
- await expect(log.getByLabel('Daily total (cups)')).toHaveValue('0')
- await log.getByRole('button',{name:'Keep this day'}).click()
- await expect(page.getByRole('dialog')).not.toBeVisible()
- expect(f.logs).toHaveLength(1);expect(f.logs[0].values.value).toBe(0)
- await page.reload()
- await expect(page.locator('.number-row.zero')).toHaveCount(1)
- const geometry=await page.locator('.value-grid').evaluate(el=>{
-  const axis=el.querySelector('.plot-axis-track')!.getBoundingClientRect(),row=el.querySelector('.plot-track')!.getBoundingClientRect()
-  const cell=parseFloat(getComputedStyle(el).getPropertyValue('--grid-cell'))
-  return {axisLeft:axis.left,rowLeft:row.left,axisWidth:axis.width,rowWidth:row.width,cell,rowHeight:row.height}
- })
- expect(Math.abs(geometry.axisLeft-geometry.rowLeft)).toBeLessThan(1)
- expect(Math.abs(geometry.axisWidth-geometry.rowWidth)).toBeLessThan(1)
- expect(geometry.rowHeight/geometry.cell).toBeCloseTo(Math.round(geometry.rowHeight/geometry.cell),2)
- await expect(page.locator('.plot-scale')).toContainText('cups')
- await page.getByRole('button',{name:/Log a day/}).click()
- await page.getByRole('dialog').getByLabel('Daily total (cups)').fill('2')
- await page.getByRole('dialog').getByRole('button',{name:'Keep this day'}).click()
- await expect(page.getByRole('dialog')).not.toBeVisible()
+ const bar=page.locator('.grid-edit-bar')
+ await bar.getByLabel('Exact total').fill('0');f.failNextLog()
+ await bar.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-error')).toContainText('connection paused')
+ await expect(bar.getByLabel('Exact total')).toHaveValue('0');await bar.getByRole('button',{name:'Save selection'}).click()
+ await expect(page.getByRole('dialog')).toHaveCount(0);expect(f.logs).toHaveLength(1);expect(f.logs[0].values.value).toBe(0)
+ await page.reload();await expect(page.locator('.number-row.zero')).toHaveCount(1)
+ const geometry=await page.locator('.value-grid').evaluate(el=>{const axis=el.querySelector('.plot-axis-track')!.getBoundingClientRect(),row=el.querySelector('.plot-track')!.getBoundingClientRect(),cell=parseFloat(getComputedStyle(el).getPropertyValue('--grid-cell'));return {axisLeft:axis.left,rowLeft:row.left,axisWidth:axis.width,rowWidth:row.width,cell,rowHeight:row.height}})
+ expect(Math.abs(geometry.axisLeft-geometry.rowLeft)).toBeLessThan(1);expect(Math.abs(geometry.axisWidth-geometry.rowWidth)).toBeLessThan(1);expect(geometry.rowHeight/geometry.cell).toBeCloseTo(Math.round(geometry.rowHeight/geometry.cell),2)
+ await page.getByRole('button',{name:/Log a day/}).click();await bar.getByLabel('Exact total').fill('2');await bar.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved')
  expect(f.logs).toHaveLength(1);expect(f.logs[0].values.value).toBe(2)
  await page.getByRole('button',{name:'Design & settings',exact:false}).click()
  const edit=page.getByRole('dialog')
@@ -103,15 +64,11 @@ test('sleep, habit, yearly pixels and journal links keep their specific layouts'
  f.trackers.push({...base,id:'88888888-8888-4888-8888-000000000001',name:'Sleep',kind:'sleep',unit:'hours',design:defaultDesign('#6978ba')},{...base,id:'88888888-8888-4888-8888-000000000002',name:'Walk',kind:'habit',unit:''},{...base,id:'88888888-8888-4888-8888-000000000003',name:'A year in pixels',kind:'category',unit:'',config:{...defaultConfig(),categories:[{id:'okay',label:'Okay',color:'#75b4cd'}]}})
  await page.goto('/trackers/88888888-8888-4888-8888-000000000001')
  await expect(page.locator('.sleep-row')).toHaveCount(new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate())
- await page.getByRole('button',{name:/Log a day/}).click()
- const log=page.getByRole('dialog')
- await log.getByLabel('Time zone',{exact:true}).fill('Asia/Manila')
- await log.getByLabel('Fell asleep',{exact:true}).fill('2024-01-01T23:00')
- await log.getByLabel('Woke up',{exact:true}).fill('2024-01-02T07:30')
- await log.getByLabel('Minutes awake during the session').fill('30')
- await expect(log.getByRole('status')).toContainText('8.00 hours')
- await log.getByRole('button',{name:'Keep this day'}).click()
- expect(f.logs[0].started_at).toBe('2024-01-01T15:00:00.000Z')
+ await page.goto('/trackers/88888888-8888-4888-8888-000000000001?month=2024-01')
+ await page.locator('[data-grid-day="2024-01-02"][data-grid-col="0"]').click()
+ await page.locator('[data-grid-day="2024-01-02"][data-grid-col="1"]').click()
+ await page.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved')
+ expect(f.logs[0].started_at).toBe('2024-01-02T00:00:00.000Z')
  await page.goto('/trackers/88888888-8888-4888-8888-000000000002?month=2024-02')
  await expect(page.locator('.habit-calendar button')).toHaveCount(29)
  await page.goto('/trackers/88888888-8888-4888-8888-000000000003')

@@ -1,0 +1,11 @@
+# Direct tracker grids
+
+Walk durations, steps, quantities and counts now use selectable boxes. Clicking or dragging sets a cumulative total; the inline Exact total field preserves precise totals and large historical values. Each box's amount is adjustable. Recorded zero and unlogged days stay distinct. Selection is a draft until Save selection; Cancel restores the saved day. Keyboard users can move with the arrow keys and toggle with Space. Unsaved edits are protected when leaving.
+
+Sleep has 24 hour boxes with a visible AM/PM header and noon divider. AM is midnight through 11:59 AM; PM is noon through 11:59 PM. Tap to toggle or drag to paint/remove hours. Mobile cells are 44 pixels with contained horizontal scrolling and AM/PM jump buttons. Overnight blocks join evening and morning on their wake-up date. Existing fractional hours are hatched, and unchanged timestamps, timezone, sleep/nap type, notes, photos, awake adjustments and historical config are retained. Removing a middle block can split an interval; the existing note/photo stays with its first remaining interval. A save that would lose attached metadata is rejected with an explanation. Overlapping/invalid/future sleep still uses the existing server validation and rolls back.
+
+The optional Note / photo action opens a compact sheet with a note and private photo. It contains no numeric total, date picker, sleep-session time, timezone or quality fields. Existing custom, habit and category trackers retain their own value editors. Archived trackers and monthly-board previews remain read-only.
+
+Apply `supabase/migrations/20261028000006_tracker_grid.sql` after the existing migrations. It adds `save_tracker_grid_day`, which locks the tracker, checks owner/MFA and expected row timestamps, validates and replaces a day's entries atomically, preserves original snapshot metadata, and rolls back on failure. The release build checks schema version `20261028.6` and anonymous write denial. No new credentials or public storage are needed.
+
+Verification: `npm test`, `npm run test:database`, `npx playwright test --config playwright.trackers.config.ts`, `npm run check:tracker-grid -- --production`, `npm run build`, and the credential/build-artifact scan. Browser tests use isolated fixtures; the hosted probe checks schema capabilities without accessing real user records.

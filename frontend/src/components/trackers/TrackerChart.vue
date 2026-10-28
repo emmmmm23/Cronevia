@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import TrackerValueGrid from './TrackerValueGrid.vue'
 import { dailyValue, displayValue, monthDays, onSchedule, type CreativeTracker, type TrackerLog } from '@/types/trackers'
-const props=withDefaults(defineProps<{tracker:CreativeTracker;logs:TrackerLog[];month:string;today:string;yearly?:boolean;compact?:boolean}>(),{yearly:false,compact:false})
-const emit=defineEmits<{log:[date:string]}>()
+const props=withDefaults(defineProps<{tracker:CreativeTracker;logs:TrackerLog[];month:string;today:string;yearly?:boolean;compact?:boolean;timezone?:string;selectedDate?:string}>(),{yearly:false,compact:false,timezone:'UTC',selectedDate:''})
+const emit=defineEmits<{log:[date:string];notes:[date:string];saved:[date:string,logs:TrackerLog[]]}>()
 const days=computed(()=>monthDays(props.month))
 const byDay=computed(()=>new Map(days.value.map(day=>[day,props.logs.filter(l=>l.tracker_id===props.tracker.id&&l.log_date===day)])))
 const dayLogs=(day:string)=>byDay.value.get(day)||[]
@@ -51,7 +51,7 @@ function yearCell(month:string,day:number){
   <template v-else-if="habitGroup">
    <section v-for="field in tracker.config.fields" :key="field.id" class="habit-group"><h4>{{field.label}} <span>?</span></h4><div class="calendar-weekdays" aria-hidden="true"><span v-for="(d,i) in ['S','M','T','W','T','F','S']" :key="i">{{d}}</span></div><div class="habit-calendar"><span v-for="i in startOffset" :key="'blank'+i"></span><button v-for="day in days" :key="day" type="button" :class="habitState(day,field.id)" :disabled="day>today||compact||tracker.archived" :style="{'--cell-color':tracker.design.accent}" :aria-label="day+' · '+field.label+': '+(habitField(day,field.id)===true?'Yes':habitField(day,field.id)===false?'No':'Not logged')" @click="emit('log',day)"><span>{{Number(day.slice(-2))}}</span><strong>{{habitField(day,field.id)===true?'✓':habitField(day,field.id)===false?'No':'·'}}</strong></button></div></section><figcaption>Each habit keeps its own answer. A blank Coffee square says nothing about Gym, Walk, or Coke.</figcaption>
   </template>
-  <TrackerValueGrid v-else-if="['sleep','steps','duration','quantity','count'].includes(tracker.kind)" :tracker="tracker" :logs="logs" :month="month" :today="today" :compact="compact" @log="emit('log',$event)" />
+  <TrackerValueGrid v-else-if="['sleep','steps','duration','quantity','count'].includes(tracker.kind)" :tracker="tracker" :logs="logs" :month="month" :today="today" :compact="compact" :timezone="timezone" :selected-date="selectedDate" @log="emit('notes',$event)" @saved="(date,rows)=>emit('saved',date,rows)" />
   <template v-else>
    <div class="calendar-weekdays" aria-hidden="true"><span v-for="(d,i) in ['S','M','T','W','T','F','S']" :key="i">{{d}}</span></div>
    <div class="habit-calendar"><span v-for="i in startOffset" :key="'blank'+i"></span><button v-for="day in days" :key="day" type="button" :class="state(day)" :disabled="day>today||compact||tracker.archived" :aria-label="label(day)" :style="{'--cell-color':color(day)}" @click="emit('log',day)"><span>{{Number(day.slice(-2))}}</span><strong>{{dayLogs(day).length?(tracker.kind==='habit'?(value(day)?'✓':'No'):tracker.kind==='category'?'●':String(dayLogs(day).length)):state(day)==='unscheduled'?'∕':'·'}}</strong></button></div>

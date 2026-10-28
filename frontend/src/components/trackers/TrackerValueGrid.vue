@@ -1,139 +1,78 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { dailyValue, displayValue, goalMet, monthDays, onSchedule, sleepSegments, type CreativeTracker, type TrackerLog } from '@/types/trackers'
-
-const props = withDefaults(defineProps<{
-  tracker: CreativeTracker; logs: TrackerLog[]; month: string; today: string; compact?: boolean
-}>(), { compact: false })
-const emit = defineEmits<{ log: [date: string] }>()
-const frame = ref<HTMLElement>()
-const frameWidth = ref(600)
-const days = computed(() => monthDays(props.month))
-const isSleep = computed(() => props.tracker.kind === 'sleep')
-const byDay = computed(() => new Map(days.value.map(day => [
-  day, props.logs.filter(log => log.tracker_id === props.tracker.id && log.log_date === day),
-])))
-const dayLogs = (day: string) => byDay.value.get(day) || []
-const value = (day: string) => Number(dailyValue(props.tracker, dayLogs(day))) || 0
-const state = (day: string) => day > props.today ? 'future' : !dayLogs(day).length
-  ? onSchedule(props.tracker, day) ? 'missing' : 'unscheduled'
-  : !isSleep.value && value(day) === 0 ? 'zero' : 'recorded'
-const accessibleLabel = (day: string) => day + ': ' + (day > props.today ? 'Future date' : displayValue(props.tracker, dayLogs(day)))
-  + (state(day) === 'unscheduled' ? ' · Not scheduled' : '')
-
-function niceStep(raw: number) {
-  const power = 10 ** Math.floor(Math.log10(Math.max(1, raw)))
-  const fraction = raw / power
-  return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power
+import {computed,ref,watch,nextTick,onBeforeUnmount} from 'vue'
+import {onBeforeRouteLeave} from 'vue-router'
+import {dailyValue,displayValue,goalMet,monthDays,cloneTracker,type CreativeTracker,type TrackerLog} from '@/types/trackers'
+import {rangesForLogs,covers,paintSleep,sleepGridEntries,type SleepRange,type GridEntry} from '@/types/tracker-grid'
+import {saveGridDay,trackerError} from '@/services/trackers.service'
+const props=withDefaults(defineProps<{tracker:CreativeTracker;logs:TrackerLog[];month:string;today:string;compact?:boolean;timezone?:string;selectedDate?:string}>(),{compact:false,timezone:'UTC',selectedDate:''})
+const emit=defineEmits<{log:[string];saved:[string,TrackerLog[]]}>()
+const days=computed(()=>monthDays(props.month)),isSleep=computed(()=>props.tracker.kind==='sleep')
+const dayLogs=(day:string)=>props.logs.filter(l=>l.tracker_id===props.tracker.id&&l.log_date===day)
+const activeDay=ref(''),snapshot=ref<TrackerLog[]>([]),ranges=ref<SleepRange[]>([]),number=ref(0),dirty=ref(false),busy=ref(false),error=ref(''),status=ref(''),focusCol=ref(0)
+const step=ref(props.tracker.kind==='steps'?500:props.tracker.kind==='duration'?5:props.tracker.kind==='quantity'?50:1)
+const columns=computed(()=>isSleep.value?24:20),maximum=computed(()=>step.value*columns.value)
+const viewport=ref<HTMLDivElement>(),gesture=ref<{date:string;start:number;end:number;fill:boolean;pointer:number}|null>(null)
+const options=computed(()=>props.tracker.kind==='steps'?[100,500,1000,2000]:props.tracker.kind==='duration'?[1,5,15,30]:props.tracker.kind==='quantity'?[10,50,100,250]:[1,2,3,5])
+const shownRanges=computed(()=>gesture.value&&isSleep.value?paintSleep(ranges.value,Math.min(gesture.value.start,gesture.value.end)*60,(Math.max(gesture.value.start,gesture.value.end)+1)*60,gesture.value.fill):ranges.value)
+const shownNumber=computed(()=>gesture.value&&!isSleep.value?(gesture.value.end+1)*step.value:number.value)
+const state=(day:string)=>day>props.today?'future':!dayLogs(day).length?'missing':!isSleep.value&&Number(dailyValue(props.tracker,dayLogs(day)))===0?'zero':'recorded'
+function selected(day:string,col:number){return isSleep.value?covers(day===activeDay.value?shownRanges.value:rangesForLogs(dayLogs(day)),col*60,(col+1)*60):(day===activeDay.value&&dirty.value||gesture.value?.date===day?shownNumber.value:Number(dailyValue(props.tracker,dayLogs(day)))||0)>=(col+1)*step.value}
+function partial(day:string,col:number){if(isSleep.value)return !selected(day,col)&&(day===activeDay.value?shownRanges.value:rangesForLogs(dayLogs(day))).some(r=>r.start<(col+1)*60&&r.end>col*60);const n=day===activeDay.value&&dirty.value?shownNumber.value:Number(dailyValue(props.tracker,dayLogs(day)))||0;return n>col*step.value&&n<(col+1)*step.value}
+const hour=(h:number)=>String(h%12||12)+(h<12?' AM':' PM')
+const cellLabel=(day:string,col:number)=>day+' · '+(isSleep.value?hour(col)+'–'+hour((col+1)%24):(col+1)*step.value+' '+props.tracker.unit)
+function choose(day:string){
+ if(props.compact||props.tracker.archived||day>props.today||busy.value)return false
+ if(dirty.value&&day===activeDay.value)return true
+ if(dirty.value&&day!==activeDay.value){error.value='Save or cancel this selection before choosing another day.';return false}
+ activeDay.value=day;snapshot.value=cloneTracker(dayLogs(day));ranges.value=rangesForLogs(snapshot.value);number.value=Number(dailyValue(props.tracker,snapshot.value))||0;dirty.value=false;error.value='';status.value='';return true
 }
-const scale = computed(() => {
-  if (isSleep.value) return { maximum: 24, step: 6, intervals: 4, columns: 24 }
-  const baseline = props.tracker.kind === 'steps' ? 10000
-    : props.tracker.kind === 'duration' ? 60 : props.tracker.kind === 'quantity' ? 1000 : 8
-  const largest = Math.max(baseline, props.tracker.config.goal?.target || 0, ...days.value.map(value))
-  const step = props.tracker.kind === 'count' && largest <= 12 ? 1 : niceStep(largest / 6)
-  const intervals = Math.ceil(largest / step)
-  const maximum = intervals * step
-  return { maximum, step, intervals, columns: props.tracker.kind === 'count' && maximum <= 20 ? maximum * 2 : intervals * 4 }
-})
-const ticks = computed(() => Array.from({ length: scale.value.intervals + 1 }, (_, i) => ({
-  value: i * scale.value.step,
-  label: isSleep.value ? ['12 AM', '6 AM', '12 PM', '6 PM', '12 AM'][i]
-    : (i * scale.value.step).toLocaleString('en-PH', { maximumFractionDigits: 2, notation: props.tracker.kind === 'steps' ? 'compact' : 'standard' }),
-})))
-const dimensions = computed(() => {
-  const day = frameWidth.value < 420 ? 28 : 34
-  const total = frameWidth.value < 420 ? 48 : 60
-  const available = Math.max(96, frameWidth.value - day - total)
-  const cell = Math.min(26, available / scale.value.columns)
-  // Each day occupies a whole number of graph-paper squares at every viewport width.
-  const target = props.compact ? 18 : frameWidth.value < 420 ? 44 : 24
-  const row = cell * Math.ceil((target - .01) / cell)
-  return { day, total, cell, row, width: cell * scale.value.columns }
-})
-const gridStyle = computed(() => ({
-  '--grid-cell': dimensions.value.cell + 'px',
-  '--grid-row': dimensions.value.row + 'px',
-  '--plot-width': dimensions.value.width + 'px',
-  '--day-column': dimensions.value.day + 'px',
-  '--total-column': dimensions.value.total + 'px',
-  '--major-column': dimensions.value.width / scale.value.intervals + 'px',
-  '--tracker-accent': props.tracker.design.accent,
-}))
-let observer: ResizeObserver | undefined
-onMounted(() => {
-  if (!frame.value) return
-  frameWidth.value = frame.value.getBoundingClientRect().width
-  observer = new ResizeObserver(entries => {
-    const width = entries[0]?.contentRect.width
-    if (width && Math.abs(width - frameWidth.value) > .1) frameWidth.value = width
-  })
-  observer.observe(frame.value)
-})
-onBeforeUnmount(() => observer?.disconnect())
+function prepare(day:string){return day===activeDay.value?!busy.value:choose(day)}
+function apply(col:number){if(!activeDay.value||busy.value)return;if(isSleep.value)ranges.value=paintSleep(ranges.value,col*60,(col+1)*60,!covers(ranges.value,col*60,(col+1)*60));else number.value=(col+1)*step.value;dirty.value=true;error.value='';focusCol.value=col}
+function activate(e:MouseEvent,day:string,col:number){if(e.detail===0&&prepare(day))apply(col)}
+function down(e:PointerEvent,day:string,col:number){if(!prepare(day))return;gesture.value={date:day,start:col,end:col,fill:!covers(ranges.value,col*60,(col+1)*60),pointer:e.pointerId};(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)}
+function drag(e:PointerEvent){if(!gesture.value||e.pointerId!==gesture.value.pointer)return;const el=document.elementFromPoint(e.clientX,e.clientY)?.closest<HTMLElement>('[data-grid-col]');if(el?.dataset.gridDay===gesture.value.date)gesture.value.end=Number(el.dataset.gridCol)}
+function up(e:PointerEvent){const g=gesture.value;if(!g||g.pointer!==e.pointerId)return;if(isSleep.value)ranges.value=paintSleep(ranges.value,Math.min(g.start,g.end)*60,(Math.max(g.start,g.end)+1)*60,g.fill);else number.value=(g.end+1)*step.value;focusCol.value=g.end;dirty.value=true;error.value='';gesture.value=null}
+function cancel(){gesture.value=null;dirty.value=false;if(activeDay.value)choose(activeDay.value)}
+function key(e:KeyboardEvent,day:string,col:number){
+ const dx=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0,dy=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0;if(!dx&&!dy)return;e.preventDefault()
+ const next=days.value[days.value.indexOf(day)+dy],c=Math.max(0,Math.min(columns.value-1,col+dx));if(!next||next>props.today)return
+ if(next!==activeDay.value&&dirty.value){error.value='Save or cancel this selection before choosing another day.';return}
+ if(prepare(next)){focusCol.value=c;nextTick(()=>viewport.value?.querySelector<HTMLElement>('[data-grid-day="'+next+'"][data-grid-col="'+c+'"]')?.focus())}
+}
+async function save(){
+ if(!dirty.value||busy.value)return;busy.value=true;error.value=''
+ try{
+  const entries:GridEntry[]=isSleep.value?sleepGridEntries(activeDay.value,ranges.value,snapshot.value,props.timezone):[{id:snapshot.value[0]?.id||crypto.randomUUID(),values:{...snapshot.value[0]?.values,value:Number(number.value)},started_at:null,ended_at:null,timezone:snapshot.value[0]?.timezone||props.timezone}]
+  if(!isSleep.value&&(!Number.isFinite(number.value)||number.value<0))throw new Error('Choose a total of zero or more.')
+  const rows=await saveGridDay(props.tracker.id,activeDay.value,snapshot.value,entries);dirty.value=false;snapshot.value=cloneTracker(rows);ranges.value=rangesForLogs(rows);emit('saved',activeDay.value,rows);status.value='Selection saved.'
+ }catch(e){error.value=trackerError(e)}finally{busy.value=false}
+}
+onBeforeRouteLeave(()=>!busy.value&&(!dirty.value||window.confirm('Leave without saving this selection?')))
+const leaving=(e:BeforeUnloadEvent)=>{if(dirty.value||busy.value){e.preventDefault();e.returnValue=''}}
+window.addEventListener('beforeunload',leaving);onBeforeUnmount(()=>window.removeEventListener('beforeunload',leaving))
+function jump(pm:boolean){viewport.value?.scrollTo({left:pm?12*parseFloat(getComputedStyle(viewport.value).getPropertyValue('--grid-cell')):0,behavior:'instant'})}
+watch(()=>props.selectedDate,day=>{if(day&&day.startsWith(props.month)){choose(day);nextTick(()=>viewport.value?.querySelector<HTMLElement>('[data-grid-day="'+day+'"][data-grid-col="0"]')?.focus())}},{immediate:true})
+watch(()=>props.logs,()=>{if(activeDay.value&&!dirty.value&&!busy.value){snapshot.value=cloneTracker(dayLogs(activeDay.value));ranges.value=rangesForLogs(snapshot.value);number.value=Number(dailyValue(props.tracker,snapshot.value))||0}})
+watch(()=>props.month,()=>{if(!dirty.value)activeDay.value=''})
 </script>
-
 <template>
-  <div ref="frame" class="value-grid-frame">
-    <div class="value-grid" :class="{ compact, 'sleep-grid': isSleep }" :style="gridStyle">
-      <div class="plot-scale"><span>{{ isSleep ? 'HOURS OF THE DAY' : tracker.unit || 'DAILY TOTAL' }}</span><span>{{ isSleep ? 'LOCAL TIME' : '0–' + scale.maximum.toLocaleString('en-PH') }}</span></div>
-      <div class="plot-axis" aria-hidden="true">
-        <span class="axis-day">DAY</span>
-        <div class="plot-axis-track"><span v-for="(tick, i) in ticks" :key="tick.value" :class="{ first: i === 0, last: i === ticks.length - 1 }" :style="{ left: tick.value / scale.maximum * 100 + '%' }">{{ tick.label }}</span></div>
-        <span class="axis-total">{{ isSleep ? 'SLEPT' : 'TOTAL' }}</span>
-      </div>
-      <div class="plot-body">
-        <div class="graph-lines" aria-hidden="true"></div>
-        <button v-for="day in days" :key="day" type="button" class="plot-row"
-          :class="[isSleep ? 'sleep-row' : 'number-row', state(day), { 'is-today': day === today }]"
-          :disabled="day > today || compact || tracker.archived" :aria-label="accessibleLabel(day)" @click="emit('log', day)">
-          <span class="row-day">{{ Number(day.slice(-2)) }}</span>
-          <span class="plot-track" :class="isSleep ? 'sleep-track' : 'number-track'">
-            <template v-if="isSleep"><template v-for="log in dayLogs(day)" :key="log.id"><i v-for="(segment, i) in sleepSegments(log)" :key="log.id + '-' + i" class="marker-bar" :class="{ nap: log.values.sleepType === 'nap' }" :style="{ left: segment.start / 24 * 100 + '%', width: segment.width / 24 * 100 + '%' }"></i></template></template>
-            <i v-else-if="dayLogs(day).length && value(day) > 0" class="marker-bar" :style="{ width: value(day) / scale.maximum * 100 + '%' }"></i>
-            <span v-if="state(day) === 'zero'" class="zero-mark" aria-hidden="true">○</span>
-            <span v-if="state(day) === 'unscheduled'" class="off-schedule" aria-hidden="true"></span>
-          </span>
-          <span class="row-value">{{ dayLogs(day).length ? isSleep ? displayValue(tracker, dayLogs(day)) : value(day).toLocaleString('en-PH', { maximumFractionDigits: 1 }) : '' }}<b v-if="goalMet(tracker, dayLogs(day))" aria-label="Goal met"> ✓</b></span>
-        </button>
-      </div>
+ <div class="value-grid-frame">
+  <div v-if="!compact&&!tracker.archived" class="grid-guide"><p>{{isSleep?'Choose or drag across the hours you slept. Tap a filled hour to clear it.':'Choose a box to fill your daily total. Drag across the row to adjust it.'}}</p><div v-if="isSleep" class="period-jumps"><button @click="jump(false)">AM · midnight–noon</button><button @click="jump(true)">PM · noon–midnight</button></div><label v-else>Each box<input v-model.number="step" type="number" :min="tracker.kind==='steps'||tracker.kind==='count'?1:.5" @change="step=Math.max(tracker.kind==='steps'||tracker.kind==='count'?1:.5,Number.isFinite(Number(step))?Number(step):1);if(tracker.kind==='steps'||tracker.kind==='count')step=Math.round(step)" :step="tracker.kind==='steps'||tracker.kind==='count'?1:'any'" :list="'box-sizes-'+tracker.id" :disabled="busy"/>{{tracker.unit}}<datalist :id="'box-sizes-'+tracker.id"><option v-for="v in options" :key="v" :value="v"/></datalist></label></div>
+  <div v-if="activeDay&&!compact" class="grid-edit-bar" :aria-label="'Edit '+activeDay"><strong>{{new Date(activeDay+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}}</strong><span v-if="isSleep">{{(shownRanges.reduce((s,r)=>s+r.end-r.start,0)/60).toFixed(1)}} hours selected</span><label v-else>Exact total<input v-model.number="number" type="number" min="0" :step="tracker.kind==='steps'||tracker.kind==='count'?1:'any'" :disabled="busy" @input="dirty=true"/></label><button v-if="!isSleep" :disabled="busy" @click="number=0;dirty=true">0 {{tracker.unit}}</button><button :disabled="busy||dirty||!dayLogs(activeDay).length" @click="emit('log',activeDay)">Note / photo</button><template v-if="dirty"><button :disabled="busy" @click="cancel">Cancel</button><button class="keep-selection" :disabled="busy" @click="save">{{busy?'Saving…':'Save selection'}}</button></template></div>
+  <p v-if="error" role="alert" class="grid-error">{{error}} <button v-if="dirty&&!busy" @click="save">Retry save</button></p><p v-if="status" role="status" class="grid-status">{{status}}</p>
+  <div ref="viewport" class="grid-scroll" :class="{compact}" tabindex="0" :aria-label="tracker.name+' grid. Scroll horizontally for more boxes.'">
+   <div class="value-grid" :class="{'sleep-grid':isSleep}" :style="{'--columns':columns,'--tracker-accent':tracker.design.accent}">
+    <div class="plot-scale"><span>{{isSleep?'HOURS OF THE DAY':tracker.unit||'DAILY TOTAL'}}</span><span>{{isSleep?'LOCAL TIME':'0–'+maximum.toLocaleString()}}</span></div>
+    <div v-if="isSleep" class="sleep-periods" aria-hidden="true"><span></span><strong>AM <small>12 midnight–11:59 AM</small></strong><strong>PM <small>12 noon–11:59 PM</small></strong><span></span></div>
+    <div class="plot-axis" aria-hidden="true"><span>DAY</span><div class="plot-axis-track"><span v-for="col in columns" :key="col">{{isSleep?(col-1)%12||12:(col*step).toLocaleString('en-PH',{notation:'compact'})}}</span></div><span>{{isSleep?'SLEPT':'TOTAL'}}</span></div>
+    <div class="plot-body">
+     <div v-for="day in days" :key="day" class="plot-row" :class="[isSleep?'sleep-row':'number-row',state(day),{'active-day':day===activeDay}]"><button class="row-day" :disabled="compact||tracker.archived||day>today" :aria-label="'Choose '+day" @click="choose(day)">{{Number(day.slice(-2))}}</button><div class="plot-track" :class="isSleep?'sleep-track':'number-track'"><button v-for="(_,col) in columns" :key="col" type="button" :data-grid-col="col" :data-grid-day="day" class="grid-box" :class="{filled:selected(day,col),partial:partial(day,col),'noon-divider':isSleep&&col===12}" :aria-label="cellLabel(day,col)" :aria-pressed="selected(day,col)" :disabled="busy||compact||tracker.archived||day>today" :tabindex="day===(activeDay||days.find(d=>d<=today))&&col===focusCol?0:-1" @pointerdown="down($event,day,col)" @pointermove="drag" @pointerup="up" @pointercancel="gesture=null" @keydown="key($event,day,col)" @click="activate($event,day,col)"></button></div><span class="row-value">{{day===activeDay&&dirty&&!isSleep?shownNumber.toLocaleString():dayLogs(day).length?displayValue(tracker,dayLogs(day)):''}}<b v-if="goalMet(tracker,dayLogs(day))" aria-label="Goal met"> ✓</b></span></div>
     </div>
-    <p v-if="isSleep" class="plot-caption"><i class="legend-color"></i> Night sleep <i class="legend-color nap-key"></i> Naps <span>·</span> Each small square is one hour. Dates belong to the day you wake up; totals use actual elapsed time.</p>
-    <p v-else class="plot-caption">Blank paper = not logged. <span class="zero-key">○ 0</span> = a recorded zero. Tap a day to log or use “Log a day.”</p>
+   </div>
   </div>
+  <p class="plot-caption">{{isSleep?'One box = one hour. Rows use the wake-up date; overnight evening blocks are kept with the following morning. Partial hours remain as recorded until you edit them.':'Blank = not logged. A saved zero is different from an empty day. Save your selection above the grid.'}}</p>
+ </div>
 </template>
-
 <style scoped>
-.value-grid-frame{width:100%;min-width:0;padding-top:10px;background:var(--paper-color,#fffdf3)}
-.value-grid{width:calc(var(--day-column) + var(--plot-width) + var(--total-column));max-width:100%;margin:0 auto;background:var(--paper-color,#fffdf3)}
-.plot-scale{display:flex;justify-content:space-between;gap:12px;margin:0 var(--total-column) 12px var(--day-column);color:#8a7656;font:9px/1.5 'Inter',sans-serif;letter-spacing:.13em;text-transform:uppercase}
-.plot-scale>span:last-child{letter-spacing:.04em}
-.plot-axis,.plot-row{display:grid;grid-template-columns:var(--day-column) var(--plot-width) var(--total-column)}
-.plot-axis{height:29px;align-items:start}
-.axis-day,.axis-total{color:#8c7a5e;font:8px/1.5 'Inter',sans-serif;letter-spacing:.12em;padding-top:1px}
-.axis-day{text-align:center}.axis-total{text-align:right;padding-right:2px}
-.plot-axis-track{position:relative;width:var(--plot-width);height:29px;color:#6e624d}
-.plot-axis-track>span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;font:14px/1 'Caveat',cursive}
-.plot-axis-track>span.first{transform:none}.plot-axis-track>span.last{transform:translateX(-100%)}
-.sleep-grid .plot-axis-track>span{font:9px/1.5 'Inter',sans-serif}
-.plot-body{position:relative;isolation:isolate}
-.graph-lines{position:absolute;left:var(--day-column);top:0;bottom:0;width:var(--plot-width);z-index:-1;border:1px solid #a1a38b;background-color:var(--paper-color,#fffdf3);background-image:linear-gradient(90deg,#9a9f7b3b 1px,transparent 1px),linear-gradient(#9a9f7b3b 1px,transparent 1px),linear-gradient(90deg,#8a8f694f 1px,transparent 1px),linear-gradient(#8a8f694f 1px,transparent 1px);background-size:var(--grid-cell) var(--grid-cell),var(--grid-cell) var(--grid-cell),var(--major-column) var(--grid-row),var(--major-column) var(--grid-row)}
-.plot-row{position:relative;align-items:center;width:100%;height:var(--grid-row);min-height:0!important;padding:0;border:0!important;background:transparent;text-align:left;color:#635744;cursor:pointer}
-.plot-row:hover:not(:disabled){background:#b1b99c18}
-.plot-row:focus-visible{outline:2px solid var(--tracker-accent);outline-offset:1px;z-index:2}
-.plot-row:disabled{cursor:default}
-.row-day{align-self:stretch;display:grid;place-items:center;padding-right:5px;color:#7a684c;font:16px/1 'Caveat',cursive}
-.is-today .row-day{color:var(--tracker-accent);font-weight:600}
-.plot-track{position:relative;display:block;height:100%;width:100%;background:none!important;min-width:0}
-.marker-bar{position:absolute;inset:1px auto 1px 0;height:auto!important;background:color-mix(in srgb,var(--tracker-accent) 65%,transparent);border:1px solid color-mix(in srgb,var(--tracker-accent) 80%,#61503e);border-radius:1px;box-shadow:inset 0 3px #ffffff12;min-width:0;pointer-events:none}
-.marker-bar.nap{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--tracker-accent) 75%,transparent) 0 3px,#f5eddb99 3px 5px)}
-.row-value{padding:0 1px 0 7px;text-align:right;color:#756348;font:11px/1.2 'Inter',sans-serif;overflow-wrap:anywhere}
-.row-value b{color:#668051;font-size:10px;font-weight:400}
-.zero-mark{position:absolute;top:50%;left:4px;transform:translateY(-50%);color:#8b8170;font-size:12px}
-.off-schedule{position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 5px,#b5ad961c 5px 6px);pointer-events:none}
-.future .row-day{color:#b8b09d}.future .plot-track{opacity:.4}
-.plot-caption{display:flex;flex-wrap:wrap;align-items:center;gap:4px 7px;margin:17px 0 0;color:#8b7a5e;font:11px/1.7 'Inter',sans-serif}
-.zero-key{color:#76634c;white-space:nowrap}.legend-color{width:13px;height:10px;display:inline-block;background:var(--tracker-accent)}.nap-key{background:repeating-linear-gradient(135deg,var(--tracker-accent) 0 3px,#eee2cc 3px 5px)}
-.compact .plot-scale{font-size:8px;margin-bottom:9px}.compact .row-day{font-size:13px}.compact .row-value{font-size:9px}.compact .plot-caption{font-size:9px}.compact .plot-axis-track>span{font-size:12px}.compact.sleep-grid .plot-axis-track>span{font-size:7px}
-@media(max-width:650px){.plot-scale{font-size:9px}.row-value{font-size:10px;padding-left:4px}.plot-axis-track>span{font-size:14px}.sleep-grid .plot-axis-track>span{font-size:8px}.axis-day,.axis-total{font-size:7px}.plot-caption{font-size:10px}.compact .row-value{font-size:8px}}
+.value-grid-frame{min-width:0;background:var(--paper-color,#fffdf3);--grid-cell:28px;--grid-row:56px;--day-column:36px;--total-column:85px}.grid-guide{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.grid-guide p{font:12px/1.6 Inter,sans-serif;margin:0;max-width:450px;color:#837a65}.grid-guide label,.grid-edit-bar label{display:flex;align-items:center;gap:7px;font:12px Inter,sans-serif}.value-grid-frame input{width:100px;min-height:44px;padding:8px;border:1px solid #c7b99c;border-radius:4px;background:#fffdf3;color:#514b40;font-size:16px}.value-grid-frame button{min-height:44px;color:#6f6049;cursor:pointer}.period-jumps{display:flex;gap:8px;flex-wrap:wrap}.period-jumps button,.grid-edit-bar>button,.grid-error button{padding:8px 12px;border:1px solid #c7b99c;border-radius:4px;background:#f5eddd;font:12px Inter,sans-serif}.grid-edit-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px;margin:0 0 12px;background:#f5eddd;border:1px solid #d1c4a9;border-radius:5px;position:sticky;top:78px;z-index:4}.grid-edit-bar strong{font:20px Caveat,cursive}.grid-edit-bar>span{font:12px Inter,sans-serif}.grid-edit-bar .keep-selection{background:#79283e;color:#fff9eb}.grid-error,.grid-status{font:12px/1.6 Inter,sans-serif;padding:12px;border-radius:4px}.grid-error{background:#f6e4dd;color:#91394e}.grid-status{background:#e8eee2;color:#476044}.grid-scroll{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain;padding-bottom:8px}.value-grid{--plot-width:calc(var(--grid-cell)*var(--columns));width:calc(var(--day-column) + var(--plot-width) + var(--total-column));margin:auto}.plot-scale{display:flex;justify-content:space-between;padding:8px var(--total-column) 12px var(--day-column);font:9px Inter,sans-serif;letter-spacing:.1em;color:#8a7656}.plot-axis,.plot-row{display:grid;grid-template-columns:var(--day-column) var(--plot-width) var(--total-column)}.plot-axis{font:9px Inter,sans-serif;color:#8a7656;align-items:center;min-height:36px;text-align:center}.plot-axis-track,.plot-track{display:grid;grid-template-columns:repeat(var(--columns),var(--grid-cell));width:var(--plot-width)}.plot-axis-track>span{display:grid;place-items:center;min-height:32px;font:13px Caveat,cursive}.sleep-periods{display:grid;grid-template-columns:var(--day-column) repeat(2,calc(var(--plot-width)/2)) var(--total-column);text-align:center}.sleep-periods strong{padding:10px;background:#eee8d8;font:600 15px Inter,sans-serif;border:1px solid #b3aa8c}.sleep-periods strong:nth-child(3){border-left:3px solid #9a835c}.sleep-periods small{font:10px Inter,sans-serif;margin-left:8px}.plot-row{min-height:var(--grid-row)}.row-day{position:sticky;left:0;z-index:2;background:var(--paper-color,#fffdf3);border:0;font:17px Caveat,cursive;padding:0}.plot-track{min-width:0}.grid-box{padding:0;min-width:0;width:var(--grid-cell);height:var(--grid-row);background:transparent;border:1px solid #aaa88d55;border-left:0;touch-action:pan-y}.grid-box:first-child{border-left:1px solid #aaa88d55}.grid-box.filled{background:color-mix(in srgb,var(--tracker-accent) 60%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tracker-accent) 60%,transparent)}.grid-box.partial{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--tracker-accent) 45%,transparent) 0 3px,transparent 3px 6px)}.grid-box.noon-divider{border-left:3px solid #9a835c}.active-day .row-day{font-weight:700;color:var(--tracker-accent)}.row-value{display:flex;align-items:center;justify-content:flex-end;gap:3px;padding:4px 7px;text-align:right;overflow-wrap:anywhere;font:10px/1.4 Inter,sans-serif;color:#756348}.row-value b{font-weight:400;color:#668051}.future{opacity:.45}.plot-caption{font:11px/1.7 Inter,sans-serif;color:#8b7a5e;margin:14px 0}.value-grid-frame button:disabled{cursor:default;opacity:.6}.value-grid-frame button:focus-visible,.value-grid-frame input:focus-visible,.grid-scroll:focus-visible{outline:2px solid #79283e;outline-offset:2px}.compact{--grid-cell:13px;--grid-row:26px}.compact .value-grid{margin:0}.compact .grid-box{min-height:26px}.compact .row-day{font-size:12px}.compact .sleep-periods small{display:none}@media(max-width:650px){.value-grid-frame{--grid-cell:44px;--grid-row:44px;--day-column:32px}.grid-edit-bar{top:68px}.grid-edit-bar label{flex:1}.row-value{font-size:10px}}
 </style>

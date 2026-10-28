@@ -1022,6 +1022,7 @@ Relationships: []
 }
 }; Views: { [_ in never]: never }; Functions: {
 save_profile_avatar: {Args:{expected_revision:number;appearance:Json;photo_path:string|null;source_path:string|null;remove_photo:boolean};Returns:Json}
+save_tracker_grid_day: {Args:{target_tracker:string;entry_date:string;expected_rows:Json;new_entries:Json};Returns:Json}
 avatar_schema_version: {Args:Record<string,never>;Returns:number}
 save_creative_tracker: { Args: { target_id: string; details: Json }; Returns: Json }
 save_tracker_log: { Args: { target_tracker: string; entry_id: string; entry_date: string; entry_values: Json; session_start: string | null; session_end: string | null; entry_timezone: string }; Returns: Json }
