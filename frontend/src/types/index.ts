@@ -104,6 +104,7 @@ export interface ItineraryItem {
 export type Mood = 'happy' | 'excited' | 'peaceful' | 'nostalgic' | 'sad' | 'anxious' | 'neutral'
 
 export interface JournalEntry {
+  tracker_links?: { id: string; month: string }[]
   scrapbook_layout?: import('./scrapbook').ScrapbookLayout | null
   tags?: string[]
   id: string

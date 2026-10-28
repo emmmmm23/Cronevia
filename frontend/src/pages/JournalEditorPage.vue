@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
+import { RouterLink, useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
 import { useJournalStore } from '@/stores/journal'
 import { useAuthStore } from '@/stores/auth'
 import NotebookHeader from '@/components/shared/NotebookHeader.vue'
@@ -17,6 +17,7 @@ const entryId=route.params.id as string | undefined
 const savedEntryId=ref(entryId), draftKey=crypto.randomUUID()
 const linkedTrip=ref(String(route.query.trip_id||'')),linkedDay=ref(String(route.query.trip_day_id||'')),linkedActivity=ref(String(route.query.itinerary_item_id||''))
 const title=ref(''), content=ref(''), date=ref(new Date().toLocaleDateString('en-CA'))
+const trackerLinks=ref<{id:string;month:string}[]>(route.query.tracker&&/^(board|[0-9a-f-]{36})$/.test(String(route.query.tracker))?[{id:String(route.query.tracker),month:/^\d{4}-(0[1-9]|1[0-2])$/.test(String(route.query.month))?String(route.query.month):date.value.slice(0,7)}]:[])
 const tags=ref<string[]>([]), tagInput=ref(''), moodEmoji=ref(''), moodLabel=ref('')
 const locationName=ref(''), latitude=ref<number|null>(null), longitude=ref<number|null>(null)
 const locationSource=ref<JournalEntry['location_source']>(null), visibility=ref<JournalEntry['visibility']>('private')
@@ -25,7 +26,7 @@ const notebook=ref<InstanceType<typeof ScrapbookNotebook>|null>(null)
 const ready=ref(false), loading=ref(false), loadFailed=ref(false), saving=ref(false), uploadBusy=ref(false), viewMode=ref(!!entryId)
 const detailsOpen=ref(false)
 const saveError=ref(''), locationError=ref(''), locationLoading=ref(false), savedDraft=ref('')
-function snapshot() { return JSON.stringify({title:title.value,content:content.value,date:date.value,tags:tags.value,moodEmoji:moodEmoji.value,moodLabel:moodLabel.value,locationName:locationName.value,latitude:latitude.value,longitude:longitude.value,locationSource:locationSource.value,visibility:visibility.value,layout:layout.value}) }
+function snapshot() { return JSON.stringify({trackerLinks:trackerLinks.value,title:title.value,content:content.value,date:date.value,tags:tags.value,moodEmoji:moodEmoji.value,moodLabel:moodLabel.value,locationName:locationName.value,latitude:latitude.value,longitude:longitude.value,locationSource:locationSource.value,visibility:visibility.value,layout:layout.value}) }
 const dirty=computed(()=>ready.value && !!savedDraft.value && snapshot()!==savedDraft.value)
 const canSave=computed(()=>ready.value && !loadFailed.value && !saving.value && !uploadBusy.value && !!title.value.trim() && !!content.value.trim() && !!date.value)
 const dateLabel=computed(()=>new Date(date.value+'T00:00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric',year:'numeric'}))
@@ -36,7 +37,7 @@ async function load() {
     if(entryId) {
       const entry=(await api.get<{data:JournalEntry}>(`/journal/${entryId}`)).data.data
       linkedTrip.value=entry.trip_id||'';linkedDay.value=entry.trip_day_id||'';linkedActivity.value=entry.itinerary_item_id||''
-      title.value=entry.title;content.value=entry.content;date.value=entry.entry_date
+      title.value=entry.title;content.value=entry.content;date.value=entry.entry_date;trackerLinks.value=entry.tracker_links||[]
       tags.value=entry.tags || [];moodEmoji.value=entry.mood_emoji || '';moodLabel.value=entry.mood_label || entry.mood || ''
       locationName.value=entry.location_name || '';latitude.value=entry.latitude;longitude.value=entry.longitude
       locationSource.value=entry.location_source;visibility.value=entry.visibility
@@ -52,14 +53,14 @@ onMounted(load)
 function cancelEdit() {
   if(!savedDraft.value) return
   const d=JSON.parse(savedDraft.value)
-  title.value=d.title;content.value=d.content;date.value=d.date;tags.value=d.tags;moodEmoji.value=d.moodEmoji;moodLabel.value=d.moodLabel
+  title.value=d.title;content.value=d.content;date.value=d.date;trackerLinks.value=d.trackerLinks||[];tags.value=d.tags;moodEmoji.value=d.moodEmoji;moodLabel.value=d.moodLabel
   locationName.value=d.locationName;latitude.value=d.latitude;longitude.value=d.longitude;locationSource.value=d.locationSource;visibility.value=d.visibility
   layout.value=d.layout;notebook.value?.reset(d.layout);viewMode.value=!!savedEntryId.value;saveError.value=''
 }
 async function handleSave() {
   if(!canSave.value) return
   saving.value=true;saveError.value=''
-  const payload={trip_id:linkedTrip.value||null,trip_day_id:linkedDay.value||null,itinerary_item_id:linkedActivity.value||null,title:title.value,content:content.value,entry_date:date.value,tags:tags.value,mood_emoji:moodEmoji.value || null,mood_label:moodLabel.value || null,location_name:locationName.value || null,latitude:latitude.value,longitude:longitude.value,location_source:locationSource.value,visibility:visibility.value}
+  const payload={...(trackerLinks.value.length?{tracker_links:trackerLinks.value}:entryId?{tracker_links:[]}:{}),trip_id:linkedTrip.value||null,trip_day_id:linkedDay.value||null,itinerary_item_id:linkedActivity.value||null,title:title.value,content:content.value,entry_date:date.value,tags:tags.value,mood_emoji:moodEmoji.value || null,mood_label:moodLabel.value || null,location_name:locationName.value || null,latitude:latitude.value,longitude:longitude.value,location_source:locationSource.value,visibility:visibility.value}
   try {
     if(!savedEntryId.value) savedEntryId.value=(await store.createEntry({...payload,draft_key:draftKey})).id
     const composition=await notebook.value!.prepareSave(savedEntryId.value)
@@ -193,6 +194,7 @@ const moodCategories: MoodCategory[] = [
   <main class="journal-desk">
     <NotebookHeader back-to="/journal" back-label="My journal" :status="loading?'Opening…':!ready?'Couldn’t load':saving?'Saving…':uploadBusy?'Uploading…':dirty?'Unsaved changes':savedEntryId?'All changes saved':'New entry'" save-label="Save entry" edit-label="Edit journal" :view-mode="viewMode" :ready="ready" :disabled="!canSave" :busy="saving || uploadBusy" @save="handleSave" @edit="viewMode=false" @cancel="cancelEdit" @details="detailsOpen=true" />
     <p class="compact-date" v-if="ready">{{dateLabel}}</p>
+    <div v-if="ready&&trackerLinks.length" class="journal-tracker-links"><span>✧ Live links · your tracker records stay in your notebook</span><div v-for="(link,i) in trackerLinks" :key="link.id"><RouterLink :to="{path:link.id==='board'?'/trackers':'/trackers/'+link.id,query:{month:link.month,...(link.id==='board'?{view:'board'}:{})}}">{{link.id==='board'?'Open monthly tracker board':'Open linked tracker'}} · {{link.month}} ↗</RouterLink><button v-if="!viewMode" :disabled="saving" aria-label="Remove tracker link from journal" @click="trackerLinks.splice(i,1)">×</button></div></div>
     <AppSheet v-model="detailsOpen" title="Entry details"><div class="details-fields">
           <template v-if="!viewMode">
             <label>Date<input v-model="date" type="date" :disabled="saving" /></label>
@@ -219,3 +221,5 @@ const moodCategories: MoodCategory[] = [
 .compact-date{text-align:center;color:#7d735f;font-size:12px;letter-spacing:.07em;margin:0 0 18px}.details-fields{display:grid;gap:18px}.details-fields label{display:grid;gap:7px;font-size:14px}.details-fields input,.details-fields select{width:100%;font-size:16px;min-height:48px;padding:10px;border:1px solid #d7ccba;border-radius:6px;background:#fffaf1}.details-fields button{min-height:44px}
 @media(max-width:959px){.journal-desk{padding:12px;min-height:100dvh}.compact-date{display:none}}
 </style>
+
+<style scoped>.journal-tracker-links{max-width:960px;margin:15px auto;padding:12px 17px;background:#f7f2e7;border:1px solid #d3c5aa;border-radius:6px;display:grid;gap:7px;color:#8c795a}.journal-tracker-links>span{font-size:10px}.journal-tracker-links>div{display:flex;align-items:center;gap:12px}.journal-tracker-links a{display:flex;align-items:center;min-height:44px;font-size:13px;color:#74283c}.journal-tracker-links button{margin-left:auto;min-width:44px;min-height:44px;font-size:23px;color:#895365}</style>

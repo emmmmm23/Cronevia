@@ -15,7 +15,10 @@
     "check:supabase": "node scripts/check-supabase.mjs",
     "check:planner": "node scripts/check-trip-planner.mjs",
     "planner:bundle": "node scripts/build-trip-planner-upgrade.mjs",
-    "check:planner-release": "node scripts/check-trip-planner.mjs --production && npm run build",
+    "check:planner-release": "node scripts/check-trip-planner.mjs --production && node scripts/check-trackers.mjs --production && npm run build",
+    "check:trackers": "node scripts/check-trackers.mjs",
+    "trackers:bundle": "node scripts/build-tracker-upgrade.mjs",
+    "test:trackers": "vitest run src/types/trackers.test.ts",
     "supabase:bundle": "node scripts/build-migration-bundle.mjs"
   },
   "dependencies": {

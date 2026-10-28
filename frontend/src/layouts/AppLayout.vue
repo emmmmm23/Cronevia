@@ -218,7 +218,7 @@ const mainNavLinks = [
   { path: '/journal', label: 'Journal' },
   { path: '/trips', label: 'Trips' },
   { path: '/memories', label: 'Memories' },
-  { path: '/map', label: 'Map' },
+  { path: '/trackers', label: 'Trackers' },
   { path: '/take-me-back', label: 'Timeline' },
   { path: '/capsules', label: 'Capsules' },
   { path: '/letters', label: 'Letters' },

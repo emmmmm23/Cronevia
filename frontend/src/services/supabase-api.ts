@@ -11,7 +11,7 @@ type Options = { params?: Record<string, string | number>; headers?: Record<stri
 const tables: Record<string, Table> = { trips: 'trips', journal: 'journal_entries', memories: 'memories' }
 const writable: Record<Table, string[]> = {
   trips: ['destination_latitude', 'destination_longitude', 'destination_source', 'timezone', 'preparation', 'title', 'description', 'destination', 'start_date', 'end_date', 'status', 'budget', 'currency', 'visibility'],
-  journal_entries: ['scrapbook_layout', 'title', 'content', 'entry_date', 'trip_id', 'trip_day_id', 'itinerary_item_id', 'memory_id', 'mood_emoji', 'mood_name', 'mood_enum', 'location_name', 'latitude', 'longitude', 'weather', 'visibility', 'status', 'is_archived', 'location_source', 'tags'],
+  journal_entries: ['tracker_links', 'scrapbook_layout', 'title', 'content', 'entry_date', 'trip_id', 'trip_day_id', 'itinerary_item_id', 'memory_id', 'mood_emoji', 'mood_name', 'mood_enum', 'location_name', 'latitude', 'longitude', 'weather', 'visibility', 'status', 'is_archived', 'location_source', 'tags'],
   memories: ['itinerary_item_id', 'journal_entry_id', 'scrapbook_layout', 'title', 'description', 'trip_id', 'memory_date', 'location_name', 'latitude', 'longitude', 'is_archived'],
 }
 export function preparePayload(table: Table, input: RecordData) {

@@ -1,6 +1,10 @@
 // Schema types for the checked-in migrations. Regenerate from Supabase after deployment.
+import type { CreativeTracker, TrackerLog, TrackerBoard } from './trackers'
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 export type Database = { public: { Tables: {
+creative_trackers: { Row: { [K in keyof CreativeTracker]: CreativeTracker[K] }; Insert: never; Update: never; Relationships: [] }
+tracker_logs: { Row: { [K in keyof TrackerLog]: TrackerLog[K] }; Insert: never; Update: never; Relationships: [] }
+tracker_boards: { Row: { [K in keyof TrackerBoard]: TrackerBoard[K] }; Insert: never; Update: never; Relationships: [] }
 profiles: {
 Row: {
   id: string
@@ -371,6 +375,7 @@ Relationships: []
 }
 journal_entries: {
 Row: {
+tracker_links: { id: string; month: string }[]
 scrapbook_layout: Json | null
 location_source: string | null
 tags: string[]
@@ -1011,6 +1016,11 @@ Update: {
 Relationships: []
 }
 }; Views: { [_ in never]: never }; Functions: {
+save_creative_tracker: { Args: { target_id: string; details: Json }; Returns: Json }
+save_tracker_log: { Args: { target_tracker: string; entry_id: string; entry_date: string; entry_values: Json; session_start: string | null; session_end: string | null; entry_timezone: string }; Returns: Json }
+remove_tracker_log: { Args: { target_id: string }; Returns: undefined }
+delete_creative_tracker: { Args: { target_id: string }; Returns: undefined }
+save_tracker_board: { Args: { details: Json }; Returns: Json }
 name_trip_day: {Args:{target_trip_id:string;target_day_id:string;day_title:string};Returns:Database['public']['Tables']['trip_days']['Row']}
 
 ensure_trip_days: {Args:{target_trip_id:string};Returns:undefined}

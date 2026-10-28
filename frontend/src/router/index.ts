@@ -98,8 +98,10 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'map',
         name: 'map',
-        component: () => import('@/pages/MapPage.vue'),
+        redirect: '/trackers',
       },
+      { path: 'trackers', name: 'trackers', component: () => import('@/pages/TrackersPage.vue') },
+      { path: 'trackers/:id', name: 'trackers.show', component: () => import('@/pages/TrackersPage.vue') },
       {
         path: 'take-me-back',
         name: 'takeback',

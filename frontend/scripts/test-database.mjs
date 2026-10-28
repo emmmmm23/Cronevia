@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite'
 import { readFile, readdir } from 'node:fs/promises'
 import assert from 'node:assert/strict'
+import { testTrackers } from './test-trackers-database.mjs'
 
 async function main() {
 // Real PostgreSQL running locally in WASM; auth/storage platform schemas are test fixtures.
@@ -268,6 +269,7 @@ await rejected('SELECT reorder_trip_places($1,NULL,$2)',[folder,[stop,legacyStop
 assert.equal((await db.query('SELECT * FROM trip_folder_summaries() WHERE trip_id=$1',[folder])).rows.length,0)
 assert.equal((await db.query('SELECT * FROM itinerary_items WHERE id=$1',[stop])).rows.length,0)
 console.log('PASS: name-only empty folder, idempotent place saves, date moves, overnight pins, atomic invalid-date rollback, unscheduled/manual clearing, summary counts and private ownership.')
+await testTrackers(db,asUser,alice,bob)
 await asUser(admin)
 assert.equal((await db.query('SELECT * FROM get_user_statistics()')).rows[0].total_users,3)
 assert.equal((await db.query(`SELECT * FROM admin_user_details($1)`,[alice])).rows[0].email,'alice@example.test')
