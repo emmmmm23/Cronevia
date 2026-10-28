@@ -49,8 +49,9 @@ async function save(){
   if(!id.value)id.value=(await api.post<{data:Memory}>('/memories',{title:title.value,description:text.value,memory_date:date.value,draft_key:draftKey})).data.data.id
   const composition=await notebook.value!.prepareSave(id.value)
   memory.value=(await api.put<{data:Memory}>('/memories/'+id.value,{title:title.value,description:text.value,memory_date:date.value,location_name:place.value || null,trip_id:linkedTrip.value||null,journal_entry_id:linkedJournal.value||null,itinerary_item_id:linkedActivity.value||null,scrapbook_layout:composition})).data.data
-  notebook.value?.markSaved();restore()
+  notebook.value?.markSaved();baseline.value=snapshot()
   if(!route.params.id)await router.replace({name:'memories.show',params:{id:id.value}})
+  restore()
  }catch(e){error.value=scrapbookError(e,'save')}finally{saving.value=false}
 }
 function cancel(){

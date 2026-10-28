@@ -10,25 +10,25 @@ Route::prefix('v1')->group(function () {
         Route::post('login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login'])
             ->middleware('throttle:5,1');
         Route::post('logout', [\App\Http\Controllers\Api\V1\AuthController::class, 'logout'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::get('me', [\App\Http\Controllers\Api\V1\AuthController::class, 'me'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::patch('profile', [\App\Http\Controllers\Api\V1\AuthController::class, 'updateProfile'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::post('profile/photo', [\App\Http\Controllers\Api\V1\AuthController::class, 'uploadProfilePhoto'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::delete('profile/photo', [\App\Http\Controllers\Api\V1\AuthController::class, 'deleteProfilePhoto'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::patch('password', [\App\Http\Controllers\Api\V1\AuthController::class, 'changePassword'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::patch('email', [\App\Http\Controllers\Api\V1\AuthController::class, 'changeEmail'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
         Route::delete('account', [\App\Http\Controllers\Api\V1\AuthController::class, 'deleteAccount'])
-            ->middleware('auth:sanctum');
+            ->middleware(['auth:sanctum','account_active']);
     });
 
     // Protected routes
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum','account_active'])->group(function () {
         // Dashboard
         Route::get('dashboard', [\App\Http\Controllers\Api\V1\DashboardController::class, 'index']);
 

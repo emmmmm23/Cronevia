@@ -44,3 +44,15 @@ frontend/.vercel/
 frontend/test-results/
 frontend/playwright-report/
 frontend/.env.*.local
+
+# Environment credentials and private key material (examples remain shareable)
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+!frontend/.env.production
+*.pem
+*.p12
+*.pfx
+*.key

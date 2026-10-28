@@ -19,20 +19,14 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        // Primary app origin — Laravel serves both the SPA and the API
-        'http://localhost:8000',
-        'http://127.0.0.1:8000',
-        // Vite dev server (for HMR WebSocket, assets only)
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:5174',
-    ],
+    'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', env(
+        'CORS_ALLOWED_ORIGINS',
+        env('APP_ENV') === 'production'
+            ? env('APP_URL', 'https://cronevia.vercel.app')
+            : 'http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174'
+    ))))),
 
-    'allowed_origins_patterns' => [
-        'https://*.vercel.app',
-    ],
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 

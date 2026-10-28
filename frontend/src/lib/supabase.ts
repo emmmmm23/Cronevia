@@ -15,6 +15,9 @@ import type { Database } from '@/types/database.types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+export function clearBrowserSession(){
+  try{window.localStorage.removeItem(authStorageKey);window.localStorage.removeItem(authStorageKey+'-code-verifier')}catch{/* Private browsing can deny storage. */}
+}
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -22,7 +25,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
     'Please check your .env file and ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.'
   )
 }
+if (supabaseAnonKey.startsWith('sb_secret_')) throw new Error('A server-only credential cannot be used by the browser.')
+try {
+  const payload = JSON.parse(atob(supabaseAnonKey.split('.')[1] || ''))
+  if (payload.role === 'service_role') throw new Error('A server-only credential cannot be used by the browser.')
+} catch (error) {
+  if (error instanceof Error && error.message.includes('server-only')) throw error
+}
 
+export const authStorageKey='sb-'+new URL(supabaseUrl).hostname.split('.')[0]+'-auth-token'
 /**
  * Supabase client instance
  * 
@@ -34,6 +45,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
  */
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storageKey: authStorageKey,
     // Store session in localStorage for persistence across page refreshes
     storage: window.localStorage,
     
@@ -47,6 +59,19 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
   },
 })
+
+/** Verify a password in an isolated, non-persistent session without downgrading MFA. */
+export async function verifyCurrentPassword(password: string) {
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user?.email || !password) throw new Error('Enter your current password to continue.')
+  const verifier = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'cronevia-password-verification' },
+  })
+  try {
+    const result = await verifier.auth.signInWithPassword({ email: user.email, password })
+    if (result.error || result.data.user?.id !== user.id) throw new Error('Your current password could not be verified.')
+  } finally { await verifier.auth.signOut({ scope: 'local' }) }
+}
 
 /**
  * Helper function to get the current user

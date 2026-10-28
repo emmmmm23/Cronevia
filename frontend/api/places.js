@@ -1,23 +1,29 @@
 // Vercel Node endpoint. Keep GEOAPIFY_API_KEY server-side (never VITE_*).
-const recent = new Map()
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
-  if (req.method !== 'GET') return res.status(405).json({ error: 'GET required' })
+  res.setHeader('X-Content-Type-Options','nosniff')
+  res.setHeader('Vary','Origin')
+  if (req.method !== 'GET') {res.setHeader('Allow','GET');return res.status(405).json({error:'GET required'})}
+  if(typeof req.url!=='string'||req.url.length>2048)return res.status(400).json({error:'Invalid location query'})
+  const origins=new Set([process.env.APP_ORIGIN||'https://cronevia.vercel.app',...(process.env.VERCEL_URL?['https://'+process.env.VERCEL_URL]:[])])
+  if(req.headers.origin&&!origins.has(req.headers.origin))return res.status(403).json({error:'Origin is not allowed'})
   const key = process.env.GEOAPIFY_API_KEY
   if (!key) return res.status(503).json({ error: 'Place lookup is not configured' })
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   if (!supabaseUrl || !anonKey) return res.status(503).json({ error: 'Authentication is not configured' })
   const authorization = req.headers.authorization
-  if (!authorization?.startsWith('Bearer ')) return res.status(401).json({ error: 'Sign in to search places' })
+  if (typeof authorization!=='string'||authorization.length>8192||!authorization.startsWith('Bearer ')) return res.status(401).json({ error: 'Sign in to search places' })
   try {
     const auth = await fetch(new URL('/auth/v1/user', supabaseUrl), {headers:{Authorization:authorization,apikey:anonKey},signal:AbortSignal.timeout(5000)})
     if (!auth.ok) return res.status(401).json({ error: 'Sign in to search places' })
-    const user = await auth.json(), now = Date.now()
+    const user = await auth.json()
     if (!user.id) return res.status(401).json({ error: 'Sign in to search places' })
-    if (now - (recent.get(user.id) || 0) < 1000) return res.status(429).json({error:'Please wait before searching again'})
-    if (recent.size > 1000) recent.clear()
-    recent.set(user.id, now)
+    // The RPC checks live account status and verified MFA factors and atomically
+    // applies the same per-account quota across every serverless instance.
+    const quota=await fetch(new URL('/rest/v1/rpc/consume_place_request',supabaseUrl),{method:'POST',headers:{Authorization:authorization,apikey:anonKey,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(5000)})
+    if(!quota.ok)return res.status(quota.status===401||quota.status===403?403:503).json({error:'Account verification is required or temporarily unavailable'})
+    if(await quota.json()!==true){res.setHeader('Retry-After','2');return res.status(429).json({error:'Please wait before searching again'})}
   } catch { return res.status(503).json({error:'Authentication temporarily unavailable'}) }
   const query = new URL(req.url, 'https://local.invalid').searchParams
   const q = query.get('q')?.trim(), lat = query.get('lat'), lon = query.get('lon'), nearby=query.get('mode')==='nearby'
@@ -31,13 +37,15 @@ export default async function handler(req, res) {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(9000) })
     if (!response.ok) return res.status(response.status === 429 ? 429 : 503).json({ error: 'Place provider unavailable' })
-    const data = await response.json()
-    const rows=nearby?(data.features||[]).map(f=>f.properties):data.results||[]
-    const normalized=rows.filter(p=>!nearby||p.name).filter(p=>!q&&!nearby||p.country_code?.toLowerCase()==='ph').map(p=>({
-      name:nearby?p.name:p.formatted, address:p.formatted||p.address_line2||'',latitude:p.lat,longitude:p.lon,countryCode:p.country_code,
-      provider:'geoapify',providerId:p.place_id,categories:p.categories||[],
-      category:(p.categories||[]).some(c=>c.startsWith('catering'))?'food':(p.categories||[]).some(c=>c.startsWith('natural')||c.startsWith('leisure.park'))?'nature':(p.categories||[]).some(c=>c.includes('museum')||c.includes('memorial')||c.includes('place_of_worship'))?'culture':'attractions',
-      ...(typeof p.datasource?.raw?.opening_hours==='string'?{openingHours:p.datasource.raw.opening_hours}:{}),
+    const text=await response.text()
+    if(text.length>1000000)throw new Error('Provider response too large')
+    const data=JSON.parse(text)
+    const rows=nearby?(Array.isArray(data.features)?data.features:[]).slice(0,48).map(f=>f?.properties):(Array.isArray(data.results)?data.results:[]).slice(0,6)
+    const normalized=rows.filter(p=>p&&typeof p==='object'&&Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180).filter(p=>!nearby||typeof p.name==='string').filter(p=>!q&&!nearby||typeof p.country_code==='string'&&p.country_code.toLowerCase()==='ph').map(p=>({
+      name:String(nearby?p.name:p.formatted||'Place').slice(0,255), address:String(p.formatted||p.address_line2||'').slice(0,500),latitude:p.lat,longitude:p.lon,countryCode:typeof p.country_code==='string'?p.country_code.slice(0,2):'',
+      provider:'geoapify',providerId:typeof p.place_id==='string'?p.place_id.slice(0,2048):'',categories:Array.isArray(p.categories)?p.categories.filter(c=>typeof c==='string').slice(0,30):[],
+      category:(Array.isArray(p.categories)?p.categories:[]).filter(c=>typeof c==='string').some(c=>c.startsWith('catering'))?'food':(Array.isArray(p.categories)?p.categories:[]).filter(c=>typeof c==='string').some(c=>c.startsWith('natural')||c.startsWith('leisure.park'))?'nature':(Array.isArray(p.categories)?p.categories:[]).filter(c=>typeof c==='string').some(c=>c.includes('museum')||c.includes('memorial')||c.includes('place_of_worship'))?'culture':'attractions',
+      ...(typeof p.datasource?.raw?.opening_hours==='string'?{openingHours:p.datasource.raw.opening_hours.slice(0,500)}:{}),
       ...(['yes','no','limited'].includes(p.datasource?.raw?.wheelchair)?{accessibility:p.datasource.raw.wheelchair}:{})
     }))
     const seen=new Set()

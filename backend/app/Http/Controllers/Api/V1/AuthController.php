@@ -32,6 +32,7 @@ class AuthController extends Controller
         ]);
 
         Auth::login($user);
+        $request->session()->regenerate();
 
         return response()->json([
             'message' => 'Registration successful.',
@@ -65,6 +66,13 @@ class AuthController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
+
+        if (! $user || ! $user->isActive()) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return response()->json(['message' => 'The provided credentials are incorrect.'], 401);
+        }
 
         return response()->json([
             'message' => 'Login successful.',
@@ -140,6 +148,14 @@ class AuthController extends Controller
             'locale' => ['sometimes', 'nullable', 'string', 'max:10'],
         ]);
 
+        // Profile updates must not bypass the dedicated email-change password check.
+        if (isset($validated['email']) && $validated['email'] !== $user->email) {
+            $confirmation = $request->validate(['current_password' => ['required', 'string']]);
+            if (! Hash::check($confirmation['current_password'], $user->password_hash)) {
+                return response()->json(['message' => 'Current password could not be verified.'], 422);
+            }
+            $user->email_verified_at = null;
+        }
         $user->update($validated);
 
         return response()->json([
@@ -280,6 +296,7 @@ class AuthController extends Controller
         }
 
         // Update email
+        $user->email_verified_at = null;
         $user->update(['email' => $validated['email']]);
 
         return response()->json([

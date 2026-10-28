@@ -118,13 +118,13 @@ async function handleSubmit() {
 
     if (result.success) {
       emailSent.value = true
-      successMessage.value = 'Password reset instructions have been sent to your email.'
+      successMessage.value = 'If an account matches that email, you will receive password reset instructions.'
     } else {
       errorMessage.value = result.error || 'Failed to send reset email. Please try again.'
     }
   } catch (error: any) {
     console.error('Password reset error:', error)
-    errorMessage.value = error.message || 'An unexpected error occurred. Please try again.'
+    errorMessage.value = 'The request could not be completed. Please try again.'
   } finally {
     loading.value = false
   }

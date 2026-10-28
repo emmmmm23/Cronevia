@@ -1,13 +1,8 @@
-/**
- * Authentication Store using Supabase
- * 
- * Replaces Laravel Sanctum with Supabase Auth
- * Handles login, registration, logout, and session management
- */
-
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { supabase, clearBrowserSession } from '@/lib/supabase'
+import { accountError } from '@/services/account-security'
+import { loadAccountTheme, clearAccountTheme } from '@/services/theme'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useJournalStore } from './journal'
 import { useTripsStore } from './trips'
@@ -15,19 +10,13 @@ import { useMemoriesStore } from './memories'
 import { useDashboardStore } from './dashboard'
 import type { User } from '@/types'
 import type { Database } from '@/types/database.types'
-
 type Profile = Database['public']['Tables']['profiles']['Row']
-
 export const useAuthStore = defineStore('auth', () => {
-  // State
-  const supabaseUser = ref<SupabaseUser | null>(null)
-  const profile = ref<Profile | null>(null)
-  const initialized = ref(false)
-  const loading = ref(false)
-
-  // Computed
+  const supabaseUser = ref<SupabaseUser | null>(null), profile = ref<Profile | null>(null)
+  const initialized = ref(false), loading = ref(false), securityChecked = ref(false), mfaRequired = ref(false)
+  const recoverySession = ref(false)
+  const inlineReauth=ref(false)
   const isAuthenticated = computed(() => supabaseUser.value !== null)
-  
   const user = computed<User | null>(() => {
     if (!supabaseUser.value || !profile.value) return null
     
@@ -55,350 +44,130 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isSuperAdmin = computed(() => profile.value?.role === 'super_admin')
   const isAccountActive = computed(() => profile.value?.account_status === 'active')
-
-  /**
-   * Initialize auth state on app startup
-   * Checks for existing session and loads user data
-   */
-  async function initialize(): Promise<void> {
-    if (initialized.value) return
-
-    try {
-      loading.value = true
-
-      // Check for existing session
-      const { data: { session }, error } = await supabase.auth.getSession()
-      
-      if (error) {
-        console.error('Session error:', error)
-        supabaseUser.value = null
-        profile.value = null
-        return
-      }
-
-      if (session?.user) {
-        supabaseUser.value = session.user
-        await fetchProfile()
-      }
-
-      // Listen for auth state changes
-      supabase.auth.onAuthStateChange((_event, session) => {
-        
-        if (session?.user) {
-          supabaseUser.value = session.user
-          setTimeout(() => { void fetchProfile() }, 0)
-        } else {
-          supabaseUser.value = null
-          profile.value = null
-          clearFeatureState()
-        }
-      })
-    } catch (error) {
-      console.error('Initialization error:', error)
-      supabaseUser.value = null
-      profile.value = null
-    } finally {
-      initialized.value = true
-      loading.value = false
-    }
-  }
-
-  /**
-   * Fetch user profile from profiles table
-   */
-  async function fetchProfile(): Promise<void> {
-    if (!supabaseUser.value) {
-      profile.value = null
-      return
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', supabaseUser.value.id)
-        .single()
-
-      if (error) {
-        console.error('Profile fetch error:', error)
-        profile.value = null
-        return
-      }
-
-      if (supabaseUser.value?.id === data.user_id) profile.value = data
-    } catch (error) {
-      console.error('Profile fetch exception:', error)
-      profile.value = null
-    }
-  }
-
-  /**
-   * Register a new user
-   * @param fullName - User's full name
-   * @param email - User's email
-   * @param password - User's password
-   */
-  async function register(
-    fullName: string,
-    email: string,
-    password: string
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      loading.value = true
-
-      // Sign up with Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      })
-
-      if (error) {
-        return { success: false, error: error.message }
-      }
-
-      if (!data.user) {
-        return { success: false, error: 'Registration failed. Please try again.' }
-      }
-
-      // Check if email confirmation is required
-      if (data.session) {
-        // Email confirmation disabled - user is logged in
-        supabaseUser.value = data.user
-        await fetchProfile()
-      } else {
-        // Email confirmation required
-        // User will need to confirm email before logging in
-        console.log('Email confirmation required')
-      }
-
-      return { success: true }
-    } catch (error: any) {
-      console.error('Registration error:', error)
-      return { success: false, error: error.message || 'Registration failed' }
-    } finally {
-      loading.value = false
-    }
-  }
-
-  /**
-   * Login with email and password
-   * @param email - User's email
-   * @param password - User's password
-   */
-  async function login(
-    email: string,
-    password: string
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      loading.value = true
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        return { success: false, error: error.message }
-      }
-
-      if (!data.user) {
-        return { success: false, error: 'Login failed. Please try again.' }
-      }
-
-      supabaseUser.value = data.user
-      await fetchProfile()
-
-      if (!profile.value) {
-        await logout()
-        return { success: false, error: 'Your profile could not be loaded. Please try again.' }
-      }
-      // Check account status
-      if (profile.value?.account_status !== 'active') {
-        const accountStatus = profile.value.account_status
-        await logout()
-        return { 
-          success: false, 
-          error: `Your account is ${accountStatus}. Please contact support.`
-        }
-      }
-
-      return { success: true }
-    } catch (error: any) {
-      console.error('Login error:', error)
-      return { success: false, error: error.message || 'Login failed' }
-    } finally {
-      loading.value = false
-    }
-  }
-
-  /**
-   * Logout current user
-   */
+  let generation = 0
   function clearFeatureState() {
-    useJournalStore().clearEntries()
-    useTripsStore().clearTrips()
-    useMemoriesStore().clearMemories()
-    useDashboardStore().resetDashboardData()
+    useJournalStore().clearEntries(); useTripsStore().clearTrips()
+    useMemoriesStore().clearMemories(); useDashboardStore().resetDashboardData()
   }
-
-  async function logout(): Promise<void> {
-    try {
-      loading.value = true
-      
-      const { error } = await supabase.auth.signOut()
-      
-      if (error) {
-        console.error('Logout error:', error)
-      }
-
-      clearFeatureState()
-      // Clear state regardless of error
-      supabaseUser.value = null
-      profile.value = null
-    } catch (error) {
-      console.error('Logout exception:', error)
-    } finally {
-      loading.value = false
-    }
+  async function fetchProfile() {
+    if (!supabaseUser.value || !securityChecked.value || mfaRequired.value) { profile.value = null; return }
+    const id = supabaseUser.value.id
+    const {data,error} = await supabase.from('profiles').select('*').eq('user_id',id).single()
+    if (supabaseUser.value?.id !== id) return
+    profile.value = error ? null : data
+    if (data && !error && data.account_status === 'active') await loadAccountTheme(id)
   }
-
-  /**
-   * Update user profile
-   */
-  async function updateProfile(updates: {
-    full_name?: string
-    username?: string
-    bio?: string
-    avatar_url?: string
-    timezone?: string
-    locale?: string
-  }): Promise<{ success: boolean; error?: string }> {
-    if (!supabaseUser.value) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    try {
-      loading.value = true
-
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('user_id', supabaseUser.value.id)
-
-      if (error) {
-        return { success: false, error: error.message }
-      }
-
-      // Refresh profile
-      await fetchProfile()
-
-      return { success: true }
-    } catch (error: any) {
-      console.error('Profile update error:', error)
-      return { success: false, error: error.message || 'Profile update failed' }
-    } finally {
-      loading.value = false
-    }
+  // A missing/failed MFA check never grants access. Auth and database checks are independent.
+  let securityQueue:Promise<void>=Promise.resolve()
+  function refreshSecurity(){
+    const task=securityQueue.then(checkSecurity,checkSecurity)
+    securityQueue=task.catch(()=>{})
+    return task
   }
-
-  /**
-   * Change user password
-   */
-  async function changePassword(
-    newPassword: string
-  ): Promise<{ success: boolean; error?: string }> {
+  async function checkSecurity() {
+    const current = ++generation
     try {
-      loading.value = true
-
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
+      const result = await supabase.auth.getUser()
+      if (current !== generation) return
+      if (result.error || !result.data.user) { supabaseUser.value=null; profile.value=null; clearFeatureState(); return }
+      if (supabaseUser.value?.id !== result.data.user.id) { profile.value=null; clearFeatureState() }
+      supabaseUser.value=result.data.user
+      const level = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (current !== generation) return
+      if (level.error || !level.data?.currentLevel) throw new Error('Security verification unavailable')
+      // getUser() supplies the live factor list; old JWTs cannot hide a newly enabled factor.
+      const hasFactor = result.data.user.factors?.some(f=>f.status==='verified') || level.data.nextLevel==='aal2'
+      mfaRequired.value=!!hasFactor && level.data.currentLevel!=='aal2'
+      securityChecked.value=true
+      if (mfaRequired.value) { profile.value=null; clearFeatureState() }
+      else await fetchProfile()
+    } catch { if(current===generation){securityChecked.value=false;profile.value=null;clearFeatureState()} }
+  }
+  async function initialize() {
+    if(initialized.value)return
+    loading.value=true
+    try {
+      supabase.auth.onAuthStateChange((event,session)=>{
+        if(event==='PASSWORD_RECOVERY')recoverySession.value=true
+        const changed=supabaseUser.value?.id!==session?.user.id
+        supabaseUser.value=session?.user||null
+        if(changed){profile.value=null;securityChecked.value=false;clearFeatureState()}
+        if(!session){generation++;mfaRequired.value=false;recoverySession.value=false;clearAccountTheme()}
+        else if(!loading.value && event!=='INITIAL_SESSION')setTimeout(()=>{void refreshSecurity()},0)
       })
-
-      if (error) {
-        return { success: false, error: error.message }
-      }
-
-      return { success: true }
-    } catch (error: any) {
-      console.error('Password change error:', error)
-      return { success: false, error: error.message || 'Password change failed' }
-    } finally {
-      loading.value = false
-    }
+      const {data,error}=await supabase.auth.getSession()
+      if(!error && data.session?.user){supabaseUser.value=data.session.user;await refreshSecurity()}
+    }catch{securityChecked.value=false;profile.value=null}
+    finally{initialized.value=true;loading.value=false}
   }
-
-  /**
-   * Request password reset email
-   */
-  async function requestPasswordReset(
-    email: string
-  ): Promise<{ success: boolean; error?: string }> {
+  async function register(fullName:string,email:string,password:string) {
+    loading.value=true
     try {
-      loading.value = true
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      })
-
-      if (error) {
-        return { success: false, error: error.message }
+      const {data,error}=await supabase.auth.signUp({email,password,options:{data:{full_name:fullName}}})
+      if(error)return {success:false,error:accountError(error,'Your account could not be created. Please check your details and try again.')}
+      if(data.session){supabaseUser.value=data.user;await refreshSecurity()}
+      return {success:true}
+    }catch{return {success:false,error:'Your account could not be created. Please try again.'}}
+    finally{loading.value=false}
+  }
+  async function login(email:string,password:string) {
+    loading.value=true
+    try {
+      const {data,error}=await supabase.auth.signInWithPassword({email,password})
+      if(error||!data.user)return {success:false,error:accountError(error,'Unable to sign in with those details. Check your email and password.')}
+      supabaseUser.value=data.user
+      await refreshSecurity()
+      if(!securityChecked.value)return {success:false,error:'Security verification is temporarily unavailable. Please retry signing in.'}
+      if(!mfaRequired.value && (!profile.value || !isAccountActive.value)){
+        await logout();return {success:false,error:'This account is unavailable. Please contact support if this continues.'}
       }
-
-      return { success: true }
-    } catch (error: any) {
-      console.error('Password reset request error:', error)
-      return { success: false, error: error.message || 'Password reset request failed' }
-    } finally {
-      loading.value = false
+      return {success:true}
+    }catch{return {success:false,error:'Sign-in is temporarily unavailable. Please try again.'}}
+    finally{loading.value=false}
+  }
+  async function logout() {
+    loading.value=true
+    try {
+      const {error}=await supabase.auth.signOut()
+      if(error)await supabase.auth.signOut({scope:'local'})
+      return !error
+    }catch{return false
+    }finally{
+      clearBrowserSession()
+      generation++;supabaseUser.value=null;profile.value=null;securityChecked.value=false;mfaRequired.value=false;recoverySession.value=false
+      clearFeatureState();clearAccountTheme();loading.value=false
     }
   }
-
-  /**
-   * Refresh current user data
-   */
-  async function fetchCurrentUser(): Promise<void> {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error) {
-      console.error('Fetch user error:', error)
-      supabaseUser.value = null
-      profile.value = null
-      return
-    }
-
-    if (user) {
-      supabaseUser.value = user
-      await fetchProfile()
-    }
+  async function updateProfile(updates:{full_name?:string;username?:string;bio?:string;avatar_url?:string;timezone?:string;locale?:string}) {
+    if(!supabaseUser.value || !securityChecked.value || mfaRequired.value)return {success:false,error:'Please finish signing in.'}
+    loading.value=true
+    try {
+      const {error}=await supabase.from('profiles').update(updates).eq('user_id',supabaseUser.value.id)
+      if(error)return {success:false,error:'Your profile could not be saved. Please try again.'}
+      await fetchProfile();return {success:true}
+    }catch{return {success:false,error:'Your profile could not be saved. Please try again.'}}
+    finally{loading.value=false}
   }
-
-  return {
-    // State
-    user,
-    supabaseUser,
-    profile,
-    initialized,
-    loading,
-    
-    // Computed
-    isAuthenticated,
-    isSuperAdmin,
-    isAccountActive,
-    
-    // Methods
-    initialize,
-    register,
-    login,
-    logout,
-    updateProfile,
-    changePassword,
-    requestPasswordReset,
-    fetchCurrentUser,
-    fetchProfile,
+  // Password recovery relies on the server-verified recovery session. Account changes
+  // use changeAccountPassword(), including current-password and fresh MFA verification.
+  async function changePassword(newPassword:string) {
+    if(!recoverySession.value)return {success:false,error:'Open a fresh password reset link from your email to continue.'}
+    if(newPassword.length<12||newPassword.length>128)return {success:false,error:'Use a password between 12 and 128 characters.'}
+    try {
+      const {error}=await supabase.auth.updateUser({password:newPassword})
+      if(error)return {success:false,error:accountError(error,'Your password could not be updated. Request a fresh reset link and try again.')}
+      await logout();return {success:true}
+    }catch{return {success:false,error:'Your password could not be updated. Please try again.'}}
   }
+  async function requestPasswordReset(email:string) {
+    try {
+      const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+'/reset-password'})
+      // Identical success copy prevents account enumeration. A genuine rate limit can be retried.
+      if(error && error.status===429)return {success:false,error:accountError(error)}
+      return {success:true}
+    }catch{return {success:false,error:'The request could not be completed. Please try again.'}}
+  }
+  async function fetchCurrentUser(){await refreshSecurity()}
+  return {user,supabaseUser,profile,initialized,loading,isAuthenticated,isSuperAdmin,isAccountActive,securityChecked,mfaRequired,recoverySession,inlineReauth,
+    initialize,register,login,logout,updateProfile,changePassword,requestPasswordReset,fetchCurrentUser,fetchProfile,refreshSecurity}
 })

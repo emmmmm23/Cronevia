@@ -24,9 +24,10 @@
           v-if="route.query.error === 'account_suspended'"
           class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm"
         >
-          {{ route.query.message || 'Your account has been suspended.' }}
+          Your account is unavailable. Please contact support.
         </div>
 
+        <p v-if="route.query.notice==='local_sign_out_only'" class="mb-6 text-sm text-gray-600">You are signed out on this device. Other devices could not be signed out; please retry once your connection is available.</p>
         <!-- Login Form -->
         <form @submit.prevent="handleLogin">
           <!-- Email -->
@@ -117,6 +118,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { safeReturnPath } from '@/services/account-security'
 
 const router = useRouter()
 const route = useRoute()
@@ -142,14 +144,14 @@ async function handleLogin() {
 
     if (result.success) {
       // Redirect to intended page or home
-      const redirect = route.query.redirect as string
-      router.push(redirect || '/')
+      password.value = ''
+      router.push(safeReturnPath(route.query.redirect))
     } else {
       errorMessage.value = result.error || 'Login failed. Please try again.'
     }
   } catch (error: any) {
     console.error('Login error:', error)
-    errorMessage.value = error.message || 'An unexpected error occurred. Please try again.'
+    errorMessage.value = 'Sign-in could not be completed. Please try again.'
   } finally {
     loading.value = false
   }

@@ -17,7 +17,7 @@ export async function fixture(page: Page, resource: 'journal'|'memories') {
   let stickers: any[] = [], customEnabled=false, failLoad=false, lostDraftResponse=false; const draftIds=new Set<string>();let failSign=false, customLoadDelay:Promise<void>|undefined, releaseCustomLoad:()=>void=()=>{}
   let collection:any[]|null=null, mediaByParent:Record<string,any[]>={}, images:Record<string,Buffer>={}
   let media: any[] = [], image = Buffer.from(''), writes = 0, creates = 0, failUpload = false, failSave = false
-  const session = {access_token:`${Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')}.${Buffer.from(JSON.stringify({sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated'})).toString('base64url')}.fixture`,refresh_token:'fixture',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}
+  const session = {access_token:`${Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')}.${Buffer.from(JSON.stringify({sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated',aal:'aal1'})).toString('base64url')}.fixture`,refresh_token:'fixture',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}
   await page.addInitScript(({key,session}) => localStorage.setItem(key,JSON.stringify(session)),{key:`sb-${host.split('.')[0]}-auth-token`,session})
   await page.route(`https://${host}/**`,async route => {
     const url = new URL(route.request().url()), method = route.request().method()

@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Register route-specific middleware
         $middleware->alias([
+            'account_active' => \App\Http\Middleware\EnsureAccountActive::class,
             'super_admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
         ]);
     })

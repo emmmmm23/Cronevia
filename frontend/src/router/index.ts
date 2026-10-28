@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { safeReturnPath } from '@/services/account-security'
 
 // Extend route meta type
 declare module 'vue-router' {
@@ -37,6 +38,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/ResetPasswordPage.vue'),
   },
 
+  { path:'/verify-2fa', name:'verify-2fa', component:()=>import('@/pages/VerifyTwoFactorPage.vue') },
   // App pages (require auth)
   {
     path: '/',
@@ -209,48 +211,26 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const auth = useAuthStore()
-
-  // Initialize auth state on first navigation
-  if (!auth.initialized) {
-    await auth.initialize()
+  const auth=useAuthStore()
+  if(!auth.initialized)await auth.initialize()
+  const cleanPath=safeReturnPath(to.fullPath,to.path)
+  if(cleanPath!==to.fullPath && /(?:access_token|refresh_token|token_hash|provider_token|error_description|[?&]code)=/i.test(to.fullPath)){
+    const clean=router.resolve(cleanPath)
+    return {path:clean.path,query:clean.query,hash:clean.hash,replace:true}
   }
-
-  // Protected routes - require authentication
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+  if(auth.isAuthenticated && (to.meta.requiresAuth||to.name==='verify-2fa'||to.name==='reset-password'))await auth.refreshSecurity()
+  if(to.name==='verify-2fa'){
+    if(!auth.isAuthenticated)return {name:'login'}
+    if(auth.securityChecked&&!auth.mfaRequired)return safeReturnPath(to.query.redirect)
+    return
   }
-
-  // Guest routes - redirect authenticated users away
-  if (to.meta.guest && auth.isAuthenticated) {
-    return { name: 'home' }
+  if((to.meta.requiresAuth||to.name==='reset-password')&&!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.fullPath)}}
+  if(auth.isAuthenticated&&(to.meta.requiresAuth||to.name==='reset-password')&&(!auth.securityChecked||auth.mfaRequired))return {name:'verify-2fa',query:{redirect:safeReturnPath(to.fullPath)}}
+  if(to.meta.guest&&auth.isAuthenticated)return auth.securityChecked&&!auth.mfaRequired?{name:'home'}:{name:'verify-2fa'}
+  if(to.meta.requiresAuth&&(!auth.profile||!auth.isAccountActive)){
+    await auth.logout();return {name:'login',query:{error:'account_unavailable'}}
   }
-
-  // Admin routes - require super_admin role
-  if (to.meta.requiresAdmin) {
-    if (!auth.isAuthenticated) {
-      return { name: 'login', query: { redirect: to.fullPath } }
-    }
-    if (!auth.isSuperAdmin) {
-      // Redirect non-admin users to home
-      return { name: 'home' }
-    }
-  }
-
-  // Check account status for authenticated users
-  if (auth.isAuthenticated && auth.profile && !auth.isAccountActive) {
-    // Account is suspended or inactive
-    if (to.name !== 'login') {
-      await auth.logout()
-      return { 
-        name: 'login', 
-        query: { 
-          error: 'account_suspended',
-          message: 'Your account has been suspended. Please contact support.' 
-        } 
-      }
-    }
-  }
+  if(to.meta.requiresAdmin&&!auth.isSuperAdmin)return {name:'home'}
 })
 
 export default router

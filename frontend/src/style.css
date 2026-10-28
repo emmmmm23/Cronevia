@@ -2,6 +2,12 @@
 @source "../index.html";
 @source "./";
 
+:root{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{--theme-light-surface:#ffffff}
+/* A notebook's chosen paper and ink are artwork, independent of the app chrome. */
+.tracker-paper,.scrapbook .paper,.scrapbook-page,.scrapbook-canvas,.journal-paper{color-scheme:light;--theme-light-surface:initial}
+
 @theme {
   --font-serif: "Playfair Display", Georgia, serif;
   --font-sans: "Inter", system-ui, sans-serif;

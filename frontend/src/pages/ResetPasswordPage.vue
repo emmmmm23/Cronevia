@@ -17,6 +17,7 @@
         <!-- Error Message -->
         <div
           v-if="errorMessage"
+          role="alert"
           class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
         >
           {{ errorMessage }}
@@ -25,6 +26,7 @@
         <!-- Success Message -->
         <div
           v-if="successMessage"
+          role="status"
           class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm"
         >
           {{ successMessage }}
@@ -48,7 +50,7 @@
               :disabled="loading"
             />
             <p class="mt-1 text-xs text-gray-500">
-              At least 8 characters
+              At least 12 characters
             </p>
           </div>
 
@@ -155,8 +157,8 @@ async function handleSubmit() {
     return
   }
 
-  if (password.value.length < 8) {
-    errorMessage.value = 'Password must be at least 8 characters long.'
+  if (password.value.length < 12) {
+    errorMessage.value = 'Password must be at least 12 characters long.'
     return
   }
 
@@ -178,7 +180,7 @@ async function handleSubmit() {
     }
   } catch (error: any) {
     console.error('Password reset error:', error)
-    errorMessage.value = error.message || 'An unexpected error occurred. Please try again.'
+    errorMessage.value = 'The request could not be completed. Please try again.'
   } finally {
     loading.value = false
   }

@@ -67,8 +67,9 @@ async function handleSave() {
     // Writing and the entire composition replace together in one PostgreSQL UPDATE.
     const updated=await store.updateEntry(savedEntryId.value,{...payload,scrapbook_layout:composition})
     layout.value=composition;existingPhotos.value=updated.media || existingPhotos.value
-    notebook.value?.markSaved();savedDraft.value=snapshot();viewMode.value=true
+    notebook.value?.markSaved();savedDraft.value=snapshot()
     if(!entryId) await router.replace({name:'journal.edit',params:{id:savedEntryId.value}})
+    viewMode.value=true
   } catch(e) {saveError.value=scrapbookError(e,'save')}
   finally {saving.value=false}
 }

@@ -2,13 +2,14 @@ import { supabase } from '@/lib/supabase'
 import { requireUser } from '@/services/supabase-api'
 import { defaultDesign, localDate, type CreativeTracker, type TrackerLog, type TrackerBoard, type TrackerValues } from '@/types/trackers'
 import type { Json } from '@/types/database.types'
+import {safeServiceMessage} from './request-errors'
 
 const asJson = (value: unknown) => value as Json
 export function trackerError(error: unknown) {
   if (error && typeof error === 'object' && 'message' in error) {
     const message=String(error.message)
     if (/schema cache|does not exist|Could not find the table/i.test(message)) return 'The tracker collection is temporarily unavailable. Your draft is still here. Please try again shortly.'
-    return message
+    return safeServiceMessage(message,'That change could not be saved. Your draft is still here; please try again.')
   }
   return 'That could not be saved. Your draft is still here; please try again.'
 }

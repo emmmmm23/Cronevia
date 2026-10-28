@@ -1,0 +1,32 @@
+name: Security checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --include=dev
+        working-directory: frontend
+      - run: npm run build && npm run check:security -- --history
+        working-directory: frontend
+      - run: npm run test:security && npm run test:database
+        working-directory: frontend
+  dependency-advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # This intentionally fails for unresolved advisories; no hidden allowlist or force upgrade.
+      - run: npm audit --package-lock-only --audit-level=high
+        working-directory: frontend

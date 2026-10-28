@@ -39,6 +39,6 @@ test('expired session can sign in again without losing the creation draft',async
  await page.unroute('**/auth/v1/user');await page.getByLabel('Email address',{exact:true}).fill('planner@example.test');await page.getByLabel('Password',{exact:true}).fill('fixture-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page.getByRole('group',{name:'Sign in again'})).not.toBeVisible();await page.getByRole('button',{name:'Create trip',exact:true}).click();await expect(page.getByRole('button',{name:'Add your first place',exact:true})).toBeVisible();expect(creates).toBe(1)
 })
 
-test('expired session while listing shows sign-in recovery, never a false empty state',async({page})=>{
- await fixture(page);await page.route('**/auth/v1/user',r=>r.fulfill({status:401,contentType:'application/json',body:JSON.stringify({code:'bad_jwt',message:'JWT expired'})}));await page.goto('/trips');await expect(page.getByRole('group',{name:'Sign in again'})).toBeVisible();await expect(page.getByText('Your first journey starts here.',{exact:true})).toHaveCount(0)
+test('expired session before opening a list returns to login, never a false empty state',async({page})=>{
+ await fixture(page);await page.route('**/auth/v1/user',r=>r.fulfill({status:401,contentType:'application/json',body:JSON.stringify({code:'bad_jwt',message:'JWT expired'})}));await page.goto('/trips');await expect(page).toHaveURL(/\/login\?redirect=\/trips/);await expect(page.getByText('Your first journey starts here.',{exact:true})).toHaveCount(0)
 })

@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { readFile, readdir } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import { testTrackers } from './test-trackers-database.mjs'
+import { testAccountSecurity } from './test-account-security-database.mjs'
 
 async function main() {
 // Real PostgreSQL running locally in WASM; auth/storage platform schemas are test fixtures.
@@ -11,6 +12,8 @@ CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
 CREATE SCHEMA auth; CREATE SCHEMA storage;
 CREATE FUNCTION public.uuid_generate_v4() RETURNS uuid LANGUAGE sql AS 'SELECT gen_random_uuid()';
 CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,last_sign_in_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');
+CREATE TABLE auth.mfa_factors(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid REFERENCES auth.users(id),status text);
+CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT COALESCE(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
 CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text);
@@ -290,6 +293,7 @@ await db.exec('RESET ROLE; SET ROLE anon')
 await rejected('SELECT * FROM profiles')
 await rejected('SELECT * FROM journal_entries')
 await rejected('SELECT * FROM get_user_statistics()')
+await testAccountSecurity(db,asUser,alice,bob,admin)
 await db.close()
 console.log('PASS: migrations, profile bootstrap, CRUD, isolation, link ownership, admin authorization, private storage, suspension, ordering, and capsule locks.')
 

@@ -80,7 +80,7 @@
               @input="validatePassword"
             />
             <p class="mt-1 text-xs text-gray-500">
-              At least 8 characters
+              At least 12 characters
             </p>
           </div>
 
@@ -167,8 +167,8 @@ const errorMessage = ref('')
 const successMessage = ref('')
 
 function validatePassword() {
-  if (password.value && password.value.length < 8) {
-    errorMessage.value = 'Password must be at least 8 characters long.'
+  if (password.value && password.value.length < 12) {
+    errorMessage.value = 'Password must be at least 12 characters long.'
   } else {
     errorMessage.value = ''
   }
@@ -185,8 +185,8 @@ async function handleRegister() {
     return
   }
 
-  if (password.value.length < 8) {
-    errorMessage.value = 'Password must be at least 8 characters long.'
+  if (password.value.length < 12) {
+    errorMessage.value = 'Password must be at least 12 characters long.'
     return
   }
 
@@ -218,7 +218,7 @@ async function handleRegister() {
     }
   } catch (error: any) {
     console.error('Registration error:', error)
-    errorMessage.value = error.message || 'An unexpected error occurred. Please try again.'
+    errorMessage.value = 'The request could not be completed. Please try again.'
   } finally {
     loading.value = false
   }

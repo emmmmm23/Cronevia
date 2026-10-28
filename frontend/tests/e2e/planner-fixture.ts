@@ -16,8 +16,8 @@ export async function fixture(page:Page){
   return route.abort()
  })
  const user={id:owner,email:'planner@example.test',aud:'authenticated',role:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-10-14T00:00:00Z'}
- const session={access_token:Buffer.from(JSON.stringify({alg:'HS256'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated'})).toString('base64url')+'.fixture',refresh_token:'fixture',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}
- await page.addInitScript(({key,session})=>localStorage.setItem(key,JSON.stringify(session)),{key:'sb-'+host.split('.')[0]+'-auth-token',session})
+ const session={access_token:Buffer.from(JSON.stringify({alg:'HS256'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated',aal:'aal1'})).toString('base64url')+'.fixture',refresh_token:'fixture',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}
+ await page.addInitScript(({key,session})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(session))},{key:'sb-'+host.split('.')[0]+'-auth-token',session})
  const db:Record<string,any[]>={trips:[{id:tripId,user_id:owner,title:'A slow weekend by the coast',destination:'Batanes',description:'A little walking, a little sea air. Leave space for the unexpected.',start_date:'2026-10-14',end_date:'2026-10-16',timezone:'Asia/Manila',status:'planning',preparation:[],deleted_at:null}],trip_days:[],itinerary_items:[],media:[],memories:[{id:uid(50),user_id:owner,title:'Light across the water',description:'A fixture moment for local visual review.',memory_date:'2026-10-14',is_archived:false,scrapbook_layout:blank(),deleted_at:null}],journal_entries:[{id:uid(51),user_id:owner,title:'Notes from the shore',content:'Fixture reflection for relationship testing.',entry_date:'2026-10-14',is_archived:false,scrapbook_layout:blank(),deleted_at:null}]}
  let serial=100,fail='',lost=false,lostPlace=false,png=Buffer.from('')
  function ensure(id:string){const t=db.trips.find(t=>t.id===id);if(!t)return;const count=t.start_date?Math.max(1,Math.round((Date.parse(t.end_date||t.start_date)-Date.parse(t.start_date))/86400000)+1):1;for(let n=1;n<=count;n++){if(!db.trip_days.some(d=>d.trip_id===id&&d.day_number===n))db.trip_days.push({id:uid(serial++),trip_id:id,day_number:n,is_ideas:false,title:'Day '+n,date:t.start_date?new Date(Date.parse(t.start_date)+(n-1)*86400000).toISOString().slice(0,10):null})}if(!db.trip_days.some(d=>d.trip_id===id&&d.is_ideas))db.trip_days.push({id:uid(serial++),trip_id:id,day_number:0,is_ideas:true,title:'Ideas',date:null})}
@@ -52,7 +52,7 @@ export async function fixture(page:Page){
   const count=rows.length,offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||1000);rows=rows.slice(offset,offset+limit)
   return json(req.headers().accept?.includes('vnd.pgrst.object')?rows[0]||null:rows,200,count)
  })
- return {db,fail(name:string){fail=name},loseCreate(){lost=true},losePlace(){lostPlace=true},image(value:Buffer){png=value}}
+ return {db,user,session,fail(name:string){fail=name},loseCreate(){lost=true},losePlace(){lostPlace=true},image(value:Buffer){png=value}}
 }
 export async function landscape(page: Page) {
   const data = await page.evaluate(() => {
