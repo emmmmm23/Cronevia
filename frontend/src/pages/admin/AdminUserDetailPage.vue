@@ -20,12 +20,7 @@
     <!-- User Details -->
     <div v-else-if="user" class="user-content">
       <div class="user-header">
-        <div class="user-avatar-large">
-          <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.full_name" />
-          <span v-else class="avatar-placeholder">
-            {{ getInitials(user.full_name) }}
-          </span>
-        </div>
+        <UserAvatar :profile="user" :size="80"/>
         <div class="user-title">
           <h1>{{ user.full_name }}</h1>
           <p>@{{ user.username || 'no-username' }}</p>
@@ -127,6 +122,7 @@
 </template>
 
 <script setup lang="ts">
+import UserAvatar from '@/components/shared/UserAvatar.vue'
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUserDetails, suspendUser, reactivateUser, type UserWithDetails } from '@/services/admin'
@@ -177,14 +173,6 @@ async function handleReactivate() {
   }
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
-}
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -258,30 +246,6 @@ onMounted(() => {
   align-items: center;
   gap: 1.5rem;
   flex-wrap: wrap;
-}
-
-.user-avatar-large {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #8b4513;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.user-avatar-large img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  color: white;
-  font-weight: 600;
-  font-size: 1.5rem;
 }
 
 .user-title {

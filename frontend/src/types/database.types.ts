@@ -1,5 +1,6 @@
 // Schema types for the checked-in migrations. Regenerate from Supabase after deployment.
 import type { CreativeTracker, TrackerLog, TrackerBoard } from './trackers'
+import type { AvatarAppearance } from './avatar'
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 export type Database = { public: { Tables: {
 creative_trackers: { Row: { [K in keyof CreativeTracker]: CreativeTracker[K] }; Insert: never; Update: never; Relationships: [] }
@@ -12,6 +13,10 @@ Row: {
   full_name: string
   username: string | null
   avatar_url: string | null
+  avatar_storage_path?: string | null
+  avatar_source_path?: string | null
+  avatar_appearance?: AvatarAppearance
+  avatar_revision?: number
   bio: string | null
   timezone: string | null
   locale: string | null
@@ -1016,6 +1021,8 @@ Update: {
 Relationships: []
 }
 }; Views: { [_ in never]: never }; Functions: {
+save_profile_avatar: {Args:{expected_revision:number;appearance:Json;photo_path:string|null;source_path:string|null;remove_photo:boolean};Returns:Json}
+avatar_schema_version: {Args:Record<string,never>;Returns:number}
 save_creative_tracker: { Args: { target_id: string; details: Json }; Returns: Json }
 save_tracker_log: { Args: { target_tracker: string; entry_id: string; entry_date: string; entry_values: Json; session_start: string | null; session_end: string | null; entry_timezone: string }; Returns: Json }
 remove_tracker_log: { Args: { target_id: string }; Returns: undefined }

@@ -66,12 +66,12 @@
               <button
                 type="button"
                 @click="toggleProfileDropdown"
-                class="w-8 h-8 rounded-full bg-[#7B0323] text-[#fdfaf5] text-xs font-bold flex items-center justify-center hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B0323] focus-visible:ring-offset-2"
+                class="min-w-[44px] min-h-[44px] flex items-center justify-center hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B0323] focus-visible:ring-offset-2"
                 :aria-expanded="profileDropdownOpen"
                 aria-haspopup="true"
                 :aria-label="`${userInitial} profile menu`"
               >
-                {{ userInitial }}
+                <UserAvatar :profile="auth.profile" :size="36"/>
               </button>
 
               <!-- Dropdown menu -->
@@ -114,7 +114,8 @@
             </div>
           </div>
 
-          <!-- Mobile hamburger button -->
+          <!-- Mobile account and navigation -->
+          <div class="xl:hidden flex items-center gap-2 ml-auto"><RouterLink to="/profile" class="min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Your profile"><UserAvatar :profile="auth.profile" :size="36"/></RouterLink>
           <button
             type="button"
             @click="toggleMobileMenu"
@@ -128,6 +129,7 @@
               <path v-else stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          </div>
         </div>
 
         <!-- Mobile menu -->
@@ -196,6 +198,7 @@
 </template>
 
 <script setup lang="ts">
+import UserAvatar from '@/components/shared/UserAvatar.vue'
 import { ref, computed, watch } from 'vue'
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { onClickOutside } from '@vueuse/core'

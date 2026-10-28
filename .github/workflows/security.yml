@@ -18,7 +18,7 @@ jobs:
         working-directory: frontend
       - run: npm run build && npm run check:security -- --history
         working-directory: frontend
-      - run: npm run test:security && npm run test:database
+      - run: npm test && npm run test:security && npm run test:database
         working-directory: frontend
   dependency-advisories:
     runs-on: ubuntu-latest

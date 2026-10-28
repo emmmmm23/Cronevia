@@ -80,16 +80,7 @@
               <tr v-for="user in users" :key="user.id">
                 <td>
                   <div class="user-cell">
-                    <div class="user-avatar">
-                      <img
-                        v-if="user.avatar_url"
-                        :src="user.avatar_url"
-                        :alt="user.full_name"
-                      />
-                      <span v-else class="avatar-placeholder">
-                        {{ getInitials(user.full_name) }}
-                      </span>
-                    </div>
+                    <UserAvatar :profile="user" :size="40"/>
                     <div class="user-info">
                       <div class="user-name">{{ user.full_name }}</div>
                       <div class="user-username">@{{ user.username || 'no-username' }}</div>
@@ -202,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import UserAvatar from '@/components/shared/UserAvatar.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { getUsers, suspendUser, reactivateUser, type UserWithDetails } from '@/services/admin'
 
@@ -323,14 +315,6 @@ function showToast(message: string, type: 'success' | 'error') {
   }, 3000)
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
-}
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -556,30 +540,6 @@ td {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #8b4513;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  color: white;
-  font-weight: 600;
-  font-size: 0.875rem;
 }
 
 .user-info {

@@ -7,7 +7,7 @@
 
     <div class="profile-content">
       <div class="profile-card">
-        <h2>Profile Information</h2>
+        <h2>Profile Information</h2><ProfilePortrait/>
         
         <div class="form-group">
           <label>Full Name</label>
@@ -112,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+import ProfilePortrait from '@/components/ProfilePortrait.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 

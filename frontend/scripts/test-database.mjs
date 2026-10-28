@@ -3,6 +3,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import { testTrackers } from './test-trackers-database.mjs'
 import { testAccountSecurity } from './test-account-security-database.mjs'
+import { testProfileAvatars } from './test-profile-avatars-database.mjs'
 
 async function main() {
 // Real PostgreSQL running locally in WASM; auth/storage platform schemas are test fixtures.
@@ -16,7 +17,7 @@ CREATE TABLE auth.mfa_factors(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT COALESCE(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text);
+CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb);
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE FUNCTION storage.foldername(text) RETURNS text[] LANGUAGE sql AS $$ SELECT string_to_array($1,'/') $$;
 GRANT USAGE ON SCHEMA public,auth,storage TO anon,authenticated;
@@ -293,6 +294,7 @@ await db.exec('RESET ROLE; SET ROLE anon')
 await rejected('SELECT * FROM profiles')
 await rejected('SELECT * FROM journal_entries')
 await rejected('SELECT * FROM get_user_statistics()')
+await testProfileAvatars(db,asUser,alice,bob,admin)
 await testAccountSecurity(db,asUser,alice,bob,admin)
 await db.close()
 console.log('PASS: migrations, profile bootstrap, CRUD, isolation, link ownership, admin authorization, private storage, suspension, ordering, and capsule locks.')

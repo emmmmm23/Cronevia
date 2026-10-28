@@ -14,7 +14,7 @@ watch(()=>[props.modelValue,props.docked,dialog.value],async()=>{
 function close(){emit('update:modelValue',false)}
 function isBackdrop(event:MouseEvent){if(props.docked||event.target!==dialog.value)return false;const r=dialog.value!.getBoundingClientRect();return event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom}
 function backdrop(event:MouseEvent){if(backdropPressed&&isBackdrop(event))close();backdropPressed=false}
-onBeforeUnmount(()=>{if(dialog.value?.open)dialog.value.close()})
+onBeforeUnmount(()=>{if(dialog.value?.open)dialog.value.close();if(previous?.isConnected)previous.focus({preventScroll:true})})
 </script>
 <template>
  <dialog ref="dialog" class="app-sheet" :class="{docked,fullscreen,'with-footer':!!$slots.footer}" :aria-label="title" @keydown.esc.stop @cancel.prevent="close" @pointerdown="backdropPressed=isBackdrop($event)" @click="backdrop">

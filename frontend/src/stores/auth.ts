@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { supabase, clearBrowserSession } from '@/lib/supabase'
 import { accountError } from '@/services/account-security'
 import { loadAccountTheme, clearAccountTheme } from '@/services/theme'
+import { clearAvatarUrls } from '@/services/avatars'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useJournalStore } from './journal'
 import { useTripsStore } from './trips'
@@ -46,6 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAccountActive = computed(() => profile.value?.account_status === 'active')
   let generation = 0
   function clearFeatureState() {
+    clearAvatarUrls()
     useJournalStore().clearEntries(); useTripsStore().clearTrips()
     useMemoriesStore().clearMemories(); useDashboardStore().resetDashboardData()
   }
@@ -168,6 +170,7 @@ export const useAuthStore = defineStore('auth', () => {
     }catch{return {success:false,error:'The request could not be completed. Please try again.'}}
   }
   async function fetchCurrentUser(){await refreshSecurity()}
+  function acceptAvatarProfile(saved:Profile){if(saved.user_id===supabaseUser.value?.id&&securityChecked.value&&!mfaRequired.value)profile.value=saved}
   return {user,supabaseUser,profile,initialized,loading,isAuthenticated,isSuperAdmin,isAccountActive,securityChecked,mfaRequired,recoverySession,inlineReauth,
-    initialize,register,login,logout,updateProfile,changePassword,requestPasswordReset,fetchCurrentUser,fetchProfile,refreshSecurity}
+    initialize,register,login,logout,updateProfile,changePassword,requestPasswordReset,fetchCurrentUser,fetchProfile,refreshSecurity,acceptAvatarProfile}
 })

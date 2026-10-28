@@ -76,16 +76,7 @@
 
       <div class="sidebar-footer">
         <div class="admin-profile" @click.stop="toggleProfileMenu">
-          <div class="profile-avatar">
-            <img
-              v-if="authStore.user?.profile?.avatar_url"
-              :src="authStore.user.profile.avatar_url"
-              alt="Admin avatar"
-            />
-            <span v-else class="avatar-placeholder">
-              {{ getInitials(authStore.user?.profile?.full_name) }}
-            </span>
-          </div>
+          <UserAvatar :profile="authStore.profile" :size="40"/>
           <div class="profile-info">
             <div class="profile-name">{{ authStore.user?.profile?.full_name }}</div>
             <div class="profile-role">👑 Super Admin</div>
@@ -153,6 +144,7 @@
 </template>
 
 <script setup lang="ts">
+import UserAvatar from '@/components/shared/UserAvatar.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -188,15 +180,6 @@ function handleSidebarClick() {
   }
 }
 
-function getInitials(name?: string): string {
-  if (!name) return 'SA'
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
-}
 
 async function handleLogout() {
   await authStore.logout()
@@ -367,29 +350,6 @@ onUnmounted(() => {
 
 .admin-profile:hover {
   background: rgba(139, 69, 19, 0.1);
-}
-
-.profile-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #8b4513;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.profile-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  color: white;
-  font-weight: 600;
-  font-size: 0.875rem;
 }
 
 .profile-info {
