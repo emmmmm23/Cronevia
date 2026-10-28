@@ -14,7 +14,7 @@ Trackers continue across months. Today offers focused daily entry; My Trackers p
 
 ## Decoration and journal connection
 
-Graph, dotted, lined, and blank paper; paper/ink colors; handwriting, serif, or sans headings. Built-in stickers and private uploaded stickers/backgrounds persist independently of logs. Decorations are arranged within a stable heading area, with drag and accessible position/size/rotation controls, locking, layer changes, removal, and undo/redo. Logging controls stay outside the decoration surface.
+Graph, dotted, lined, and blank paper; paper/ink colors; handwriting, serif, or sans headings. Built-in stickers and private uploaded stickers/backgrounds persist independently of logs. Decorations are arranged within a stable heading area, with direct dragging, resize/rotation handles, keyboard arrow controls, locking, layer changes, removal, and undo/redo. Existing tracker pages offer Arrange stickers with explicit Save/Cancel; the same handles appear in design settings and the board designer. A pointer cancellation restores the previous placement; saving failures retain the draft for retry. Logging controls stay outside the decoration surface.
 
 Journal pages can retain live links to a tracker or monthly board. These references open the same records; they are not embedded snapshots and do not duplicate values.
 

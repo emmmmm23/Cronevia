@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type Locator } from '@playwright/test'
 import { fixture, noOverflow, landscape } from './planner-fixture'
 import { mkdir } from 'node:fs/promises'
 import { defaultConfig, defaultDesign } from '../../src/types/trackers'
@@ -168,4 +168,96 @@ test('combined habit page keeps Coffee, Gym, Walk and Coke independent',async({p
  await expect(page.locator('.habit-group').filter({has:page.getByRole('heading',{name:'Coffee ?'})}).locator('button.recorded')).toHaveCount(1)
  await expect(page.locator('.habit-group').filter({has:page.getByRole('heading',{name:'Gym ?'})}).locator('button.recorded')).toHaveCount(0)
  await shot(page,'combined-habits')
+})
+
+for (const width of [390, 1440]) test('stickers move, resize and rotate directly at '+width+'px', async ({page}) => {
+ const f = await trackersFixture(page)
+ await page.setViewportSize({width, height:1000})
+ const id='88888888-8888-4888-8888-000000000018'
+ const original={id:'sticker-one',x:.7,y:.5,width:.15,rotation:0,z:0,locked:false,asset:'/stickers-builtin/star-01.svg',text:''}
+ f.trackers.push({id,user_id:'11111111-1111-4111-8111-111111111111',name:'My sticker page',kind:'habit',unit:'',config:defaultConfig(),design:{...defaultDesign(),decorations:[original]},archived:false,is_template:false,created_at:new Date().toISOString()})
+ const touch = width===390 ? await page.context().newCDPSession(page) : null
+ async function drag(target:Locator, dx:number, dy:number, offset=.5){
+  await target.scrollIntoViewIfNeeded()
+  const box=(await target.boundingBox())!,x=box.x+box.width*offset,y=box.y+box.height*.5
+  if(touch){
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]})
+   for(let i=1;i<=6;i++)await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/6,y:y+dy*i/6,id:1}]})
+   await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+  }else{await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,y+dy,{steps:6});await page.mouse.up()}
+ }
+ await page.goto('/trackers/'+id)
+ await page.getByRole('button',{name:'Arrange stickers',exact:true}).click()
+ const paper=page.locator('.detail-layout>.tracker-paper'),art=paper.getByRole('button',{name:'Move sticker',exact:true})
+ const surface=(await paper.locator('.paper-decorations').boundingBox())!
+ // Grab away from the center: moving should preserve the grab offset rather than jump.
+ await drag(art,-30,5,.3)
+ await expect(paper.locator('.decoration-item')).toHaveClass(/chosen/)
+ const movedX=await paper.locator('.decoration-item').evaluate(el=>parseFloat((el as HTMLElement).style.left)/100)
+ expect(movedX).toBeCloseTo(original.x-30/surface.width,2)
+ expect(f.trackers[0].design.decorations[0]).toEqual(original)
+ await drag(paper.getByRole('button',{name:'Resize sticker',exact:true}),9,9)
+ const resized=await paper.locator('.decoration-item').evaluate(el=>parseFloat((el as HTMLElement).style.width)/100)
+ expect(resized).toBeGreaterThan(original.width)
+ await drag(paper.getByRole('button',{name:'Rotate sticker',exact:true}),-20,-5)
+ const rotated=await paper.locator('.decoration-item').getAttribute('style')
+ expect(rotated).not.toContain('rotate(0deg)')
+ const arrangement=page.getByRole('region',{name:'Arrange stickers'})
+ await arrangement.getByRole('button',{name:/Undo/}).click()
+ await expect(paper.locator('.decoration-item')).toHaveAttribute('style',/rotate\(0deg\)/)
+ await arrangement.getByRole('button',{name:/Redo/}).click()
+ await arrangement.getByRole('button',{name:'Lock sticker',exact:true}).click()
+ await expect(paper.getByRole('button',{name:'Resize sticker',exact:true})).toHaveCount(0)
+ const locked=await paper.locator('.decoration-item').getAttribute('style')
+ await drag(paper.getByRole('button',{name:'Move sticker (locked)',exact:true}),20,0)
+ expect(await paper.locator('.decoration-item').getAttribute('style')).toBe(locked)
+ await arrangement.getByRole('button',{name:'Unlock sticker',exact:true}).click()
+ for(const name of ['Resize sticker','Rotate sticker']){
+  const handle=paper.getByRole('button',{name,exact:true})
+  await handle.scrollIntoViewIfNeeded()
+  expect(await handle.evaluate(el=>{
+   const r=el.getBoundingClientRect()
+   return [-8,0,8].every(offset=>el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2+offset)))
+  })).toBe(true)
+ }
+ await shot(page,'direct-sticker-editing-'+width)
+ let fail=true
+ await page.route('**/rest/v1/rpc/save_creative_tracker',route=>{
+  if(fail){fail=false;return route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({message:'Please retry saving your stickers.'})})}
+  return route.fallback()
+ })
+ await arrangement.getByRole('button',{name:'Save stickers',exact:true}).click()
+ await expect(arrangement.getByRole('alert')).toContainText('retry')
+ await expect(paper.locator('.decoration-item')).toHaveAttribute('style',rotated!)
+ await arrangement.getByRole('button',{name:'Save stickers',exact:true}).click()
+ await expect(arrangement).not.toBeVisible()
+ expect(f.trackers[0].design.decorations[0].x).toBeCloseTo(movedX,3)
+ expect(f.trackers[0].design.decorations[0].width).toBeCloseTo(resized,3)
+ expect(f.trackers[0].design.decorations[0].rotation).not.toBe(0)
+ expect(f.logs).toHaveLength(0)
+ await page.reload()
+ await expect(paper.locator('.decoration-item')).toHaveAttribute('style',/rotate\((?!0deg)/)
+ const savedStyle=await paper.locator('.decoration-item').getAttribute('style')
+ await page.getByRole('button',{name:'Arrange stickers',exact:true}).click()
+ await drag(art,15,0)
+ await arrangement.getByRole('button',{name:'Cancel',exact:true}).click()
+ await expect(paper.locator('.decoration-item')).toHaveAttribute('style',savedStyle!)
+ await page.getByRole('button',{name:/Design & settings/}).click()
+ const editor=page.getByRole('dialog')
+ await editor.getByText('Paper, lettering & stickers',{exact:false}).click()
+ await expect(editor.locator('input[type="range"]')).toHaveCount(0)
+ const preview=editor.locator('.design-canvas')
+ await preview.getByRole('button',{name:'Move sticker',exact:true}).focus()
+ await page.keyboard.press('ArrowLeft')
+ await preview.getByRole('button',{name:'Resize sticker',exact:true}).focus()
+ await page.keyboard.press('ArrowUp')
+ await preview.getByRole('button',{name:'Rotate sticker',exact:true}).focus()
+ await page.keyboard.press('ArrowRight')
+ await editor.getByRole('button',{name:/Undo/}).click()
+ await editor.getByRole('button',{name:/Redo/}).click()
+ await editor.getByRole('button',{name:'Keep this tracker'}).click()
+ await expect(editor).not.toBeVisible()
+ expect(f.trackers[0].design.decorations[0].width).toBeCloseTo(resized-.01,3)
+ await noOverflow(page)
+ await touch?.detach()
 })

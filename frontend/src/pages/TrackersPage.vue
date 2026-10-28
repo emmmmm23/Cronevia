@@ -11,7 +11,7 @@ import TrackerEditor from '@/components/trackers/TrackerEditor.vue'
 import TrackerLogEditor from '@/components/trackers/TrackerLogEditor.vue'
 import TrackerDesignEditor from '@/components/trackers/TrackerDesignEditor.vue'
 import { loadTrackers, saveTracker, saveBoard, removeTracker, trackerError } from '@/services/trackers.service'
-import { defaultDesign, displayValue, fromStarter, kindLabels, localDate, monthDays, monthLabel, onSchedule, shiftMonth, starters, summarize, type CreativeTracker, type TrackerBoard, type TrackerLog, type TrackerStarter } from '@/types/trackers'
+import { defaultDesign, displayValue, fromStarter, kindLabels, localDate, monthDays, monthLabel, onSchedule, shiftMonth, starters, summarize, type CreativeTracker, type TrackerBoard, type TrackerLog, type TrackerStarter, type TrackerDesign } from '@/types/trackers'
 import './trackers.css'
 useEditingViewport()
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
@@ -23,6 +23,31 @@ const trackers=ref<CreativeTracker[]>([]),logs=ref<TrackerLog[]>([]),board=ref<T
 const loading=ref(true),error=ref(''),notice=ref(''),actionBusy=ref(false)
 const draft=ref<Omit<CreativeTracker,'user_id'|'created_at'>|null>(null),logging=ref<{tracker:CreativeTracker;date:string}|null>(null)
 const boardDraft=ref<TrackerBoard|null>(null),boardError=ref(''),uploading=ref(false)
+const stickerDraft=ref<TrackerDesign|null>(null),stickerSelection=ref(''),stickerError=ref('')
+const stickerHistory=ref<TrackerDesign[]>([]),stickerCursor=ref(0)
+const selectedSticker=computed(()=>stickerDraft.value?.decorations.find(d=>d.id===stickerSelection.value))
+watch(()=>route.params.id,()=>{stickerDraft.value=null;stickerSelection.value=''})
+function arrangeStickers(){
+ if(!selected.value)return
+ stickerDraft.value=cloneTracker(selected.value.design);stickerSelection.value='';stickerError.value=''
+ stickerHistory.value=[cloneTracker(stickerDraft.value)];stickerCursor.value=0
+}
+function rememberStickers(){
+ if(!stickerDraft.value||JSON.stringify(stickerDraft.value)===JSON.stringify(stickerHistory.value[stickerCursor.value]))return
+ stickerHistory.value=stickerHistory.value.slice(0,stickerCursor.value+1).concat(cloneTracker(stickerDraft.value))
+ if(stickerHistory.value.length>40)stickerHistory.value.shift()
+ stickerCursor.value=stickerHistory.value.length-1
+}
+function undoStickers(delta:number){
+ stickerCursor.value=Math.max(0,Math.min(stickerHistory.value.length-1,stickerCursor.value+delta))
+ stickerDraft.value=cloneTracker(stickerHistory.value[stickerCursor.value])
+}
+async function keepStickers(){
+ if(!selected.value||!stickerDraft.value||actionBusy.value)return
+ actionBusy.value=true;stickerError.value=''
+ try{trackerSaved(await saveTracker({...cloneTracker(selected.value),design:cloneTracker(stickerDraft.value)}));stickerDraft.value=null;notice.value='Your stickers are right where you want them.'}
+ catch(e){stickerError.value=trackerError(e)}finally{actionBusy.value=false}
+}
 const active=computed(()=>trackers.value.filter(t=>!t.is_template&&!t.archived))
 const personalTemplates=computed(()=>trackers.value.filter(t=>t.is_template&&!t.archived))
 const collection=computed(()=>trackers.value.filter(t=>!t.is_template&&t.archived===showArchived.value))
@@ -133,8 +158,9 @@ const weeklySteps=computed(()=>{
    <div v-if="loading" role="status" class="tracker-loading"><span>✧</span> Gathering your pages…</div>
    <template v-else>
     <template v-if="selected">
-     <div class="tracker-detail-toolbar"><div><span class="tracker-type">{{kindLabels[selected.kind]}}{{selected.archived?' · Archived':''}}</span><h2>{{selected.name}}</h2><p>{{summary(selected)}} · {{monthLabel(month)}}</p></div><div><button v-if="selected.kind==='category'" class="tracker-secondary" :aria-pressed="yearly" @click="yearly=!yearly">{{yearly?'Monthly page':'A year in pixels'}}</button><button v-if="!selected.archived" class="tracker-primary" @click="openLog(selected)">＋ Log a day</button><button class="tracker-secondary" @click="editTracker(selected)">✎ Design &amp; settings</button></div></div>
-     <div class="detail-layout"><TrackerPaper :design="selected.design" :title="selected.name"><div class="paper-month"><span>{{yearly?month.slice(0,4):monthLabel(month)}}</span><span>{{selected.kind==='sleep'?'☾':'✧'}}</span></div><TrackerChart :tracker="selected" :logs="selectedLogs" :month="month" :today="today" :yearly="yearly" @log="openLog(selected!,$event)" /></TrackerPaper><aside class="tracker-sidebar"><p class="tracker-eyebrow">A LITTLE PERSPECTIVE</p><h3>A page of your life.</h3><p>{{summary(selected)}}</p><p v-if="selectedSummary" class="coverage">{{selectedSummary.days}} logged days · {{selectedSummary.missing}} scheduled days unlogged.<br />Future dates are left out.</p><p v-if="selected.kind==='steps'" class="fine">Steps are entered manually. Saving a daily total replaces that date’s number.</p><p v-if="selected.kind==='sleep'" class="fine">The dates shown are wake-up dates. Sleep hours use actual elapsed time, including clock changes. These are your notes, not a medical assessment.</p><div v-if="weeklySteps.length" class="weekly-steps"><h4>Weekly totals</h4><div v-for="week in weeklySteps" :key="week.label"><span>Days {{week.label}}</span><strong>{{week.total.toLocaleString()}}</strong><small>{{week.coverage}} logged days</small></div></div><RouterLink :to="journalLink(selected)" class="tracker-secondary">＋ Connect to a journal page</RouterLink><button class="text-action" @click="duplicate(selected)">Duplicate design</button><button class="text-action" @click="duplicate(selected,true)">Save as a personal template</button><button class="text-action" :disabled="actionBusy" @click="archive(selected)">{{selected.archived?'Restore tracker':'Archive tracker'}}</button><button class="text-action danger" :disabled="actionBusy" @click="destroy(selected)">Delete tracker &amp; entries</button></aside></div>
+     <div class="tracker-detail-toolbar"><div><span class="tracker-type">{{kindLabels[selected.kind]}}{{selected.archived?' · Archived':''}}</span><h2>{{selected.name}}</h2><p>{{summary(selected)}} · {{monthLabel(month)}}</p></div><div><button v-if="selected.kind==='category'" class="tracker-secondary" :aria-pressed="yearly" @click="yearly=!yearly">{{yearly?'Monthly page':'A year in pixels'}}</button><button v-if="!selected.archived" class="tracker-primary" @click="openLog(selected)">＋ Log a day</button><button v-if="!stickerDraft && selected.design.decorations.length" class="tracker-secondary" @click="arrangeStickers">Arrange stickers</button><button class="tracker-secondary" :disabled="!!stickerDraft" @click="editTracker(selected)">✎ Design &amp; settings</button></div></div>
+     <section v-if="stickerDraft" class="sticker-arrangement" aria-label="Arrange stickers"><div><strong>A little rearranging.</strong><p>Drag a sticker to move it. Use ↗ to resize and ↻ to rotate. Arrow keys work too.</p></div><div class="sticker-arrangement-actions"><button class="tracker-secondary" :disabled="!stickerCursor || actionBusy" @click="undoStickers(-1)">↶ Undo</button><button class="tracker-secondary" :disabled="stickerCursor===stickerHistory.length-1 || actionBusy" @click="undoStickers(1)">↷ Redo</button><button v-if="selectedSticker" class="tracker-secondary" :disabled="actionBusy" @click="selectedSticker.locked=!selectedSticker.locked;rememberStickers()">{{selectedSticker.locked?'Unlock sticker':'Lock sticker'}}</button><button class="tracker-secondary" :disabled="actionBusy" @click="stickerDraft=null">Cancel</button><button class="tracker-primary" :disabled="actionBusy" @click="keepStickers">{{actionBusy?'Saving…':'Save stickers'}}</button></div><p v-if="stickerError" role="alert">{{stickerError}}</p></section>
+     <div class="detail-layout"><TrackerPaper :design="stickerDraft||selected.design" :title="selected.name" :editable="!!stickerDraft && !actionBusy" v-model:selected-id="stickerSelection" @update:decorations="stickerDraft && (stickerDraft.decorations=$event)" @commit="rememberStickers"><div class="paper-month"><span>{{yearly?month.slice(0,4):monthLabel(month)}}</span><span>{{selected.kind==='sleep'?'☾':'✧'}}</span></div><TrackerChart :tracker="selected" :logs="selectedLogs" :month="month" :today="today" :yearly="yearly" @log="openLog(selected!,$event)" /></TrackerPaper><aside class="tracker-sidebar"><p class="tracker-eyebrow">A LITTLE PERSPECTIVE</p><h3>A page of your life.</h3><p>{{summary(selected)}}</p><p v-if="selectedSummary" class="coverage">{{selectedSummary.days}} logged days · {{selectedSummary.missing}} scheduled days unlogged.<br />Future dates are left out.</p><p v-if="selected.kind==='steps'" class="fine">Steps are entered manually. Saving a daily total replaces that date’s number.</p><p v-if="selected.kind==='sleep'" class="fine">The dates shown are wake-up dates. Sleep hours use actual elapsed time, including clock changes. These are your notes, not a medical assessment.</p><div v-if="weeklySteps.length" class="weekly-steps"><h4>Weekly totals</h4><div v-for="week in weeklySteps" :key="week.label"><span>Days {{week.label}}</span><strong>{{week.total.toLocaleString()}}</strong><small>{{week.coverage}} logged days</small></div></div><RouterLink :to="journalLink(selected)" class="tracker-secondary">＋ Connect to a journal page</RouterLink><button class="text-action" @click="duplicate(selected)">Duplicate design</button><button class="text-action" @click="duplicate(selected,true)">Save as a personal template</button><button class="text-action" :disabled="actionBusy" @click="archive(selected)">{{selected.archived?'Restore tracker':'Archive tracker'}}</button><button class="text-action danger" :disabled="actionBusy" @click="destroy(selected)">Delete tracker &amp; entries</button></aside></div>
     </template>
     <div v-else-if="route.params.id" class="tracker-empty"><h2>This tracker isn’t in your notebook.</h2><RouterLink to="/trackers">Return to my trackers</RouterLink></div>
     <template v-else-if="tab==='today'">
