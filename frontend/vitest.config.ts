@@ -10,6 +10,11 @@ export default defineConfig({
     },
   },
   test: {
+    // Unit tests must not depend on a developer's hosted project or local env.
+    env: {
+      VITE_SUPABASE_URL: 'https://supabase.example.test',
+      VITE_SUPABASE_ANON_KEY: 'unit-test-public-placeholder',
+    },
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
