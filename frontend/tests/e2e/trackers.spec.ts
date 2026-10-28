@@ -56,6 +56,15 @@ for(const width of [390,1440])test('paper tracker journey at '+width+'px',async(
  expect(f.logs).toHaveLength(1);expect(f.logs[0].values.value).toBe(0)
  await page.reload()
  await expect(page.locator('.number-row.zero')).toHaveCount(1)
+ const geometry=await page.locator('.value-grid').evaluate(el=>{
+  const axis=el.querySelector('.plot-axis-track')!.getBoundingClientRect(),row=el.querySelector('.plot-track')!.getBoundingClientRect()
+  const cell=parseFloat(getComputedStyle(el).getPropertyValue('--grid-cell'))
+  return {axisLeft:axis.left,rowLeft:row.left,axisWidth:axis.width,rowWidth:row.width,cell,rowHeight:row.height}
+ })
+ expect(Math.abs(geometry.axisLeft-geometry.rowLeft)).toBeLessThan(1)
+ expect(Math.abs(geometry.axisWidth-geometry.rowWidth)).toBeLessThan(1)
+ expect(geometry.rowHeight/geometry.cell).toBeCloseTo(Math.round(geometry.rowHeight/geometry.cell),2)
+ await expect(page.locator('.plot-scale')).toContainText('cups')
  await page.getByRole('button',{name:/Log a day/}).click()
  await page.getByRole('dialog').getByLabel('Daily total (cups)').fill('2')
  await page.getByRole('dialog').getByRole('button',{name:'Keep this day'}).click()
