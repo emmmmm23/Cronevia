@@ -5,6 +5,16 @@
 :root{color-scheme:light}
 :root[data-theme="dark"]{color-scheme:dark}
 :root[data-theme="light"]{--theme-light-surface:#ffffff}
+:root:not([data-theme]),:root[data-theme="vintage"]{
+  --vintage-brand:#65432b;
+  --vintage-brand-strong:#493020;
+  --vintage-ornament:#96734c;
+  --vintage-soft:#e5d3b5;
+  --vintage-page:#eaddc5;
+  --vintage-card:#f5ebd8;
+  --vintage-line:#c3ab85;
+  --vintage-muted:#71583e;
+}
 /* A notebook's chosen paper and ink are artwork, independent of the app chrome. */
 .tracker-paper,.scrapbook .paper,.scrapbook-page,.scrapbook-canvas,.journal-paper{color-scheme:light;--theme-light-surface:initial}
 

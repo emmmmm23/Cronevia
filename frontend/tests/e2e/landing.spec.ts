@@ -1,6 +1,8 @@
 import {test,expect,type Page} from '@playwright/test'
 import {fixture,noOverflow,owner} from './planner-fixture'
 import {mkdir} from 'node:fs/promises'
+import {trackersFixture} from './tracker-fixture'
+import {defaultConfig,defaultDesign} from '../../src/types/trackers'
 async function guest(page:Page){
  const privateCalls:string[]=[]
  await page.route('**/*.supabase.co/**',route=>{privateCalls.push(route.request().url());return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({message:'No guest access'})})})
@@ -10,6 +12,7 @@ for(const width of [320,390,1440])test(`public landing survives refresh and its 
  const privateCalls=await guest(page);await page.setViewportSize({width,height:950});await page.goto('/')
  await expect(page.getByRole('heading',{name:'Your journeys, written in time.'})).toBeVisible();await expect(page).toHaveURL(/\/$/)
  await expect(page.getByRole('heading',{name:'Everything your memories deserve'})).toBeVisible();expect(privateCalls).toEqual([])
+ await expect(page.locator('html')).toHaveAttribute('data-theme','vintage');await expect(page.locator('.public-brand')).toHaveCSS('color','rgb(101, 67, 43)');await expect(page.locator('.landing-primary').first()).toHaveCSS('background-color','rgb(101, 67, 43)');await expect(page.locator('.landing-page')).toHaveCSS('background-color','rgb(234, 221, 197)')
  await page.reload();await expect(page.getByRole('heading',{name:'Your journeys, written in time.'})).toBeVisible()
  await noOverflow(page);await mkdir('test-results/landing',{recursive:true});await page.screenshot({path:`test-results/landing/landing-${width}.png`,fullPage:true})
  await page.getByRole('main').getByRole('link',{name:'Start Writing',exact:true}).click();await expect(page).toHaveURL(/\/register$/)
@@ -53,4 +56,12 @@ test('landing follows a signed-in dark theme without losing readable content',as
  await fixture(page);await page.route('**/rest/v1/user_settings?**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({user_id:owner,theme:'dark'})}));await page.setViewportSize({width:390,height:900});await page.goto('/')
  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');await expect(page.getByRole('heading',{name:'Your journeys, written in time.'})).toBeVisible();await noOverflow(page)
  await mkdir('test-results/landing',{recursive:true});await page.screenshot({path:'test-results/landing/landing-dark.png',fullPage:true})
+})
+
+for(const theme of ['vintage','light','dark'])test('shared app chrome honors '+theme+' and preserves personal notebook colors',async({page})=>{
+ const f=await trackersFixture(page),id='88888888-8888-4888-8888-000000000091';await page.route('**/rest/v1/user_settings?**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({user_id:owner,theme})}));f.trackers.push({id,user_id:owner,name:'My personal colors',kind:'habit',unit:'',config:defaultConfig(),design:{...defaultDesign('#6978ba'),color:'#fde5ea'},created_at:new Date().toISOString(),archived:false,is_template:false})
+ await page.setViewportSize({width:390,height:900});await page.goto('/trackers/'+id+'?month=2024-01');await expect(page.locator('html')).toHaveAttribute('data-theme',theme)
+ const brand=page.getByRole('navigation',{name:'Main navigation'}).getByRole('link',{name:'Cronevia',exact:true});if(theme==='vintage'){await expect(brand).toHaveCSS('color','rgb(101, 67, 43)');await expect(page.locator('.trackers-page')).toHaveCSS('background-color','rgb(234, 221, 197)');await expect(page.locator('.tracker-detail-toolbar p')).toHaveCSS('color','rgb(113, 88, 62)')}else if(theme==='light'){await expect(brand).toHaveCSS('color','rgb(123, 3, 35)');await expect(page.locator('.trackers-page')).toHaveCSS('background-color','rgb(255, 255, 255)')}else{await expect(page.locator('html')).toHaveCSS('color-scheme','dark');expect(await brand.evaluate(el=>getComputedStyle(el).color)).not.toBe('rgb(101, 67, 43)')}
+ await expect(page.locator('.tracker-paper')).toHaveCSS('background-color','rgb(253, 229, 234)');await expect(page.locator('.paper-heading h3')).toHaveCSS('color','rgb(105, 120, 186)');await noOverflow(page);await mkdir('test-results/landing',{recursive:true});await page.screenshot({path:'test-results/landing/app-theme-'+theme+'.png',fullPage:true})
+ await page.goto('/');await expect(page.locator('html')).toHaveAttribute('data-theme',theme);await expect(page.getByRole('heading',{name:'Your journeys, written in time.'})).toBeVisible();await noOverflow(page);await page.screenshot({path:'test-results/landing/landing-theme-'+theme+'.png',fullPage:true})
 })
