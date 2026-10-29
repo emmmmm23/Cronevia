@@ -6,7 +6,7 @@ async function securityFixture(page:Page,enabled=false){
  // All requests are intercepted locally. No hosted account or real OTP is used.
  const factors:any[]=enabled?[{id:'factor-one',factor_type:'totp',status:'verified',friendly_name:'My authenticator',created_at:new Date().toISOString()}]:[]
  let prefs:any={user_id:owner,theme:'vintage',timezone:'Asia/Manila',email_notifications:true}
- const calls={profile:0,password:0,unenroll:0,enroll:0,signouts:[] as string[]}
+ const calls={profile:0,password:0,passwordOwners:[] as string[],unenroll:0,enroll:0,signouts:[] as string[]}
  const json=(route:any,value:any,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)})
  const user=()=>({...core.user,factors})
  function session(aal='aal1',recovery=false){
@@ -14,7 +14,7 @@ async function securityFixture(page:Page,enabled=false){
   return {...core.session,user:user(),access_token:Buffer.from('{"alg":"HS256"}').toString('base64url')+'.'+Buffer.from(JSON.stringify(payload)).toString('base64url')+'.fixture'}
  }
  await page.route('**/auth/v1/user',route=>{
-  if(route.request().method()==='PUT'){calls.password++;const body=route.request().postDataJSON();const token=route.request().headers().authorization?.split(' ')[1];const recovery=token&&JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString()).amr?.some((a:any)=>a.method==='recovery');if(body.password&&!recovery&&(!body.current_password||body.current_password!=='fixture-current-password'))return json(route,{code:'reauthentication_needed',message:'private diagnostic must not reach UI'},400)}
+  if(route.request().method()==='PUT'){calls.password++;const body=route.request().postDataJSON();const token=route.request().headers().authorization?.split(' ')[1];const claims=token&&JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());const recovery=claims?.amr?.some((a:any)=>a.method==='recovery');calls.passwordOwners.push(claims?.sub);if(body.password&&!recovery&&(!body.current_password||body.current_password!=='fixture-current-password'))return json(route,{code:'reauthentication_needed',message:'private diagnostic must not reach UI'},400)}
   return json(route,user())
  })
  await page.route('**/auth/v1/token?**',route=>{
@@ -32,7 +32,8 @@ async function securityFixture(page:Page,enabled=false){
   if(data.code!=='123456')return json(route,{code:data.code==='999999'?'mfa_challenge_expired':'mfa_verification_failed',message:'private verification diagnostic'},400)
   const id=new URL(route.request().url()).pathname.split('/').at(-2),factor=factors.find(f=>f.id===id)
   if(factor)factor.status='verified'
-  return json(route,session('aal2'))
+  const token=route.request().headers().authorization?.split(' ')[1],recovery=token&&JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString()).amr?.some((a:any)=>a.method==='recovery')
+  return json(route,session('aal2',!!recovery))
  })
  await page.route('**/auth/v1/factors/*',route=>{
   if(route.request().method()!=='DELETE')return route.fallback()
@@ -128,11 +129,108 @@ test('cancelled setup is cleaned up and current password is verified without rep
  expect(f.calls.signouts).toContain('local');expect(f.calls.signouts).toContain('others')
  await expect(page).toHaveURL(/settings/)
  await page.goto('/reset-password')
- await page.getByLabel('New Password',{exact:true}).fill('fixture-new-password-12')
- await page.getByLabel('Confirm New Password',{exact:true}).fill('fixture-new-password-12')
- await page.getByRole('button',{name:/Reset Password/i}).click()
- await expect(page.getByText('Open a fresh password reset link from your email to continue.')).toBeVisible()
+ await expect(page.getByRole('alert')).toContainText('Open a fresh password reset link')
+ await expect(page.getByLabel('New Password',{exact:true})).toHaveCount(0)
  expect(f.calls.password).toBe(1)
+})
+
+for(const width of [390,1440])test('landing fallback opens isolated recovery, blocks journal navigation and requires sign-in afterwards at '+width,async({page})=>{
+ const f=await securityFixture(page)
+ await page.addInitScript(()=>{for(const key of Object.keys(localStorage))if(key.endsWith('-auth-token'))localStorage.removeItem(key)})
+ await page.setViewportSize({width,height:900})
+ const recovery=f.session('aal1',true)
+ const fragment=new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',expires_in:'3600',token_type:'bearer',type:'recovery'})
+ await page.goto('/#'+fragment)
+ await expect(page).toHaveURL(/\/reset-password$/)
+ await expect(page.getByLabel('New Password',{exact:true})).toBeVisible()
+ expect(f.calls.profile).toBe(0)
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain(recovery.access_token)
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ await page.evaluate(()=>{history.pushState({},'', '/journal');window.dispatchEvent(new PopStateEvent('popstate'))})
+ await expect(page).toHaveURL(/\/reset-password$/)
+ await page.getByLabel('New Password',{exact:true}).fill('fixture-recovered-password-12')
+ await page.getByLabel('Confirm New Password',{exact:true}).fill('fixture-recovered-password-12')
+ await page.getByRole('button',{name:'Reset Password',exact:true}).click()
+ await expect(page.getByRole('status')).toContainText('Sign in with your new password')
+ expect(f.calls.passwordOwners).toEqual([owner])
+ expect(f.calls.signouts).toContain('global')
+ await page.getByRole('button',{name:'Sign In',exact:true}).click()
+ await expect(page).toHaveURL(/\/login$/)
+ await page.goto('/journal');await expect(page).toHaveURL(/\/login\?redirect=/)
+})
+
+test('recovery stays tied to its email account when a different account was previously signed in',async({page})=>{
+ const f=await securityFixture(page),other='22222222-2222-4222-8222-222222222222'
+ const previous={...f.session(),user:{...f.user(),id:other}}
+ const parts=previous.access_token.split('.');parts[1]=Buffer.from(JSON.stringify({...JSON.parse(Buffer.from(parts[1],'base64url').toString()),sub:other})).toString('base64url');previous.access_token=parts.join('.')
+ await page.addInitScript(value=>{const key=Object.keys(localStorage).find(k=>k.endsWith('-auth-token'));if(key)localStorage.setItem(key,JSON.stringify(value))},previous)
+ const recovery=f.session('aal1',true)
+ await page.goto('/reset-password#'+new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',type:'recovery'}))
+ await page.getByLabel('New Password',{exact:true}).fill('fixture-account-a-password-12')
+ await page.getByLabel('Confirm New Password',{exact:true}).fill('fixture-account-a-password-12')
+ await page.getByRole('button',{name:'Reset Password',exact:true}).click()
+ await expect(page.getByRole('status')).toContainText('successfully')
+ expect(f.calls.passwordOwners).toEqual([owner]);expect(f.calls.passwordOwners).not.toContain(other)
+ expect(f.calls.profile).toBe(0)
+})
+
+test('recovery keeps authenticator protection and never opens the private app after MFA',async({page})=>{
+ const f=await securityFixture(page,true),recovery=f.session('aal1',true)
+ await page.goto('/#'+new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',type:'recovery'}))
+ await page.getByLabel('New Password',{exact:true}).fill('fixture-mfa-recovered-password')
+ await page.getByLabel('Confirm New Password',{exact:true}).fill('fixture-mfa-recovered-password')
+ await page.getByLabel('Authenticator code',{exact:true}).fill('000000')
+ await page.getByRole('button',{name:'Reset Password',exact:true}).click()
+ await expect(page.getByRole('alert')).toContainText('could not be verified');expect(f.calls.password).toBe(0)
+ await page.getByLabel('Authenticator code',{exact:true}).fill('123456')
+ await page.getByRole('button',{name:'Reset Password',exact:true}).click()
+ await expect(page.getByRole('status')).toContainText('successfully')
+ expect(f.calls.password).toBe(1);expect(f.calls.profile).toBe(0)
+})
+
+test('expired, wrongly marked and reloaded recovery links cannot become an account login',async({page})=>{
+ const f=await securityFixture(page)
+ await page.addInitScript(()=>{for(const key of Object.keys(localStorage))if(key.endsWith('-auth-token'))localStorage.removeItem(key)})
+ await page.goto('/reset-password#error=access_denied&error_code=otp_expired&error_description=private-diagnostic')
+ await expect(page).toHaveURL(/\/reset-password$/)
+ await expect(page.getByRole('alert')).toContainText('missing, expired, or already used')
+ await expect(page.locator('body')).not.toContainText('private-diagnostic')
+ const normal=f.session()
+ await page.goto('/#'+new URLSearchParams({access_token:normal.access_token,refresh_token:'fixture',type:'recovery'}))
+ await expect(page.getByRole('alert')).toContainText('missing, expired, or already used')
+ await expect(page.getByLabel('New Password',{exact:true})).toHaveCount(0)
+ const recovery=f.session('aal1',true)
+ await page.goto('/#'+new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',type:'recovery'}))
+ await expect(page.getByLabel('New Password',{exact:true})).toBeVisible()
+ await page.reload()
+ await expect(page.getByRole('alert')).toContainText('Open a fresh password reset link')
+ await expect(page.getByLabel('New Password',{exact:true})).toHaveCount(0)
+ expect(f.calls.password).toBe(0);expect(f.calls.profile).toBe(0)
+})
+
+test('sessions saved by an older recovery flow are quarantined instead of opening the journal',async({page})=>{
+ const f=await securityFixture(page),recovery=f.session('aal1',true)
+ await page.addInitScript(value=>{const key=Object.keys(localStorage).find(k=>k.endsWith('-auth-token'));if(key)localStorage.setItem(key,JSON.stringify(value))},recovery)
+ await page.goto('/journal')
+ await expect(page).toHaveURL(/\/reset-password$/)
+ await expect(page.getByLabel('New Password',{exact:true})).toBeVisible()
+ expect(f.calls.profile).toBe(0)
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain(recovery.access_token)
+ await page.getByRole('button',{name:'Cancel and return to sign in'}).click()
+ await expect(page).toHaveURL(/\/login$/)
+})
+
+test('reset requests use the dedicated callback and show the same email confirmation without signing in',async({page})=>{
+ await securityFixture(page)
+ await page.addInitScript(()=>{for(const key of Object.keys(localStorage))if(key.endsWith('-auth-token'))localStorage.removeItem(key)})
+ let callback='',email=''
+ await page.route('**/auth/v1/recover**',route=>{callback=new URL(route.request().url()).searchParams.get('redirect_to')||'';email=route.request().postDataJSON().email;return route.fulfill({status:200,contentType:'application/json',body:'{}'})})
+ await page.goto('/forgot-password')
+ await page.getByLabel('Email Address',{exact:true}).fill('recovery-test@example.test')
+ await page.getByRole('button',{name:'Send Reset Link',exact:true}).click()
+ await expect(page.getByText('If an account exists with that email', {exact:false})).toBeVisible()
+ expect(callback).toBe('http://127.0.0.1:5177/reset-password');expect(email).toBe('recovery-test@example.test')
+ await page.getByRole('link',{name:'Return to Login'}).click();await expect(page).toHaveURL(/\/login$/)
 })
 test('MFA lookup failures fail closed and return paths cannot redirect to another origin',async({page})=>{
  await securityFixture(page,true)

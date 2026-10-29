@@ -10,6 +10,7 @@
  * - Never use service_role key in frontend code
  */
 
+import { hasRecoveryCallback } from '@/services/recovery-boot'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.types'
 
@@ -34,6 +35,14 @@ try {
 }
 
 export const authStorageKey='sb-'+new URL(supabaseUrl).hostname.split('.')[0]+'-auth-token'
+if (hasRecoveryCallback) clearBrowserSession()
+
+/** Recovery stays in memory, outside the persisted account session and its cross-tab channel. */
+export function createRecoveryClient() {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { storageKey: 'cronevia-password-recovery', persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  })
+}
 /**
  * Supabase client instance
  * 

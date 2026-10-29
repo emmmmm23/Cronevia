@@ -1,192 +1,41 @@
-<template>
-  <div class="min-h-screen bg-[#FFF8F0] flex items-center justify-center px-4 py-8">
-    <div class="w-full max-w-md">
-      <!-- Logo/Branding -->
-      <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold text-[#8B4513] mb-2">Cronevia</h1>
-        <p class="text-gray-600 italic">Write today. Travel back anytime.</p>
-      </div>
-
-      <!-- Reset Password Card -->
-      <div class="bg-white rounded-lg shadow-lg border-2 border-[#D4A574] p-8">
-        <h2 class="text-2xl font-bold text-[#8B4513] mb-2">Reset Password</h2>
-        <p class="text-gray-600 mb-6 text-sm">
-          Enter your new password below.
-        </p>
-
-        <!-- Error Message -->
-        <div
-          v-if="errorMessage"
-          role="alert"
-          class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-        >
-          {{ errorMessage }}
-        </div>
-
-        <!-- Success Message -->
-        <div
-          v-if="successMessage"
-          role="status"
-          class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm"
-        >
-          {{ successMessage }}
-        </div>
-
-        <!-- Form -->
-        <form v-if="!passwordReset" @submit.prevent="handleSubmit">
-          <!-- New Password -->
-          <div class="mb-4">
-            <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
-              New Password
-            </label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              required
-              autocomplete="new-password"
-              class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#8B4513] focus:outline-none transition-colors"
-              placeholder="••••••••"
-              :disabled="loading"
-            />
-            <p class="mt-1 text-xs text-gray-500">
-              At least 12 characters
-            </p>
-          </div>
-
-          <!-- Confirm Password -->
-          <div class="mb-6">
-            <label for="passwordConfirm" class="block text-sm font-medium text-gray-700 mb-2">
-              Confirm New Password
-            </label>
-            <input
-              id="passwordConfirm"
-              v-model="passwordConfirm"
-              type="password"
-              required
-              autocomplete="new-password"
-              class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#8B4513] focus:outline-none transition-colors"
-              placeholder="••••••••"
-              :disabled="loading"
-            />
-          </div>
-
-          <!-- Submit Button -->
-          <button
-            type="submit"
-            :disabled="loading"
-            class="w-full bg-[#C41E3A] hover:bg-[#A01828] text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-4"
-          >
-            <span v-if="!loading">Reset Password</span>
-            <span v-else>Resetting...</span>
-          </button>
-
-          <!-- Back to Login -->
-          <router-link
-            to="/login"
-            class="block text-center text-sm text-[#8B4513] hover:underline"
-          >
-            Back to login
-          </router-link>
-        </form>
-
-        <!-- After Password Reset -->
-        <div v-else class="text-center">
-          <div class="mb-6">
-            <svg
-              class="w-16 h-16 mx-auto text-green-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M5 13l4 4L19 7"
-              ></path>
-            </svg>
-          </div>
-          <p class="text-gray-600 mb-6">
-            Your password has been reset successfully!
-          </p>
-          <router-link
-            to="/login"
-            class="inline-block bg-[#8B4513] hover:bg-[#6D3410] text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-          >
-            Sign In
-          </router-link>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="mt-8 text-center text-sm text-gray-500">
-        <p>Plan it. Live it. Remember it.</p>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-
-const auth = useAuthStore()
-
-// Form state
-const password = ref('')
-const passwordConfirm = ref('')
-const loading = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
-const passwordReset = ref(false)
-
-onMounted(() => {
-  // Supabase automatically handles the token from the URL
-  // The user should be authenticated at this point if the link is valid
-})
-
-async function handleSubmit() {
-  // Clear messages
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  // Validation
-  if (!password.value || !passwordConfirm.value) {
-    errorMessage.value = 'Please fill in all fields.'
-    return
-  }
-
-  if (password.value.length < 12) {
-    errorMessage.value = 'Password must be at least 12 characters long.'
-    return
-  }
-
-  if (password.value !== passwordConfirm.value) {
-    errorMessage.value = 'Passwords do not match.'
-    return
-  }
-
-  try {
-    loading.value = true
-
-    const result = await auth.changePassword(password.value)
-
-    if (result.success) {
-      passwordReset.value = true
-      successMessage.value = 'Your password has been reset successfully!'
-    } else {
-      errorMessage.value = result.error || 'Failed to reset password. Please try again.'
-    }
-  } catch (error: any) {
-    console.error('Password reset error:', error)
-    errorMessage.value = 'The request could not be completed. Please try again.'
-  } finally {
-    loading.value = false
-  }
+import {computed,ref} from 'vue'
+import {useRouter} from 'vue-router'
+import {useAuthStore} from '@/stores/auth'
+import {recoveryState} from '@/services/password-recovery'
+const auth=useAuthStore(),router=useRouter()
+const password=ref(''),confirmation=ref(''),code=ref(''),factorId=ref(recoveryState.factors[0]?.id||''),busy=ref(false),error=ref(''),complete=ref(false)
+const ready=computed(()=>auth.recoverySession&&recoveryState.status==='ready')
+async function submit(){
+ error.value=''
+ if(password.value.length<12||password.value.length>128){error.value='Use a password between 12 and 128 characters.';return}
+ if(password.value!==confirmation.value){error.value='Passwords do not match.';return}
+ busy.value=true
+ try{const result=await auth.changePassword(password.value,factorId.value||recoveryState.factors[0]?.id||'',code.value);if(result.success){complete.value=true;password.value='';confirmation.value='';code.value=''}else error.value=result.error||'Your password could not be updated.'}finally{busy.value=false}
 }
+async function leave(path:string){await auth.cancelRecovery();await router.replace(path)}
 </script>
-
+<template>
+ <main class="recovery-desk"><section class="recovery-paper" aria-labelledby="reset-heading">
+  <p class="brand">Cronevia</p><p class="eyebrow">A fresh start</p>
+  <h1 id="reset-heading">{{complete?'Password updated':'Reset Password'}}</h1>
+  <template v-if="complete"><p role="status">Your password has been reset successfully! Sign in with your new password to open your account.</p><button class="primary" @click="leave('/login')">Sign In</button></template>
+  <template v-else-if="ready">
+   <p>Choose a new password for the account linked to this email. You’ll sign in after saving it.</p>
+   <p class="recovery-note">Password recovery only · Your journal stays closed.</p>
+   <form @submit.prevent="submit">
+    <p v-if="error" class="feedback" role="alert">{{error}}</p>
+    <label for="new-password">New Password</label><input id="new-password" v-model="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" :disabled="busy" aria-describedby="password-help"/>
+    <p id="password-help" class="help">Use 12–128 characters.</p>
+    <label for="confirm-password">Confirm New Password</label><input id="confirm-password" v-model="confirmation" type="password" autocomplete="new-password" required minlength="12" maxlength="128" :disabled="busy"/>
+    <template v-if="recoveryState.requiresMfa"><label v-if="recoveryState.factors.length>1" for="recovery-factor">Authenticator</label><select v-if="recoveryState.factors.length>1" id="recovery-factor" v-model="factorId"><option v-for="factor in recoveryState.factors" :key="factor.id" :value="factor.id">{{factor.name}}</option></select><label for="recovery-code">Authenticator code</label><input id="recovery-code" v-model="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required :disabled="busy"/><p class="help">Your existing two-factor protection still applies.</p></template>
+    <button class="primary" type="submit" :disabled="busy">{{busy?'Saving password…':'Reset Password'}}</button>
+   </form>
+   <button class="text-link" :disabled="busy" @click="leave('/login')">Cancel and return to sign in</button>
+  </template>
+  <template v-else><p role="alert">{{recoveryState.error||'Open a fresh password reset link from your email to continue. This page cannot reset a password using a normal account login.'}}</p><button class="primary" @click="leave('/forgot-password')">Request a new reset link</button><button class="text-link" @click="leave('/login')">Back to sign in</button></template>
+ </section></main>
+</template>
 <style scoped>
-/* Vintage-inspired styling is handled through Tailwind classes */
+.recovery-desk{min-height:100dvh;display:grid;place-items:center;padding:24px 16px;background:var(--vintage-page,#efe2ce);color:var(--vintage-text,#49321f)}.recovery-paper{width:min(100%,480px);min-width:0;padding:clamp(24px,6vw,42px);background:var(--vintage-card,#fff8eb);border:1px solid var(--vintage-line,#c9ad88);box-shadow:0 12px 35px #49321f12;overflow-wrap:anywhere}.brand{font:bold 30px Georgia,serif;margin:0 0 28px}.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--vintage-muted,#85694b)}h1{font:32px/1.2 Georgia,serif;margin:10px 0 18px}p{line-height:1.65;margin:0 0 20px}.recovery-note{font-size:13px;border-block:1px solid var(--vintage-line,#c9ad88);padding:12px 0}label{display:block;font-weight:600;margin:20px 0 8px}input,select{display:block;width:100%;min-height:48px;padding:11px 12px;background:var(--vintage-input,#fffdf7);color:inherit;border:1px solid var(--vintage-line,#c9ad88);border-radius:4px;font:inherit}.help{font-size:12px;margin:7px 0 0;color:var(--vintage-muted,#85694b)}button{min-height:48px;font:inherit;cursor:pointer}.primary{width:100%;margin-top:24px;padding:12px 16px;border:0;border-radius:4px;background:#704624;color:#fff8eb;font-weight:600}.text-link{display:block;width:100%;background:transparent;border:0;color:inherit;text-decoration:underline;margin-top:14px;padding:10px 0}.feedback{padding:12px;border:1px solid #a84f39;border-radius:4px}button:disabled{opacity:.6;cursor:wait}input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid #a6773f;outline-offset:3px}
 </style>

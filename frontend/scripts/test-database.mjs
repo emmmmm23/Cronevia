@@ -1,4 +1,5 @@
 import {testSharedJournals} from './test-shared-journals-database.mjs'
+import {testPasswordRecovery} from './test-password-recovery-database.mjs'
 import { PGlite } from '@electric-sql/pglite'
 import { readFile, readdir } from 'node:fs/promises'
 import assert from 'node:assert/strict'
@@ -311,6 +312,7 @@ await testProfileAvatars(db,asUser,alice,bob,admin)
 await testTrackerGrid(db,asUser,alice,bob)
 await testAccountSecurity(db,asUser,alice,bob,admin)
 await testSharedJournals(db,asUser)
+await testPasswordRecovery(db,asUser,alice,admin)
 await db.close()
 console.log('PASS: migrations, profile bootstrap, CRUD, isolation, link ownership, admin authorization, private storage, suspension, ordering, and capsule locks.')
 

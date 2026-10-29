@@ -15,7 +15,7 @@
     "check:supabase": "node scripts/check-supabase.mjs",
     "check:planner": "node scripts/check-trip-planner.mjs",
     "planner:bundle": "node scripts/build-trip-planner-upgrade.mjs",
-    "check:planner-release": "node scripts/check-trip-planner.mjs --production && node scripts/check-trackers.mjs --production && node scripts/check-account-security.mjs --production && node scripts/check-profile-avatars.mjs --production && node scripts/check-tracker-grid.mjs --production && node scripts/check-shared-journals.mjs --production && npm run build",
+    "check:planner-release": "node scripts/check-trip-planner.mjs --production && node scripts/check-trackers.mjs --production && node scripts/check-account-security.mjs --production && node scripts/check-profile-avatars.mjs --production && node scripts/check-tracker-grid.mjs --production && node scripts/check-shared-journals.mjs --production && node scripts/check-password-recovery.mjs --production && npm run build",
     "check:trackers": "node scripts/check-trackers.mjs",
     "trackers:bundle": "node scripts/build-tracker-upgrade.mjs",
     "test:trackers": "vitest run src/types/trackers.test.ts",
@@ -25,7 +25,8 @@
     "check:account-security": "node scripts/check-account-security.mjs",
     "check:profile-avatars": "node scripts/check-profile-avatars.mjs",
     "check:tracker-grid": "node scripts/check-tracker-grid.mjs",
-    "check:shared-journals": "node scripts/check-shared-journals.mjs"
+    "check:shared-journals": "node scripts/check-shared-journals.mjs",
+    "check:password-recovery": "node scripts/check-password-recovery.mjs"
   },
   "dependencies": {
     "@sentry/vue": "^8.0.0",

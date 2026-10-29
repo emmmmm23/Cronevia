@@ -22,14 +22,6 @@
           {{ errorMessage }}
         </div>
 
-        <!-- Success Message -->
-        <div
-          v-if="successMessage"
-          class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm"
-        >
-          {{ successMessage }}
-        </div>
-
         <!-- Form -->
         <form v-if="!emailSent" @submit.prevent="handleSubmit">
           <!-- Email -->
@@ -70,7 +62,7 @@
 
         <!-- After Email Sent -->
         <div v-else class="text-center">
-          <p class="text-gray-600 mb-6">
+          <p role="status" class="text-gray-600 mb-6">
             If an account exists with that email, you'll receive a password reset link shortly.
           </p>
           <router-link
@@ -100,7 +92,6 @@ const auth = useAuthStore()
 const email = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
-const successMessage = ref('')
 const emailSent = ref(false)
 
 async function handleSubmit() {
@@ -112,13 +103,11 @@ async function handleSubmit() {
   try {
     loading.value = true
     errorMessage.value = ''
-    successMessage.value = ''
 
     const result = await auth.requestPasswordReset(email.value)
 
     if (result.success) {
       emailSent.value = true
-      successMessage.value = 'If an account matches that email, you will receive password reset instructions.'
     } else {
       errorMessage.value = result.error || 'Failed to send reset email. Please try again.'
     }

@@ -217,19 +217,25 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth=useAuthStore()
   if(!auth.initialized)await auth.initialize()
+  if(auth.recoverySession){
+    if(to.name!=='reset-password')return {name:'reset-password',replace:true}
+    return
+  }
+  // A normal login cannot authorize a password recovery operation.
+  if(to.name==='reset-password')return
   const cleanPath=safeReturnPath(to.fullPath,to.path)
   if(cleanPath!==to.fullPath && /(?:access_token|refresh_token|token_hash|provider_token|error_description|[?&]code)=/i.test(to.fullPath)){
     const clean=router.resolve(cleanPath)
     return {path:clean.path,query:clean.query,hash:clean.hash,replace:true}
   }
-  if(auth.isAuthenticated && (to.meta.requiresAuth||to.name==='verify-2fa'||to.name==='reset-password'||to.name==='journal.invitation'))await auth.refreshSecurity()
+  if(auth.isAuthenticated && (to.meta.requiresAuth||to.name==='verify-2fa'||to.name==='journal.invitation'))await auth.refreshSecurity()
   if(to.name==='verify-2fa'){
     if(!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.query.redirect,'/home')}}
     if(auth.securityChecked&&!auth.mfaRequired)return safeReturnPath(to.query.redirect,'/home')
     return
   }
-  if((to.meta.requiresAuth||to.name==='reset-password')&&!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.fullPath)}}
-  if(auth.isAuthenticated&&(to.meta.requiresAuth||to.name==='reset-password'||to.name==='journal.invitation')&&(!auth.securityChecked||auth.mfaRequired))return {name:'verify-2fa',query:{redirect:safeReturnPath(to.fullPath)}}
+  if(to.meta.requiresAuth&&!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.fullPath)}}
+  if(auth.isAuthenticated&&(to.meta.requiresAuth||to.name==='journal.invitation')&&(!auth.securityChecked||auth.mfaRequired))return {name:'verify-2fa',query:{redirect:safeReturnPath(to.fullPath)}}
   if(to.meta.guest&&auth.isAuthenticated)return auth.securityChecked&&!auth.mfaRequired?safeReturnPath(to.query.redirect,'/home'):{name:'verify-2fa',query:{redirect:safeReturnPath(to.query.redirect,'/home')}}
   if(to.meta.requiresAuth&&(!auth.profile||!auth.isAccountActive)){
     await auth.logout();return {name:'login',query:{error:'account_unavailable'}}

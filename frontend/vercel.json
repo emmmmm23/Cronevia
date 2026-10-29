@@ -67,6 +67,15 @@
       ]
     },
     {
+      "source": "/reset-password",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    },
+    {
       "source": "/journal/invitations/accept",
       "headers": [
         {

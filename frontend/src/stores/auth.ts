@@ -5,6 +5,8 @@ import { supabase, clearBrowserSession } from '@/lib/supabase'
 import { accountError } from '@/services/account-security'
 import { loadAccountTheme, clearAccountTheme } from '@/services/theme'
 import { clearAvatarUrls } from '@/services/avatars'
+import {hasRecoveryCallback,isRecoveryAccessToken} from '@/services/recovery-boot'
+import {openPasswordRecovery,resetRecoveredPassword,cancelPasswordRecovery} from '@/services/password-recovery'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useJournalStore } from './journal'
 import { useTripsStore } from './trips'
@@ -18,7 +20,7 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false), loading = ref(false), securityChecked = ref(false), mfaRequired = ref(false)
   const recoverySession = ref(false)
   const inlineReauth=ref(false)
-  const isAuthenticated = computed(() => supabaseUser.value !== null)
+  const isAuthenticated = computed(() => supabaseUser.value !== null && !recoverySession.value)
   const user = computed<User | null>(() => {
     if (!supabaseUser.value || !profile.value) return null
     
@@ -68,6 +70,7 @@ export const useAuthStore = defineStore('auth', () => {
     return task
   }
   async function checkSecurity() {
+    if(recoverySession.value)return
     const current = ++generation
     try {
       const result = await supabase.auth.getUser()
@@ -90,8 +93,14 @@ export const useAuthStore = defineStore('auth', () => {
     if(initialized.value)return
     loading.value=true
     try {
+      if(hasRecoveryCallback)enterRecovery()
       supabase.auth.onAuthStateChange((event,session)=>{
-        if(event==='PASSWORD_RECOVERY')recoverySession.value=true
+        if(session&&(event==='PASSWORD_RECOVERY'||isRecoveryAccessToken(session.access_token))){
+          enterRecovery();clearBrowserSession()
+          void openPasswordRecovery(session)
+          return
+        }
+        if(recoverySession.value)return
         const changed=supabaseUser.value?.id!==session?.user.id
         supabaseUser.value=session?.user||null
         if(changed){profile.value=null;securityChecked.value=false;clearFeatureState()}
@@ -99,9 +108,23 @@ export const useAuthStore = defineStore('auth', () => {
         else if(!loading.value && event!=='INITIAL_SESSION')setTimeout(()=>{void refreshSecurity()},0)
       })
       const {data,error}=await supabase.auth.getSession()
-      if(!error && data.session?.user){supabaseUser.value=data.session.user;await refreshSecurity()}
+      if(hasRecoveryCallback)await openPasswordRecovery()
+      else if(!error&&data.session&&isRecoveryAccessToken(data.session.access_token)){
+        enterRecovery();clearBrowserSession();await openPasswordRecovery(data.session)
+      }
+      else if(recoverySession.value)await openPasswordRecovery()
+      else if(!error && data.session?.user&&!recoverySession.value){supabaseUser.value=data.session.user;await refreshSecurity()}
     }catch{securityChecked.value=false;profile.value=null}
     finally{initialized.value=true;loading.value=false}
+  }
+  function enterRecovery(){
+    generation++;recoverySession.value=true;supabaseUser.value=null;profile.value=null;securityChecked.value=false;mfaRequired.value=false
+    clearFeatureState();clearAccountTheme()
+  }
+  async function cancelRecovery(){
+    await cancelPasswordRecovery()
+    generation++;recoverySession.value=false;supabaseUser.value=null;profile.value=null;securityChecked.value=false;mfaRequired.value=false
+    clearFeatureState();clearAccountTheme()
   }
   async function register(fullName:string,email:string,password:string,returnPath='/home') {
     loading.value=true
@@ -114,6 +137,7 @@ export const useAuthStore = defineStore('auth', () => {
     finally{loading.value=false}
   }
   async function login(email:string,password:string) {
+    if(recoverySession.value)return {success:false,error:'Finish or cancel password recovery before signing in.'}
     loading.value=true
     try {
       const {data,error}=await supabase.auth.signInWithPassword({email,password})
@@ -136,6 +160,7 @@ export const useAuthStore = defineStore('auth', () => {
       return !error
     }catch{return false
     }finally{
+      await cancelPasswordRecovery()
       clearBrowserSession()
       generation++;supabaseUser.value=null;profile.value=null;securityChecked.value=false;mfaRequired.value=false;recoverySession.value=false
       clearFeatureState();clearAccountTheme();loading.value=false
@@ -153,14 +178,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
   // Password recovery relies on the server-verified recovery session. Account changes
   // use changeAccountPassword(), including current-password and fresh MFA verification.
-  async function changePassword(newPassword:string) {
+  async function changePassword(newPassword:string,factorId='',code='') {
     if(!recoverySession.value)return {success:false,error:'Open a fresh password reset link from your email to continue.'}
     if(newPassword.length<12||newPassword.length>128)return {success:false,error:'Use a password between 12 and 128 characters.'}
-    try {
-      const {error}=await supabase.auth.updateUser({password:newPassword})
-      if(error)return {success:false,error:accountError(error,'Your password could not be updated. Request a fresh reset link and try again.')}
-      await logout();return {success:true}
-    }catch{return {success:false,error:'Your password could not be updated. Please try again.'}}
+    const result=await resetRecoveredPassword(newPassword,factorId,code)
+    if(result.success){recoverySession.value=false;supabaseUser.value=null;profile.value=null;securityChecked.value=false;clearFeatureState();clearAccountTheme()}
+    return result
   }
   async function requestPasswordReset(email:string) {
     try {
@@ -173,5 +196,5 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchCurrentUser(){await refreshSecurity()}
   function acceptAvatarProfile(saved:Profile){if(saved.user_id===supabaseUser.value?.id&&securityChecked.value&&!mfaRequired.value)profile.value=saved}
   return {user,supabaseUser,profile,initialized,loading,isAuthenticated,isSuperAdmin,isAccountActive,securityChecked,mfaRequired,recoverySession,inlineReauth,
-    initialize,register,login,logout,updateProfile,changePassword,requestPasswordReset,fetchCurrentUser,fetchProfile,refreshSecurity,acceptAvatarProfile}
+    initialize,register,login,logout,updateProfile,changePassword,requestPasswordReset,cancelRecovery,fetchCurrentUser,fetchProfile,refreshSecurity,acceptAvatarProfile}
 })

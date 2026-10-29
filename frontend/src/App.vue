@@ -4,12 +4,13 @@ import { watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { safeReturnPath } from '@/services/account-security'
 const auth=useAuthStore(),router=useRouter()
+watch(()=>auth.recoverySession,recovering=>{if(recovering)void router.replace({name:'reset-password'})})
 watch(()=>auth.mfaRequired,required=>{
   const route=router.currentRoute.value
   if(required&&route.meta.requiresAuth&&!auth.inlineReauth)void router.replace({name:'verify-2fa',query:{redirect:safeReturnPath(route.fullPath)}})
 })
 watch(()=>auth.isAuthenticated,signedIn=>{
-  if(!signedIn&&router.currentRoute.value.meta.requiresAuth&&!auth.inlineReauth)void router.replace('/login')
+  if(!signedIn&&router.currentRoute.value.meta.requiresAuth&&!auth.inlineReauth)void router.replace(auth.recoverySession?'/reset-password':'/login')
 })
 </script>
 
