@@ -4,12 +4,14 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 import themeColors from './scripts/theme-colors.mjs'
 import {validatePublicEnv} from './scripts/public-env.mjs'
+import journalInvitesDev from './scripts/journal-invites-dev.mjs'
 
 export default defineConfig(({mode})=>{
   validatePublicEnv(loadEnv(mode,process.cwd(),'VITE_'))
   return {
   base: '/',
   plugins: [
+    journalInvitesDev(loadEnv(mode,process.cwd(),'')),
     vue(),
     tailwindcss(),
   ],

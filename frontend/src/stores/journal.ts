@@ -5,7 +5,7 @@ import type { JournalEntry, PaginatedResponse } from '../types'
 
 /**
  * Journal store — all data comes from Supabase with row-level security.
- * No demo data. Every entry belongs to the authenticated user.
+ * No demo data. Access comes from ownership or accepted journal membership.
  */
 export const useJournalStore = defineStore('journal', () => {
   const entries    = ref<JournalEntry[]>([])
@@ -14,29 +14,33 @@ export const useJournalStore = defineStore('journal', () => {
   const error      = ref<string | null>(null)
   const totalPages = ref(1)
   const total      = ref(0)
+  let readGeneration=0
 
   /**
    * Fetch the authenticated user's journal entries from the API.
    * Returns an empty array for brand-new accounts.
    */
   async function fetchEntries(params?: Record<string, string | number>) {
+    const generation=++readGeneration
     loading.value = true
     error.value   = null
     try {
       const { data } = await api.get<PaginatedResponse<JournalEntry>>('/journal', { params })
+      if(generation!==readGeneration)return
       entries.value  = data.data
       total.value    = data.meta.total
       totalPages.value = data.meta.last_page
     } catch (err: unknown) {
+      if(generation!==readGeneration)return
       const e = err as { response?: { status?: number } }
-      if (e?.response?.status === 401) {
-        entries.value = []  // unauthenticated — clear state
+      if (e?.response?.status === 401 || e?.response?.status === 403) {
+        entries.value = [];error.value='This journal is unavailable or access has ended.'
       } else {
         error.value = `We couldn't load your journal right now. Please try again.`
         console.error('[JournalStore] fetchEntries error:', err)
       }
     } finally {
-      loading.value = false
+      if(generation===readGeneration)loading.value = false
     }
   }
 
@@ -111,6 +115,7 @@ export const useJournalStore = defineStore('journal', () => {
   }
 
   function clearEntries() {
+    ++readGeneration;loading.value=false
     entries.value = []
     total.value   = 0
   }

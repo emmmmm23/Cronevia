@@ -4,6 +4,8 @@ import { validateScrapbook } from '@/types/scrapbook'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
 import {requestError} from './request-errors'
+import {journalRpc} from './shared-journals'
+import {isJournalId} from './journal-routes'
 
 type Table = 'trips' | 'journal_entries' | 'memories'
 type RecordData = Record<string, any>
@@ -48,7 +50,7 @@ async function mediaFor(table: Table, id: string) {
   const column = table === 'trips' ? 'trip_id' : table === 'journal_entries' ? 'journal_entry_id' : 'memory_id'
   const rows = check(await supabase.from('media').select('*').eq(column, id).order('sort_order')) || []
   return Promise.all(rows.map(async row => {
-    const signed = check(await supabase.storage.from('cronevia-media').createSignedUrl(row.storage_path, 3600))
+    const signed = check(await supabase.storage.from('cronevia-media').createSignedUrl(row.storage_path, table==='journal_entries'?60:3600))
     return { ...row, file_path: signed.signedUrl, thumbnail_path: signed.signedUrl, thumbnail_url: signed.signedUrl,
       original_filename: row.file_name, file_size: row.size_bytes, type: row.mime_type.startsWith('image/') ? 'image' : 'video' }
   }))
@@ -64,7 +66,11 @@ async function list(table: Table, userId: string, params: Record<string, string 
   const page = Math.max(1, Number(params.page) || 1)
   const perPage = Math.min(100, Math.max(1, Number(params.per_page) || 20))
   const dateColumn = table === 'trips' ? 'start_date' : table === 'memories' ? 'memory_date' : 'entry_date'
-  let query = supabase.from(table).select('*', { count: 'exact' }).eq('user_id', userId).is('deleted_at', null)
+  let query = supabase.from(table).select('*', { count: 'exact' }).is('deleted_at', null)
+  if(table==='journal_entries'&&params.journal){
+    if(!isJournalId(params.journal)||!await journalRpc('journal_role',{target_journal:params.journal}))failure('This journal is unavailable or access has ended.',403)
+    query=query.filter('journal_id','eq',params.journal)
+  }else query=query.eq('user_id',userId)
   if (table !== 'trips') query = query.filter('is_archived', 'eq', String(params.archived) === 'true')
   if (params.trip_id && table !== 'trips') query = query.filter('trip_id', 'eq', String(params.trip_id))
   if (params.search) query = query.ilike('title', `%${String(params.search).replace(/[%_]/g, '\\$&')}%`)
@@ -88,11 +94,16 @@ async function upload(table: Table, parentId: string, body: FormData, userId: st
   if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024) failure('Choose a JPG, PNG, WebP or GIF image under 10 MB.', 422)
   const uploadId = String(body.get('upload_id') || crypto.randomUUID())
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uploadId)) failure('Invalid upload reference.',422)
-  const path = `${userId}/${uploadId}.${file.type.split('/')[1]}`
-  check(await supabase.storage.from('cronevia-media').upload(path, file, { contentType: file.type, upsert: true }))
+  const path = table==='journal_entries'?`${userId}/journals/${parentId}/${uploadId}.${file.type.split('/')[1]}`:`${userId}/${uploadId}.${file.type.split('/')[1]}`
+  if(table==='journal_entries'){
+    const existing=check(await supabase.from('media').select('*').eq('id',uploadId).eq('journal_entry_id',parentId).maybeSingle())
+    if(existing)return {data:existing}
+    const uploaded=await supabase.storage.from('cronevia-media').upload(path,file,{contentType:file.type,upsert:false})
+    if(uploaded.error&&String((uploaded.error as {statusCode?:string}).statusCode)!=='409')check(uploaded)
+  }else check(await supabase.storage.from('cronevia-media').upload(path, file, { contentType: file.type, upsert: true }))
   const foreignKey = table === 'trips' ? 'trip_id' : table === 'journal_entries' ? 'journal_entry_id' : 'memory_id'
-  const result = await supabase.from('media').upsert({ id:uploadId, user_id: userId, [foreignKey]: parentId,
-    storage_path: path, file_name: file.name, mime_type: file.type, size_bytes: file.size } as Database['public']['Tables']['media']['Insert']).select().single()
+  const metadata={id:uploadId,user_id:userId,[foreignKey]:parentId,storage_path:path,file_name:file.name,mime_type:file.type,size_bytes:file.size} as Database['public']['Tables']['media']['Insert']
+  const result=table==='journal_entries'?await supabase.from('media').insert(metadata).select().single():await supabase.from('media').upsert(metadata).select().single()
   // Keep the private object when a response is uncertain; the same upload ID safely retries.
   check(result)
   return { data: result.data }
@@ -134,13 +145,16 @@ async function request(method: string, path: string, body?: RecordData | FormDat
   const table = tables[resource]
   if (!table) failure(`Unsupported operation: ${method} ${path}`, 404)
   if (child === 'media') {
-    check(await supabase.from(table).select('id').eq('id', id).eq('user_id', user.id).single())
-    if (method === 'POST' && body instanceof FormData) return upload(table, id, body, user.id)
+    let parentQuery=supabase.from(table).select('id,user_id').eq('id',id)
+    if(table!=='journal_entries')parentQuery=parentQuery.eq('user_id',user.id)
+    const parent=check(await parentQuery.single())
+    if(table==='journal_entries'&&!await journalRpc('can_edit_journal_entry',{target_entry:id}))failure('This entry is read only.',403)
+    if (method === 'POST' && body instanceof FormData) return upload(table, id, body, parent.user_id)
     const foreignKey = table === 'trips' ? 'trip_id' : table === 'journal_entries' ? 'journal_entry_id' : 'memory_id'
-    const row = check(await supabase.from('media').select('*').eq('id', childId).eq(foreignKey, id).eq('user_id', user.id).single())
+    const row = check(await supabase.from('media').select('*').eq('id', childId).eq(foreignKey, id).eq('user_id', parent.user_id).single())
     if (method === 'DELETE') {
       // Check database reference protection before removing the underlying reusable file.
-      check(await supabase.from('media').delete().eq('id', row.id).eq('user_id', user.id))
+      check(await supabase.from('media').delete().eq('id', row.id).eq('user_id', parent.user_id))
       check(await supabase.storage.from('cronevia-media').remove([row.storage_path]))
       return { data: null }
     }
@@ -175,25 +189,39 @@ async function request(method: string, path: string, body?: RecordData | FormDat
   }
   if (method === 'GET') {
     if (!id) return list(table, user.id, options.params)
-    const row = check(await supabase.from(table).select('*').eq('id', id).eq('user_id', user.id).is('deleted_at', null).single())
+    let query=supabase.from(table).select('*').eq('id',id).is('deleted_at',null)
+    if(table!=='journal_entries')query=query.eq('user_id',user.id)
+    const row=check(await query.single())
     return { data: await present(table, row) }
   }
   if (method === 'DELETE') {
+    if(table==='journal_entries'){
+      const access=await journalRpc<{version:number}|null>('journal_entry_access',{target_entry:id})
+      if(!access)failure('This entry is unavailable.',403)
+      await journalRpc('save_journal_entry',{target_entry:id,expected_version:access.version,details:{deleted_at:new Date().toISOString()}})
+      return {data:null}
+    }
     check(await supabase.from(table).update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('user_id', user.id).select('id').single())
     return { data: null }
   }
   const payload = preparePayload(table, input)
+  if(table==='journal_entries'){
+    if(method==='POST')payload.status='draft'
+    if(child==='archive'||child==='restore')payload.is_archived=child==='archive'
+    let version=input.version??null
+    if(id&&version===null){
+      if(child!=='archive'&&child!=='restore')failure('Reload this entry before saving. Your draft has been kept.',409,'40001')
+      const access=await journalRpc<{version:number}|null>('journal_entry_access',{target_entry:id});if(!access)failure('This entry is unavailable.',403);version=access.version
+    }
+    const row=await journalRpc<RecordData>('save_journal_entry',{target_entry:id||String(input.draft_key||crypto.randomUUID()),expected_version:version,details:payload,target_journal:isJournalId(input.journal_id)?input.journal_id:null})
+    return {data:await present(table,row)}
+  }
   if (child === 'archive' || child === 'restore') payload.is_archived = child === 'archive'
   if (method === 'POST') {
     if (!String(payload.title || '').trim()) failure('A title is required.', 422)
     if (table === 'trips') payload.slug = `${String(payload.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0,100)}-${crypto.randomUUID()}`
     const row = table === 'trips' && input.draft_key
       ? check(await supabase.rpc('create_trip_draft',{draft_id:String(input.draft_key),details:{...payload,draft_ideas:input.draft_ideas||[]}}))
-      : table === 'journal_entries' && input.draft_key
-      ? check(await supabase.rpc('create_journal_draft', {
-        draft_id: String(input.draft_key), draft_title: String(payload.title),
-        draft_content: String(payload.content || ''), draft_date: String(payload.entry_date)
-      }))
       : table === 'memories' && input.draft_key
         ? check(await supabase.rpc('create_memory_draft', {draft_id:String(input.draft_key),draft_title:String(payload.title),draft_description:String(payload.description || ''),draft_date:String(payload.memory_date)}))
         : await writeRecord(table, { ...payload, user_id: user.id })

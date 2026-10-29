@@ -145,6 +145,16 @@ test('MFA lookup failures fail closed and return paths cannot redirect to anothe
  await expect(page).toHaveURL(/\/login\?redirect=/)
  await expect(page.locator('body')).not.toContainText('private infrastructure diagnostic')
 })
+
+test('2FA returns to the exact pending journal invitation without accepting it',async({page})=>{
+ await securityFixture(page,true)
+ const id='44444444-4444-4444-8444-444444444444',destination='/journal/invitations/accept?invitation='+id
+ let accepted=0
+ await page.route('**/api/journal-invites',route=>{if(route.request().postDataJSON().action==='accept')accepted++;return route.fulfill({contentType:'application/json',body:JSON.stringify({status:'pending',role:'viewer',invitation_id:id,journal_title:'A shared notebook'})})})
+ await page.goto(destination);await expect(page).toHaveURL(/verify-2fa\?redirect=/)
+ await page.getByLabel('Authenticator code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Verify and continue'}).click()
+ await expect(page).toHaveURL(destination);await expect(page.getByRole('button',{name:'Accept invitation'})).toBeVisible();expect(accepted).toBe(0)
+})
 test('an expired drafting session can finish 2FA without losing the draft',async({page})=>{
  await securityFixture(page,true)
  await page.goto('/verify-2fa')

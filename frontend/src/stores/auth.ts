@@ -1,3 +1,4 @@
+import {safeReturnPath} from '@/services/account-security'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase, clearBrowserSession } from '@/lib/supabase'
@@ -102,10 +103,10 @@ export const useAuthStore = defineStore('auth', () => {
     }catch{securityChecked.value=false;profile.value=null}
     finally{initialized.value=true;loading.value=false}
   }
-  async function register(fullName:string,email:string,password:string) {
+  async function register(fullName:string,email:string,password:string,returnPath='/home') {
     loading.value=true
     try {
-      const {data,error}=await supabase.auth.signUp({email,password,options:{data:{full_name:fullName}}})
+      const {data,error}=await supabase.auth.signUp({email,password,options:{data:{full_name:fullName},emailRedirectTo:new URL(safeReturnPath(returnPath,'/home'),window.location.origin).href}})
       if(error)return {success:false,error:accountError(error,'Your account could not be created. Please check your details and try again.')}
       if(data.session){supabaseUser.value=data.user;await refreshSecurity()}
       return {success:true}

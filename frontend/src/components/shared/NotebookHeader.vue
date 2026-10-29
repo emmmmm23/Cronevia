@@ -2,7 +2,7 @@
 import {ref,nextTick} from 'vue'
 import {RouterLink} from 'vue-router'
 import AppSheet from './AppSheet.vue'
-defineProps<{backTo:string;backLabel:string;status:string;saveLabel:string;editLabel:string;viewMode:boolean;disabled?:boolean;busy?:boolean;ready?:boolean}>()
+defineProps<{backTo:string;backLabel:string;status:string;saveLabel:string;editLabel:string;viewMode:boolean;disabled?:boolean;busy?:boolean;ready?:boolean;readOnly?:boolean}>()
 const emit=defineEmits<{save:[];edit:[];cancel:[];details:[]}>()
 const menu=ref(false)
 async function action(type:'details'|'cancel'){menu.value=false;await nextTick();type==='details'?emit('details'):emit('cancel')}
@@ -14,7 +14,7 @@ async function action(type:'details'|'cancel'){menu.value=false;await nextTick()
   <button class="secondary" :disabled="!ready" @click="emit('details')">Details</button>
   <button v-if="!viewMode" class="secondary" :disabled="busy" @click="emit('cancel')">Cancel</button>
   <button class="more" aria-label="Entry options" :aria-expanded="menu" :disabled="!ready" @click="menu=true">•••</button>
-  <button v-if="viewMode && ready" class="primary" :aria-label="editLabel" @click="emit('edit')"><span class="long-label">{{editLabel}}</span><span class="short-label">Edit</span></button>
+  <button v-if="viewMode && ready && !readOnly" class="primary" :aria-label="editLabel" @click="emit('edit')"><span class="long-label">{{editLabel}}</span><span class="short-label">Edit</span></button>
   <button v-else-if="!viewMode" class="primary" :aria-label="saveLabel" :disabled="disabled" @click="emit('save')"><span class="long-label">{{busy?'Saving…':saveLabel}}</span><span class="short-label">{{busy?'Saving…':'Save'}}</span></button>
  </header>
  <AppSheet v-model="menu" title="Entry options"><div class="menu-actions"><button @click="action('details')">Date &amp; details</button><button v-if="!viewMode" :disabled="busy" @click="action('cancel')">Cancel editing</button></div></AppSheet>

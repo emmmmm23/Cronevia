@@ -235,6 +235,10 @@ FOR EACH ROW EXECUTE FUNCTION public.validate_custom_sticker_path();
 ALTER TABLE public.journal_entries ADD COLUMN IF NOT EXISTS scrapbook_layout jsonb;
 ALTER TABLE public.memories ADD COLUMN IF NOT EXISTS scrapbook_layout jsonb;
 
+-- A legacy scrapbook upgrade must not replace the newer sharing-aware validator.
+DO $upgrade$ BEGIN
+IF to_regclass('public.journals') IS NULL THEN
+EXECUTE $legacy$
 CREATE OR REPLACE FUNCTION public.validate_scrapbook_layout() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path=public AS $$
 DECLARE p jsonb; e jsonb; field text; seen text[] := '{}'; page_index integer := 0; aid uuid; asset_owner uuid; asset_path text;
@@ -282,6 +286,10 @@ DROP TRIGGER IF EXISTS validate_scrapbook_layout ON public.journal_entries;
 CREATE TRIGGER validate_scrapbook_layout BEFORE INSERT OR UPDATE OF scrapbook_layout,user_id ON public.journal_entries FOR EACH ROW EXECUTE FUNCTION public.validate_scrapbook_layout();
 DROP TRIGGER IF EXISTS validate_scrapbook_layout ON public.memories;
 CREATE TRIGGER validate_scrapbook_layout BEFORE INSERT OR UPDATE OF scrapbook_layout,user_id ON public.memories FOR EACH ROW EXECUTE FUNCTION public.validate_scrapbook_layout();
+
+$legacy$;
+END IF;
+END $upgrade$;
 
 CREATE OR REPLACE FUNCTION public.protect_scrapbook_asset() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$

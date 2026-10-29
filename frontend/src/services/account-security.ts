@@ -5,7 +5,7 @@ export function safeReturnPath(value: unknown, fallback = '/') {
   const url = new URL(value, window.location.origin)
   // Never promote an implicit/PKCE callback credential into a redirect query.
   for(const key of ['access_token','refresh_token','token_hash','provider_token','provider_refresh_token','code','error_description','error_code'])url.searchParams.delete(key)
-  if(/(?:access_token|refresh_token|token_hash|provider_token|error_description)=/i.test(url.hash))url.hash=''
+  if(/(?:access_token|refresh_token|token_hash|provider_token|error_description|invite)=/i.test(url.hash))url.hash=''
   return url.origin === window.location.origin && !/^\/(login|register|verify-2fa)(\/|$)/.test(url.pathname)
     ? url.pathname + url.search + url.hash : fallback
 }

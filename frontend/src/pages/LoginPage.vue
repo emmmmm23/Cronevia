@@ -97,7 +97,7 @@
           <p class="text-gray-600">
             Don't have an account?
             <router-link
-              to="/register"
+              :to="{name:'register',query:route.query.redirect?{redirect:safeReturnPath(route.query.redirect)}:{}}"
               class="text-[#8B4513] font-semibold hover:underline ml-1"
             >
               Create one

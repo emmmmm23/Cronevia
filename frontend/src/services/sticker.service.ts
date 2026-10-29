@@ -87,6 +87,14 @@ export async function fetchUserAssets(userId: string): Promise<Array<StickerAsse
   )
 }
 
+/** Only assets referenced by an accessible entry are returned by sharing RLS. */
+export async function fetchJournalAssets(ids:string[]):Promise<Array<StickerAsset & {url:string}>>{
+ const valid=[...new Set(ids)].filter(id=>/^[0-9a-f-]{36}$/i.test(id)).slice(0,200)
+ if(!valid.length)return []
+ const rows=check(await supabase.from('sticker_assets').select('*').in('id',valid))||[]
+ return Promise.all(rows.map(async row=>({...row,url:check(await supabase.storage.from('stickers-custom').createSignedUrl(row.storage_path,60)).signedUrl})))
+}
+
 /**
  * Validate uploaded sticker file
  * Checks: MIME type, file size, dimensions, transparency
@@ -268,15 +276,14 @@ export async function deleteAsset(assetId: string): Promise<void> {
  * Returns placements with asset information joined
  */
 export async function fetchPlacements(entryId: string): Promise<StickerPlacement[]> {
-  const user = await requireUser()
+  await requireUser()
 
-  // Verify entry ownership
+  // Verify entry access through RLS; members can read eligible legacy decorations.
   check(
     await supabase
       .from('journal_entries')
       .select('id')
       .eq('id', entryId)
-      .eq('user_id', user.id)
       .single()
   )
 

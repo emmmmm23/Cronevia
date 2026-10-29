@@ -1,3 +1,4 @@
+import '@/services/invitation-boot'
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -15,6 +16,7 @@ declare module 'vue-router' {
 const routes: RouteRecordRaw[] = [
   // The public introduction must stay separate from the private app shell.
   {path:'/',name:'landing',component:()=>import('@/pages/LandingPage.vue')},
+  {path:'/journal/invitations/accept',name:'journal.invitation',component:()=>import('@/pages/JournalInvitationPage.vue')},
   // Auth pages
   {
     path: '/login',
@@ -220,15 +222,15 @@ router.beforeEach(async (to) => {
     const clean=router.resolve(cleanPath)
     return {path:clean.path,query:clean.query,hash:clean.hash,replace:true}
   }
-  if(auth.isAuthenticated && (to.meta.requiresAuth||to.name==='verify-2fa'||to.name==='reset-password'))await auth.refreshSecurity()
+  if(auth.isAuthenticated && (to.meta.requiresAuth||to.name==='verify-2fa'||to.name==='reset-password'||to.name==='journal.invitation'))await auth.refreshSecurity()
   if(to.name==='verify-2fa'){
-    if(!auth.isAuthenticated)return {name:'login'}
+    if(!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.query.redirect,'/home')}}
     if(auth.securityChecked&&!auth.mfaRequired)return safeReturnPath(to.query.redirect,'/home')
     return
   }
   if((to.meta.requiresAuth||to.name==='reset-password')&&!auth.isAuthenticated)return {name:'login',query:{redirect:safeReturnPath(to.fullPath)}}
-  if(auth.isAuthenticated&&(to.meta.requiresAuth||to.name==='reset-password')&&(!auth.securityChecked||auth.mfaRequired))return {name:'verify-2fa',query:{redirect:safeReturnPath(to.fullPath)}}
-  if(to.meta.guest&&auth.isAuthenticated)return auth.securityChecked&&!auth.mfaRequired?{name:'home'}:{name:'verify-2fa'}
+  if(auth.isAuthenticated&&(to.meta.requiresAuth||to.name==='reset-password'||to.name==='journal.invitation')&&(!auth.securityChecked||auth.mfaRequired))return {name:'verify-2fa',query:{redirect:safeReturnPath(to.fullPath)}}
+  if(to.meta.guest&&auth.isAuthenticated)return auth.securityChecked&&!auth.mfaRequired?safeReturnPath(to.query.redirect,'/home'):{name:'verify-2fa',query:{redirect:safeReturnPath(to.query.redirect,'/home')}}
   if(to.meta.requiresAuth&&(!auth.profile||!auth.isAccountActive)){
     await auth.logout();return {name:'login',query:{error:'account_unavailable'}}
   }

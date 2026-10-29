@@ -1,3 +1,4 @@
+import {testSharedJournals} from './test-shared-journals-database.mjs'
 import { PGlite } from '@electric-sql/pglite'
 import { readFile, readdir } from 'node:fs/promises'
 import assert from 'node:assert/strict'
@@ -26,9 +27,20 @@ GRANT ALL ON storage.objects TO authenticated;
 `)
 const directory = new URL('../../supabase/migrations/', import.meta.url)
 for (const file of (await readdir(directory)).filter(f=>f.endsWith('.sql')).sort()) {
+  if(file==='20261029000001_shared_journals.sql'){
+    await db.exec(`INSERT INTO auth.users(id,email) VALUES('89898989-8989-4989-8989-898989898989','upgrade-fixture@example.test');
+    INSERT INTO public.journal_entries(id,user_id,title,content,entry_date,visibility,updated_at)
+    VALUES('87878787-8787-4787-8787-878787878787','89898989-8989-4989-8989-898989898989','Existing private page','Preserve my writing','2020-01-02','private','2020-01-03T00:00:00Z');`)
+  }
   const sql = (await readFile(new URL(file,directory),'utf8')).replace(/CREATE EXTENSION IF NOT EXISTS "uuid-ossp";/g,'')
   try { await db.exec(sql); console.log(`Applied ${file}`) }
   catch(e) { console.error(`Migration failed: ${file}: ${e.message}`); process.exitCode=1; await db.close(); process.exit(1) }
+  if(file==='20261029000001_shared_journals.sql'){
+    const upgraded=(await db.query("SELECT * FROM public.journal_entries WHERE id='87878787-8787-4787-8787-878787878787'")).rows[0]
+    assert.equal(upgraded.visibility,'private');assert.equal(upgraded.content,'Preserve my writing');assert.ok(upgraded.journal_id);assert.equal(new Date(upgraded.updated_at).toISOString(),'2020-01-03T00:00:00.000Z')
+    await db.exec("DELETE FROM auth.users WHERE id='89898989-8989-4989-8989-898989898989'")
+    assert.equal((await db.query("SELECT * FROM public.journal_entries WHERE id='87878787-8787-4787-8787-878787878787'")).rows.length,0)
+  }
 }
 // The documented upgrade must also work twice on an existing installation.
 const scrapbookUpgrade=await readFile(new URL('../../supabase/apply-scrapbook-upgrade.sql',import.meta.url),'utf8')
@@ -298,6 +310,7 @@ await rejected('SELECT * FROM get_user_statistics()')
 await testProfileAvatars(db,asUser,alice,bob,admin)
 await testTrackerGrid(db,asUser,alice,bob)
 await testAccountSecurity(db,asUser,alice,bob,admin)
+await testSharedJournals(db,asUser)
 await db.close()
 console.log('PASS: migrations, profile bootstrap, CRUD, isolation, link ownership, admin authorization, private storage, suspension, ordering, and capsule locks.')
 

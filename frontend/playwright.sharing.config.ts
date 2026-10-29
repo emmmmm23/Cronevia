@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test'
+export default defineConfig({testDir:'./tests/e2e',testMatch:['sharing.spec.ts'],timeout:45000,expect:{timeout:12000},workers:1,reporter:'list',outputDir:'./test-results/sharing',use:{channel:'msedge',baseURL:'http://127.0.0.1:5180',viewport:{width:390,height:844},screenshot:'only-on-failure'},webServer:{command:'npm run dev -- --host 127.0.0.1 --port 5180',url:'http://127.0.0.1:5180',reuseExistingServer:false}})

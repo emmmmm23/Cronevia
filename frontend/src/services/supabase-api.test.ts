@@ -60,7 +60,8 @@ describe('Reusable scrapbook asset deletion',()=> {
   }
   it('keeps the photo object when a saved layout blocks media deletion',async()=>{
     mocks.getUser.mockResolvedValue({data:{user:{id:'owner'}},error:null})
-    mocks.from.mockReturnValueOnce(result({id:'entry'})).mockReturnValueOnce(result({id:'photo',storage_path:'owner/photo.png'})).mockReturnValueOnce(result(null,{message:'Remove saved scrapbook placements before deleting this asset'}))
+    mocks.rpc.mockResolvedValue({data:true,error:null,status:200})
+    mocks.from.mockReturnValueOnce(result({id:'entry',user_id:'owner'})).mockReturnValueOnce(result({id:'photo',storage_path:'owner/photo.png'})).mockReturnValueOnce(result(null,{message:'Remove saved scrapbook placements before deleting this asset'}))
     await expect(api.delete('/journal/entry/media/photo')).rejects.toThrow('Remove saved scrapbook placements')
     expect(mocks.storage).not.toHaveBeenCalled()
   })

@@ -3,7 +3,7 @@ import { useMediaQuery } from '@vueuse/core'
 import AppSheet from '@/components/shared/AppSheet.vue'
 import { useEditingViewport } from '@/composables/useEditingViewport'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { fetchBuiltinAssets, fetchUserAssets, uploadStickerAsset } from '@/services/sticker.service'
+import { fetchBuiltinAssets, fetchUserAssets, fetchJournalAssets, uploadStickerAsset } from '@/services/sticker.service'
 import api from '@/services/api.service'
 import { scrapbookError } from '@/services/scrapbook-errors'
 import type { Media } from '@/types'
@@ -63,12 +63,17 @@ watch(() => props.modelValue, value => {
 }, { deep: true })
 watch(() => props.viewMode, () => { decorate.value = false; selectedId.value = null })
 watch(() => props.media, media => { for (const m of media) urls.value[m.id] = m.file_path }, { immediate: true })
+watch(()=>props.media,()=>{if(props.resource==='journal')void loadReferenced()})
+async function loadReferenced(){
+ try{const assets=await fetchJournalAssets(layout.value.pages.flatMap(p=>p.elements.filter(e=>e.type==='sticker').map(e=>e.assetId)));for(const asset of assets)urls.value[asset.id]=asset.url}catch{assetError.value='Some journal decorations could not be opened. Please try again.'}
+}
 onMounted(async () => {
   observer = new ResizeObserver(entries => { const visible=entries.find(e=>e.contentRect.width>0);if (visible) sheetWidth.value = visible.contentRect.width })
   sheetRefs.forEach(el => observer!.observe(el))
   builtins.value = await fetchBuiltinAssets()
   builtins.value.forEach(a => urls.value[a.id] = a.url)
   await loadCustom()
+  if(props.resource==='journal')await loadReferenced()
 })
 async function loadCustom() {
   if (!props.userId) return

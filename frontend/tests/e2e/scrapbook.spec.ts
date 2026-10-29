@@ -13,7 +13,7 @@ const empty = () => ({version:1,pages:[{id:'page-left',elements:[]},{id:'page-ri
 
 export async function fixture(page: Page, resource: 'journal'|'memories') {
   const table = resource === 'journal' ? 'journal_entries' : 'memories'
-  let record: any = {id:recordId,user_id:owner,title:'An afternoon by the lake',content:'We followed the path beside the water and stopped to watch the clouds.\n\nA small, ordinary afternoon worth keeping.',description:'We followed the path beside the water and stopped to watch the clouds.\n\nA small, ordinary afternoon worth keeping.',entry_date:'2026-10-14',memory_date:'2026-10-14',tags:['weekend'],visibility:'private',scrapbook_layout:empty()}
+  let record: any = {id:recordId,user_id:owner,journal_id:owner,version:1,title:'An afternoon by the lake',content:'We followed the path beside the water and stopped to watch the clouds.\n\nA small, ordinary afternoon worth keeping.',description:'We followed the path beside the water and stopped to watch the clouds.\n\nA small, ordinary afternoon worth keeping.',entry_date:'2026-10-14',memory_date:'2026-10-14',tags:['weekend'],visibility:'private',scrapbook_layout:empty()}
   let stickers: any[] = [], customEnabled=false, failLoad=false, lostDraftResponse=false; const draftIds=new Set<string>();let failSign=false, customLoadDelay:Promise<void>|undefined, releaseCustomLoad:()=>void=()=>{}
   let collection:any[]|null=null, mediaByParent:Record<string,any[]>={}, images:Record<string,Buffer>={}
   let media: any[] = [], image = Buffer.from(''), writes = 0, creates = 0, failUpload = false, failSave = false
@@ -30,6 +30,17 @@ export async function fixture(page: Page, resource: 'journal'|'memories') {
       return json({Key:owner+'/fixture.png'})
     }
     if(url.pathname.endsWith('/rest/v1/profiles')) return json({id:owner,user_id:owner,full_name:'Notebook tester',username:'tester',role:'user',account_status:'active'})
+    if(url.pathname.endsWith('/rest/v1/rpc/list_my_journals'))return json([{id:owner,owner_id:owner,title:'My journal',role:'owner',share_future:false,shared:false}])
+    if(url.pathname.endsWith('/rest/v1/rpc/journal_role'))return json('owner')
+    if(url.pathname.endsWith('/rest/v1/rpc/can_edit_journal_entry'))return json(true)
+    if(url.pathname.endsWith('/rest/v1/rpc/journal_entry_access'))return json({journal_id:owner,role:'owner',version:record.version,last_editor:'Notebook tester'})
+    if(url.pathname.endsWith('/rest/v1/rpc/save_journal_entry')){
+      const body=route.request().postDataJSON()
+      if(body.expected_version===null){if(!draftIds.has(body.target_entry)){draftIds.add(body.target_entry);creates++;record={...record,...body.details,id:body.target_entry,version:2}}if(lostDraftResponse){lostDraftResponse=false;return json({message:'Response lost'},500)}return json(record)}
+      if(failSave){failSave=false;return json({message:'Fixture save rejected',code:'23514'},400)}
+      if(collection){const index=collection.findIndex(row=>row.id===body.target_entry);collection[index]={...collection[index],...body.details,version:(collection[index].version||1)+1};return json(collection[index])}
+      record={...record,...body.details,version:record.version+1};writes++;return json(record)
+    }
     if(url.pathname.endsWith('/rest/v1/sticker_assets')) {
       if(method==='POST') {const asset={...route.request().postDataJSON(),created_at:'2026-10-14T00:00:00Z'};stickers=[asset,...stickers.filter(s=>s.id!==asset.id)];return json(asset)}
       const loaded=[...stickers];if(customLoadDelay){const wait=customLoadDelay;customLoadDelay=undefined;await wait}
@@ -173,15 +184,18 @@ test('new journal upload retry and rejected save retain the draft without duplic
   await page.getByLabel('Photo frame',{exact:true}).selectOption('polaroid')
   await page.getByRole('button',{name:'Save entry',exact:true}).click()
   await expect(page.getByRole('button',{name:'Retry upload',exact:true})).toBeVisible()
+  expect(f.record.status).toBe('draft')
   await expect(page.locator('.photo')).toHaveCount(1)
   await page.getByRole('button',{name:'Retry upload',exact:true}).click()
   await expect(page.getByRole('button',{name:'Retry upload',exact:true})).toHaveCount(0)
   f.failSave();await page.getByRole('button',{name:'Save entry',exact:true}).click()
   await expect(page.getByRole('alert').filter({hasText:'Your entry couldn’t be saved'})).toBeVisible()
   await expect(page.getByLabel('Your story',{exact:true})).toHaveValue('Keep this writing through failures.')
+  expect(f.record.status).toBe('draft')
   await page.getByRole('button',{name:'Save entry',exact:true}).click()
   await expect(page.getByRole('button',{name:'Edit journal',exact:true})).toBeVisible()
   expect(f.creates).toBe(1)
+  expect(f.record.status).toBe('published')
   expect(f.record.scrapbook_layout.pages[0].elements).toHaveLength(2)
 })
 

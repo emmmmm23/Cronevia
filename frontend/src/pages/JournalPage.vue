@@ -1,10 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useJournalStore } from '@/stores/journal'
 import type { JournalEntry } from '@/types'
 
-const store  = useJournalStore()
+import JournalSharing from '@/components/journal/JournalSharing.vue'
+import AppSheet from '@/components/shared/AppSheet.vue'
+import {listJournals,manageSharing,type SharedJournal} from '@/services/shared-journals'
+import {journalDestination,journalEntryDestination,newJournalEntryDestination,isJournalId} from '@/services/journal-routes'
+import {useAuthStore} from '@/stores/auth'
+const store=useJournalStore(),route=useRoute(),router=useRouter(),auth=useAuthStore()
+const journals=ref<SharedJournal[]>([]),sharingOpen=ref(false),leaveOpen=ref(false),journalError=ref('')
+const selectedJournal=computed(()=>route.query.journal?journals.value.find(j=>j.id===route.query.journal):journals.value.find(j=>j.role==='owner'))
+const isOwner=computed(()=>selectedJournal.value?.role==='owner'),canWrite=computed(()=>['owner','editor'].includes(selectedJournal.value?.role||''))
+async function refreshJournals(){
+ try{journals.value=(await listJournals())||[];if(!selectedJournal.value){store.clearEntries();journalError.value='This journal is unavailable or you no longer have access.'}else journalError.value=''}catch(e){journalError.value=(e as Error).message;store.clearEntries()}
+}
+async function openCollection(){store.clearEntries();viewMode.value='active';search.value='';await refreshJournals();if(selectedJournal.value)await loadEntries()}
+async function leave(){processing.value=true;try{await manageSharing(selectedJournal.value!.id,'leave',auth.user!.id);leaveOpen.value=false;store.clearEntries();await router.replace(journalDestination())}catch(e){journalError.value=(e as Error).message}finally{processing.value=false}}
+let accessTimer:ReturnType<typeof setInterval>|undefined
+function checkAccess(){if(document.visibilityState==='visible')void refreshJournals()}
+watch(()=>route.query.journal,openCollection)
+
 const search = ref('')
 const activeMood = ref('')
 const viewMode = ref<'active' | 'archived'>('active')
@@ -23,12 +40,12 @@ const moods = [
   { key: 'neutral',   label: 'Neutral' },
 ]
 
-onMounted(() => {
-  loadEntries()
-})
+onMounted(()=>{void openCollection();accessTimer=setInterval(checkAccess,30000);window.addEventListener('focus',checkAccess)})
+onBeforeUnmount(()=>{clearInterval(accessTimer);window.removeEventListener('focus',checkAccess);store.clearEntries()})
 
 async function loadEntries() {
   const params: Record<string, string | number> = viewMode.value === 'archived' ? { archived: 'true' } : {}
+  if(route.query.journal){if(!isJournalId(route.query.journal))return;params.journal=route.query.journal}
   await store.fetchEntries(params)
 }
 
@@ -122,7 +139,7 @@ function formatSaved(isoStr: string): string {
             <p class="mt-1 text-sm text-[#6b4423]">Your pages, your moments, your story.</p>
           </div>
           <RouterLink
-            :to="{ name: 'journal.create' }"
+            :to="newJournalEntryDestination(selectedJournal?.id)" v-if="canWrite"
             class="inline-flex items-center gap-2 bg-[#7B0323] text-[#fdfaf5] text-sm font-semibold px-5 py-2.5 rounded border border-[#5a0019] hover:bg-[#5a0019] transition-colors shrink-0"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -136,6 +153,11 @@ function formatSaved(isoStr: string): string {
 
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
 
+      <nav class="journal-collections" aria-label="Journal collections"><div><h2>My journals</h2><RouterLink v-for="j in journals.filter(item=>item.role==='owner')" :key="j.id" :to="journalDestination(j.id)" :aria-current="selectedJournal?.id===j.id?'page':undefined">{{j.title}} <span v-if="j.shared">Shared · Owner</span></RouterLink></div><div><h2>Shared with me</h2><RouterLink v-for="j in journals.filter(item=>item.role!=='owner')" :key="j.id" :to="journalDestination(j.id)" :aria-current="selectedJournal?.id===j.id?'page':undefined">{{j.title}} <span>{{j.role}}</span></RouterLink><p v-if="!journals.some(j=>j.role!=='owner')">Journals you accept will appear here.</p></div></nav>
+      <div class="journal-sharing-bar" v-if="selectedJournal"><p>{{selectedJournal.title}} · <strong>{{selectedJournal.role}}</strong></p><button v-if="isOwner" @click="sharingOpen=true">Share journal</button><button v-else @click="leaveOpen=true">Leave journal</button></div>
+      <p v-if="journalError" role="alert" class="journal-access-error">{{journalError}} <RouterLink :to="journalDestination()">Back to my journal</RouterLink></p>
+      <JournalSharing v-if="selectedJournal&&isOwner" v-model="sharingOpen" :journal="selectedJournal" @changed="refreshJournals" />
+      <AppSheet v-model="leaveOpen" title="Leave this journal?"><p>You will lose access to its shared pages. Your personal journal will stay with you. You’ll need a new invitation to rejoin.</p><p v-if="journalError" role="alert">{{journalError}}</p><template #footer><button :disabled="processing" @click="leaveOpen=false">Cancel</button><button :disabled="processing" @click="leave">Leave journal</button></template></AppSheet>
       <!-- View mode tabs -->
       <div class="flex items-center gap-2 mb-6 border-b border-[#e5d4bb] pb-0">
         <button
@@ -158,7 +180,7 @@ function formatSaved(isoStr: string): string {
               ? 'text-[#7B0323] border-[#7B0323]'
               : 'text-[#a68e73] border-transparent hover:text-[#7B0323]',
           ]"
-          @click="switchView('archived')"
+          v-if="isOwner" @click="switchView('archived')"
         >
           Archive
         </button>
@@ -180,7 +202,7 @@ function formatSaved(isoStr: string): string {
         <button
           type="button"
           class="text-sm font-semibold text-[#7B0323] hover:underline"
-          @click="store.fetchEntries()"
+          @click="loadEntries"
         >
           Try Again
         </button>
@@ -262,7 +284,7 @@ function formatSaved(isoStr: string): string {
                 </p>
                 <div class="flex items-center gap-3">
                   <RouterLink
-                    :to="{ name: 'journal.edit', params: { id: entry.id } }"
+                    :to="journalEntryDestination(entry.id)"
                     class="text-xs font-semibold text-[#7B0323] hover:underline inline-flex items-center gap-1"
                   >
                     {{ viewMode === 'archived' ? 'View Entry' : 'Read Entry' }}
@@ -273,7 +295,7 @@ function formatSaved(isoStr: string): string {
 
                   <!-- Restore button (archived view) -->
                   <button
-                    v-if="viewMode === 'archived'"
+                    v-if="isOwner && viewMode === 'archived'"
                     type="button"
                     :disabled="processing"
                     class="text-xs font-semibold text-[#8a5c2e] hover:text-[#7B0323] hover:underline disabled:opacity-50"
@@ -284,7 +306,7 @@ function formatSaved(isoStr: string): string {
 
                   <!-- Archive button (active view) -->
                   <button
-                    v-if="viewMode === 'active'"
+                    v-if="isOwner && viewMode === 'active'"
                     type="button"
                     :disabled="processing"
                     class="text-xs font-semibold text-[#a68e73] hover:text-[#7B0323] hover:underline disabled:opacity-50"
@@ -298,7 +320,7 @@ function formatSaved(isoStr: string): string {
                     type="button"
                     :disabled="processing"
                     class="text-xs font-semibold text-[#c4ad94] hover:text-[#7B0323] hover:underline disabled:opacity-50"
-                    @click="confirmDelete = entry.id"
+                    v-if="isOwner" @click="confirmDelete = entry.id"
                   >
                     Delete
                   </button>
@@ -395,3 +417,7 @@ function formatSaved(isoStr: string): string {
     </div>
   </div>
 </template>
+
+<style scoped>.journal-collections{display:grid;gap:20px;margin-bottom:26px}.journal-collections>div{display:flex;gap:8px;flex-wrap:wrap;align-content:start}.journal-collections h2{width:100%;font:20px Georgia,serif;margin-bottom:5px}.journal-collections a{padding:12px 16px;min-height:48px;display:grid;gap:4px;border:1px solid var(--vintage-line,#c9b08a);border-radius:5px;background:var(--vintage-card,#fbf2df)}.journal-collections a[aria-current=page]{outline:2px solid #967047;outline-offset:2px}.journal-collections span{font-size:11px;text-transform:capitalize}.journal-collections p{font-size:13px;opacity:.8}.journal-sharing-bar{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:22px}.journal-sharing-bar button,.journal-access-error a{min-height:48px;display:inline-flex;align-items:center;padding:10px 16px;border:1px solid currentColor;border-radius:5px}.journal-access-error{padding:18px;border:1px solid #b37b54;margin-bottom:18px}@media(min-width:640px){.journal-collections{grid-template-columns:1fr 1fr}}.journal-sharing-bar button:focus-visible,.journal-collections a:focus-visible{outline:2px solid #a6773f;outline-offset:4px}</style>
+
+<style scoped>.journal-collections a{min-width:0;max-width:100%;overflow-wrap:anywhere}.journal-sharing-bar p{min-width:0;overflow-wrap:anywhere;flex:1}</style>

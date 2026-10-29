@@ -380,6 +380,9 @@ Relationships: []
 }
 journal_entries: {
 Row: {
+journal_id: string | null
+version: number
+last_edited_by: string | null
 tracker_links: { id: string; month: string }[]
 scrapbook_layout: Json | null
 location_source: string | null
@@ -411,6 +414,9 @@ Insert: {
 scrapbook_layout?: Json | null
 location_source?: string | null
 tags?: string[]
+journal_id?: string | null
+version?: number
+last_edited_by?: string | null
   id?: string
   user_id: string
   trip_id?: string | null
@@ -437,6 +443,9 @@ tags?: string[]
 Update: {
 location_source?: string | null
 tags?: string[]
+journal_id?: string | null
+version?: number
+last_edited_by?: string | null
   id?: string
   user_id?: string
   trip_id?: string | null

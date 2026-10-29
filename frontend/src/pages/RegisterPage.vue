@@ -132,7 +132,7 @@
           <p class="text-gray-600">
             Already have an account?
             <router-link
-              to="/login"
+              :to="{name:'login',query:route.query.redirect?{redirect:safeReturnPath(route.query.redirect)}:{}}"
               class="text-[#8B4513] font-semibold hover:underline ml-1"
             >
               Sign in
@@ -150,11 +150,12 @@
 </template>
 
 <script setup lang="ts">
+import {safeReturnPath} from '@/services/account-security'
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-const router = useRouter()
+const router = useRouter(), route=useRoute()
 const auth = useAuthStore()
 
 // Form state
@@ -198,7 +199,7 @@ async function handleRegister() {
   try {
     loading.value = true
 
-    const result = await auth.register(fullName.value, email.value, password.value)
+    const result = await auth.register(fullName.value, email.value, password.value, safeReturnPath(route.query.redirect,'/home'))
 
     if (result.success) {
       // Check if email confirmation is required
@@ -211,7 +212,7 @@ async function handleRegister() {
         passwordConfirm.value = ''
       } else {
         // Auto-logged in, redirect to home
-        router.push({name:'home'})
+        router.push(safeReturnPath(route.query.redirect,'/home'))
       }
     } else {
       errorMessage.value = result.error || 'Registration failed. Please try again.'
