@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import TrackerValueGrid from './TrackerValueGrid.vue'
+import TrackerDayMemories from './TrackerDayMemories.vue'
 import { dailyValue, displayValue, monthDays, onSchedule, type CreativeTracker, type TrackerLog } from '@/types/trackers'
 const props=withDefaults(defineProps<{tracker:CreativeTracker;logs:TrackerLog[];month:string;today:string;yearly?:boolean;compact?:boolean;timezone?:string;selectedDate?:string}>(),{yearly:false,compact:false,timezone:'UTC',selectedDate:''})
 const emit=defineEmits<{log:[date:string,fieldId?:string];notes:[date:string];saved:[date:string,logs:TrackerLog[]]}>()
 const days=computed(()=>monthDays(props.month))
 const byDay=computed(()=>new Map(days.value.map(day=>[day,props.logs.filter(l=>l.tracker_id===props.tracker.id&&l.log_date===day)])))
 const dayLogs=(day:string)=>byDay.value.get(day)||[]
+const dayHasMemory=(day:string)=>dayLogs(day).some(log=>log.values.note?.trim()||log.values.photo)
 const value=(day:string)=>dailyValue(props.tracker,dayLogs(day))
 const display=(day:string)=>displayValue(props.tracker,dayLogs(day))
 const startOffset=computed(()=>new Date(props.month+'-01T12:00:00').getDay())
@@ -49,15 +51,16 @@ function yearCell(month:string,day:number){
    <figcaption>One square, one day. Empty paper means not logged. Impossible dates are crossed out.</figcaption>
   </template>
   <template v-else-if="habitGroup">
-   <section v-for="field in tracker.config.fields" :key="field.id" class="habit-group"><h4>{{field.label}} <span>?</span></h4><div class="calendar-weekdays" aria-hidden="true"><span v-for="(d,i) in ['S','M','T','W','T','F','S']" :key="i">{{d}}</span></div><div class="habit-calendar"><span v-for="i in startOffset" :key="'blank'+i"></span><button v-for="day in days" :key="day" type="button" :class="habitState(day,field.id)" :disabled="day>today||compact||tracker.archived" :style="{'--cell-color':tracker.design.accent}" :aria-label="day+' · '+field.label+': '+(habitField(day,field.id)===true?'Yes':habitField(day,field.id)===false?'No':'Not logged')" @click="emit('log',day,field.id)"><span>{{Number(day.slice(-2))}}</span><strong>{{habitField(day,field.id)===true?'✓':habitField(day,field.id)===false?'No':'·'}}</strong></button></div></section><figcaption>Each habit keeps its own answer. A blank Coffee square says nothing about Gym, Walk, or Coke.</figcaption>
+   <section v-for="field in tracker.config.fields" :key="field.id" class="habit-group"><h4>{{field.label}} <span>?</span></h4><div class="calendar-weekdays" aria-hidden="true"><span v-for="(d,i) in ['S','M','T','W','T','F','S']" :key="i">{{d}}</span></div><div class="habit-calendar"><span v-for="i in startOffset" :key="'blank'+i"></span><button v-for="day in days" :key="day" type="button" :class="habitState(day,field.id)" :disabled="day>today||compact||tracker.archived" :style="{'--cell-color':tracker.design.accent}" :aria-label="day+' · '+field.label+': '+(habitField(day,field.id)===true?'Yes':habitField(day,field.id)===false?'No':'Not logged')" @click="emit('log',day,field.id)"><span>{{Number(day.slice(-2))}}</span><strong>{{habitField(day,field.id)===true?'✓':habitField(day,field.id)===false?'No':'·'}}</strong><span v-if="dayHasMemory(day)" class="calendar-memory" aria-label="Note or photo saved">✧</span></button></div></section><figcaption>Each habit keeps its own answer. A blank Coffee square says nothing about Gym, Walk, or Coke.</figcaption>
   </template>
   <TrackerValueGrid v-else-if="['sleep','steps','duration','quantity','count'].includes(tracker.kind)" :tracker="tracker" :logs="logs" :month="month" :today="today" :compact="compact" :timezone="timezone" :selected-date="selectedDate" @log="emit('notes',$event)" @saved="(date,rows)=>emit('saved',date,rows)" />
   <template v-else>
    <div class="calendar-weekdays" aria-hidden="true"><span v-for="(d,i) in ['S','M','T','W','T','F','S']" :key="i">{{d}}</span></div>
-   <div class="habit-calendar"><span v-for="i in startOffset" :key="'blank'+i"></span><button v-for="day in days" :key="day" type="button" :class="state(day)" :disabled="day>today||compact||tracker.archived" :aria-label="label(day)" :style="{'--cell-color':color(day)}" @click="emit('log',day)"><span>{{Number(day.slice(-2))}}</span><strong>{{dayLogs(day).length?(tracker.kind==='habit'?(value(day)?'✓':'No'):tracker.kind==='category'?'●':String(dayLogs(day).length)):state(day)==='unscheduled'?'∕':'·'}}</strong></button></div>
+   <div class="habit-calendar"><span v-for="i in startOffset" :key="'blank'+i"></span><button v-for="day in days" :key="day" type="button" :class="state(day)" :disabled="day>today||compact||tracker.archived" :aria-label="label(day)" :style="{'--cell-color':color(day)}" @click="emit('log',day)"><span>{{Number(day.slice(-2))}}</span><strong>{{dayLogs(day).length?(tracker.kind==='habit'?(value(day)?'✓':'No'):tracker.kind==='category'?'●':String(dayLogs(day).length)):state(day)==='unscheduled'?'∕':'·'}}</strong><span v-if="dayHasMemory(day)" class="calendar-memory" aria-label="Note or photo saved">✧</span></button></div>
    <div v-if="tracker.kind==='category'" class="year-key"><span v-for="category in legend" :key="category.id"><i :style="{background:category.color}"></i>{{category.label}}</span></div>
    <figcaption>✓ / color = logged · No = recorded no · dot = not logged · slash = not scheduled.</figcaption>
   </template>
+  <TrackerDayMemories v-if="!compact" :tracker-id="tracker.id" :month="month" :logs="logs" />
  </figure>
 </template>
 <style scoped>
@@ -82,3 +85,11 @@ function yearCell(month:string,day:number){
 @media(max-width:650px){.habit-calendar button{min-height:44px}.year-column strong{font-size:10px}.year-key>span{font-size:14px}}
 </style>
 <style scoped>.habit-group{margin:0 0 25px}.habit-group h4{margin:0 0 4px;font:600 27px 'Caveat',cursive;color:var(--tracker-accent);letter-spacing:.04em;text-transform:uppercase}.habit-group h4 span{font-weight:400;opacity:.6}.compact .habit-group h4{font-size:23px}</style>
+
+<style scoped>
+.calendar-weekdays,.habit-calendar{max-width:840px;margin-inline:auto}
+.tracker-chart:not(.compact) .habit-calendar button{position:relative;min-height:54px;aspect-ratio:1.15}
+.habit-group h4{max-width:840px;margin-inline:auto}
+.habit-calendar .calendar-memory{position:absolute;right:6px;bottom:4px;padding:0;font:16px/1 Inter,sans-serif;color:#795238}
+@media(max-width:650px){.tracker-chart:not(.compact) .habit-calendar button{min-height:52px;aspect-ratio:auto}.habit-calendar .calendar-memory{font-size:12px;right:3px;bottom:4px}.calendar-weekdays,.habit-calendar{gap:4px}}
+</style>

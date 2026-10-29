@@ -168,7 +168,7 @@ const weeklySteps=computed(()=>{
 })
 </script>
 <template>
- <section class="trackers-page" :class="{'tracker-detail-page':!!route.params.id}">
+ <section class="trackers-page" :class="{'tracker-detail-page':!!route.params.id,'calendar-notebook':selected&&!directGridKinds.includes(selected.kind)&&!yearly}">
   <div class="trackers-wrap">
    <header v-if="!route.params.id" class="trackers-hero"><div><p class="tracker-eyebrow"><span>✦</span> YOUR EVERYDAY NOTEBOOK</p><h1>Your days, <em>in color.</em></h1><p class="tracker-intro">Little rituals. Restful nights. The things that make a life.<br />Keep them in a notebook that feels like you.</p><span class="hero-handnote">a little more noticing, a little less measuring.</span></div><div class="hero-swatches" aria-hidden="true"><span class="tape"></span><p>little things<br /><em>add up.</em></p><div><i></i><i></i><i></i><i></i><i></i></div><small>YOUR DAYS, IN YOUR OWN RHYTHM</small></div></header>
    <div v-if="notice" role="status" class="tracker-notice"><span>✓</span>{{notice}}<button aria-label="Dismiss confirmation" @click="notice=''">×</button></div>
@@ -226,8 +226,8 @@ const weeklySteps=computed(()=>{
    <footer class="trackers-footer">✧ KEEP THE LITTLE THINGS. THEY MAKE A LIFE. ✧</footer>
   </div>
   <TrackerEditor v-if="draft" :initial="draft" :allow-kind-choice="chooseTrackerKind" :customize="draft.id===selected?.id" @saved="trackerSaved" @close="draft=null" />
-  <TrackerDayNotes v-if="logging&&directGridKinds.includes(logging.tracker.kind)" :tracker="logging.tracker" :date="logging.date" :logs="logs" :timezone="timezone" @saved="notesSaved" @choose="chooseNoteDate" @close="logging=null" />
-  <TrackerLogEditor v-else-if="logging" :tracker="logging.tracker" :date="logging.date" :logs="logs" :timezone="timezone" :field-id="logging.fieldId" @saved="logSaved" @removed="logRemoved" @close="logging=null" />
+  <TrackerDayNotes v-if="logging&&directGridKinds.includes(logging.tracker.kind)" :key="logging.tracker.id+logging.date" :tracker="logging.tracker" :date="logging.date" :logs="logs" @saved="notesSaved" @choose="chooseNoteDate" @close="logging=null" />
+  <TrackerLogEditor v-else-if="logging" :key="logging.tracker.id+logging.date+(logging.fieldId||'')" :tracker="logging.tracker" :date="logging.date" :logs="logs" :timezone="timezone" :field-id="logging.fieldId" @saved="logSaved" @removed="logRemoved" @close="logging=null" />
   <AppSheet :model-value="!!boardDraft" title="Make room for your little rhythms" @update:model-value="boardDraft=null"><form v-if="boardDraft" id="board-form" class="board-form" @submit.prevent="keepBoard"><label>Board name<input v-model="boardDraft.name" required maxlength="100" /></label><fieldset><legend>Pages on this spread</legend><label v-for="tracker in active" :key="tracker.id" class="board-choice"><input type="checkbox" :checked="boardDraft.tracker_ids.includes(tracker.id)" @change="toggleBoard(tracker.id)" />{{tracker.name}}</label><p v-if="!active.length">Create a tracker first, then add it to your board.</p></fieldset><TrackerDesignEditor v-model="boardDraft.design" @busy="uploading=$event" /><p v-if="boardError" class="tracker-load-error" role="alert">{{boardError}}</p></form><template #footer><div class="sheet-actions"><button class="tracker-secondary" :disabled="actionBusy||uploading" @click="boardDraft=null">Cancel</button><button class="tracker-primary" form="board-form" type="submit" :disabled="actionBusy||uploading">{{actionBusy?'Saving…':'Keep this spread'}}</button></div></template></AppSheet>
  </section>
 </template>

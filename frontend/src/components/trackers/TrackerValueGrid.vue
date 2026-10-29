@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import {computed,ref,watch,nextTick,onBeforeUnmount} from 'vue'
 import {onBeforeRouteLeave} from 'vue-router'
+import {useMediaQuery} from '@vueuse/core'
 import {dailyValue,displayValue,goalMet,monthDays,cloneTracker,type CreativeTracker,type TrackerLog} from '@/types/trackers'
 import {rangesForLogs,covers,modeCovers,paintSleep,sleepGridEntries,validateSleepSelection,type SleepRange,type GridEntry} from '@/types/tracker-grid'
 import {saveGridDay,trackerError} from '@/services/trackers.service'
 const props=withDefaults(defineProps<{tracker:CreativeTracker;logs:TrackerLog[];month:string;today:string;compact?:boolean;timezone?:string;selectedDate?:string}>(),{compact:false,timezone:'UTC',selectedDate:''})
 const emit=defineEmits<{log:[string];saved:[string,TrackerLog[]]}>()
 const days=computed(()=>monthDays(props.month)),isSleep=computed(()=>props.tracker.kind==='sleep')
+const wide=useMediaQuery('(min-width:1024px)')
+const mobile=computed(()=>!wide.value&&!props.compact)
+const calendar=ref<HTMLElement>(),dayEditor=ref<HTMLElement>()
+const mobileDate=computed(()=>activeDay.value||(days.value.includes(props.today)?props.today:days.value.find(day=>day<=props.today)||days.value[0]))
+const monthOffset=computed(()=>new Date(props.month+'-01T12:00:00').getDay())
+const dayLabel=(date:string)=>new Date(date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',weekday:'short'})
 const dayLogs=(day:string)=>props.logs.filter(l=>l.tracker_id===props.tracker.id&&l.log_date===day)
 const activeDay=ref(''),snapshot=ref<TrackerLog[]>([]),ranges=ref<SleepRange[]>([]),number=ref(0),dirty=ref(false),busy=ref(false),error=ref(''),status=ref(''),focusCol=ref(0)
 const sleepType=ref<'night'|'nap'>('night')
@@ -23,7 +30,7 @@ function nap(day:string,col:number){const r=day===activeDay.value?shownRanges.va
 const hour=(h:number)=>String(h%12||12)+(h<12?' AM':' PM')
 const cellLabel=(day:string,col:number)=>day+' · '+(isSleep.value?hour(col)+'–'+hour((col+1)%24):(col+1)*step.value+' '+props.tracker.unit)
 function choose(day:string){
- if(props.compact||props.tracker.archived||day>props.today||busy.value)return false
+ if(props.compact||day>props.today||busy.value)return false
  if(dirty.value&&day===activeDay.value)return true
  if(dirty.value&&day!==activeDay.value){error.value='Save or cancel this selection before choosing another day.';return false}
  activeDay.value=day;snapshot.value=cloneTracker(dayLogs(day));ranges.value=rangesForLogs(snapshot.value);number.value=Number(dailyValue(props.tracker,snapshot.value))||0;dirty.value=false;error.value='';status.value='';return true
@@ -35,6 +42,13 @@ function down(e:PointerEvent,day:string,col:number){if(!prepare(day))return;gest
 function drag(e:PointerEvent){if(!gesture.value||e.pointerId!==gesture.value.pointer)return;const el=document.elementFromPoint(e.clientX,e.clientY)?.closest<HTMLElement>('[data-grid-col]');if(el?.dataset.gridDay===gesture.value.date)gesture.value.end=Number(el.dataset.gridCol)}
 function up(e:PointerEvent){const g=gesture.value;if(!g||g.pointer!==e.pointerId)return;if(isSleep.value)ranges.value=paintSleep(ranges.value,Math.min(g.start,g.end)*60,(Math.max(g.start,g.end)+1)*60,g.fill,sleepType.value);else number.value=(g.end+1)*step.value;focusCol.value=g.end;dirty.value=true;error.value='';gesture.value=null}
 function cancel(){gesture.value=null;dirty.value=false;if(activeDay.value)choose(activeDay.value)}
+function chooseMobileDay(day:string){if(choose(day))nextTick(()=>dayEditor.value?.scrollIntoView({block:'start',behavior:'instant'}))}
+function mobileKey(event:KeyboardEvent,col:number){
+ const perRow=window.matchMedia('(max-width:359px)').matches?(isSleep.value?4:3):isSleep.value?6:4
+ const delta=event.key==='ArrowRight'?1:event.key==='ArrowLeft'?-1:event.key==='ArrowDown'?perRow:event.key==='ArrowUp'?-perRow:0
+ if(!delta)return
+ event.preventDefault();const next=Math.max(0,Math.min(columns.value-1,col+delta));viewport.value?.querySelector<HTMLElement>('[data-grid-col="'+next+'"]')?.focus()
+}
 function key(e:KeyboardEvent,day:string,col:number){
  const dx=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0,dy=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0;if(!dx&&!dy)return;e.preventDefault()
  const next=days.value[days.value.indexOf(day)+dy],c=Math.max(0,Math.min(columns.value-1,col+dx));if(!next||next>props.today)return
@@ -58,15 +72,27 @@ watch(()=>props.logs,()=>{if(activeDay.value&&!dirty.value&&!busy.value){snapsho
 watch(()=>props.month,()=>{if(!dirty.value){if(props.selectedDate.startsWith(props.month))choose(props.selectedDate);else activeDay.value=''}})
 </script>
 <template>
- <div class="value-grid-frame">
+ <div class="value-grid-frame" :class="{'mobile-frame':mobile}">
   <div v-if="!compact&&!tracker.archived" class="grid-guide">
-   <p>{{isSleep?'Mark the hours you slept. Tap again to clear.':'Choose a box for your daily total. Drag across a row to adjust.'}}</p>
-   <label v-if="isSleep" class="nap-toggle"><input type="checkbox" :checked="sleepType==='nap'" :disabled="busy" @change="sleepType=($event.target as HTMLInputElement).checked?'nap':'night'" />Mark as a nap</label>
-   <label v-else>Each box<input v-model.number="step" type="number" :min="tracker.kind==='steps'||tracker.kind==='count'?1:.5" @change="step=Math.max(tracker.kind==='steps'||tracker.kind==='count'?1:.5,Number.isFinite(Number(step))?Number(step):1);if(tracker.kind==='steps'||tracker.kind==='count')step=Math.round(step)" :step="tracker.kind==='steps'||tracker.kind==='count'?1:'any'" :list="'box-sizes-'+tracker.id" :disabled="busy"/>{{tracker.unit}}<datalist :id="'box-sizes-'+tracker.id"><option v-for="v in options" :key="v" :value="v"/></datalist></label>
+   <p>{{mobile?'Choose a day below to '+(isSleep?'mark your sleep hours.':'record your total.'):isSleep?'Mark the hours you slept. Tap again to clear.':'Choose a box for your daily total. Drag across a row to adjust.'}}</p>
+   <label v-if="isSleep&&!mobile" class="nap-toggle"><input type="checkbox" :checked="sleepType==='nap'" :disabled="busy" @change="sleepType=($event.target as HTMLInputElement).checked?'nap':'night'" />Mark as a nap</label>
+   <label v-else-if="!isSleep">Each box<input v-model.number="step" type="number" :min="tracker.kind==='steps'||tracker.kind==='count'?1:.5" @change="step=Math.max(tracker.kind==='steps'||tracker.kind==='count'?1:.5,Number.isFinite(Number(step))?Number(step):1);if(tracker.kind==='steps'||tracker.kind==='count')step=Math.round(step)" :step="tracker.kind==='steps'||tracker.kind==='count'?1:'any'" :list="'box-sizes-'+tracker.id" :disabled="busy"/>{{tracker.unit}}<datalist :id="'box-sizes-'+tracker.id"><option v-for="v in options" :key="v" :value="v"/></datalist></label>
   </div>
   <div v-if="activeDay&&!compact&&(dirty||dayLogs(activeDay).length)" class="grid-edit-bar" :aria-label="'Edit '+activeDay"><strong>{{new Date(activeDay+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}}</strong><span v-if="isSleep">{{(shownRanges.reduce((s,r)=>s+r.end-r.start,0)/60).toFixed(1)}} hours selected</span><label v-else>Exact total<input v-model.number="number" type="number" min="0" :step="tracker.kind==='steps'||tracker.kind==='count'?1:'any'" :disabled="busy" @input="dirty=true"/></label><button v-if="!isSleep" :disabled="busy" @click="number=0;dirty=true">0 {{tracker.unit}}</button><button :disabled="busy||dirty||!dayLogs(activeDay).length" @click="emit('log',activeDay)">Note / photo</button><template v-if="dirty"><button :disabled="busy" @click="cancel">Cancel</button><button class="keep-selection" :disabled="busy" @click="save">{{busy?'Saving…':'Save selection'}}</button></template><span v-if="status&&!dirty" role="status" class="grid-status">{{status}}</span></div>
   <p v-if="error" role="alert" class="grid-error">{{error}} <button v-if="dirty&&!busy" @click="save">Retry save</button></p>
-  <div ref="viewport" class="grid-scroll" :class="{compact}" tabindex="0" :aria-label="tracker.name+' grid. Scroll horizontally for more boxes.'">
+  <div v-if="mobile" ref="viewport" class="mobile-tracker">
+   <section ref="calendar" class="mobile-month" aria-label="Choose a tracker day">
+    <div class="mobile-weekdays" aria-hidden="true"><span v-for="(day,index) in ['S','M','T','W','T','F','S']" :key="index">{{day}}</span></div>
+    <div class="mobile-calendar"><span v-for="blank in monthOffset" :key="'blank'+blank"></span><button v-for="day in days" :key="day" type="button" :class="[state(day),{'current-day':day===mobileDate}]" :disabled="busy||day>today" :aria-label="'Choose '+day" :aria-pressed="day===mobileDate" @click="chooseMobileDay(day)"><span>{{Number(day.slice(-2))}}</span><small>{{dayLogs(day).length?displayValue(tracker,dayLogs(day)):'·'}}</small></button></div>
+   </section>
+   <section ref="dayEditor" class="mobile-day-editor" :aria-label="dayLabel(mobileDate)+' · '+(isSleep?'Sleep hours':'Daily total')">
+    <header><div><span>{{isSleep?'SLEEP HOURS':'DAILY TOTAL'}}</span><h4>{{dayLabel(mobileDate)}}</h4></div><button type="button" class="calendar-return" @click="calendar?.scrollIntoView({block:'start',behavior:'instant'})">Calendar ↑</button></header>
+    <label v-if="isSleep&&!tracker.archived" class="nap-toggle"><input type="checkbox" :checked="sleepType==='nap'" :disabled="busy" @change="sleepType=($event.target as HTMLInputElement).checked?'nap':'night'" />Mark as a nap</label>
+    <template v-if="isSleep"><section v-for="period in [0,1]" :key="period" class="mobile-period"><h5>{{period?'PM':'AM'}} <small>{{period?'noon–midnight':'midnight–noon'}}</small></h5><div class="mobile-hour-grid"><button v-for="offset in 12" :key="offset" type="button" class="grid-box mobile-box" :class="{filled:selected(mobileDate,period*12+offset-1),partial:partial(mobileDate,period*12+offset-1),nap:nap(mobileDate,period*12+offset-1)}" :data-grid-day="mobileDate" :data-grid-col="period*12+offset-1" :aria-label="cellLabel(mobileDate,period*12+offset-1)" :aria-pressed="selected(mobileDate,period*12+offset-1)" :disabled="busy||tracker.archived||mobileDate>today" @pointerdown="down($event,mobileDate,period*12+offset-1)" @pointermove="drag" @pointerup="up" @pointercancel="gesture=null" @keydown="mobileKey($event,period*12+offset-1)" @click="activate($event,mobileDate,period*12+offset-1)">{{hour(period*12+offset-1)}}</button></div></section></template>
+    <div v-else class="mobile-number-grid"><button v-for="(_,col) in columns" :key="col" type="button" class="grid-box mobile-box" :class="{filled:selected(mobileDate,col),partial:partial(mobileDate,col)}" :data-grid-day="mobileDate" :data-grid-col="col" :aria-label="cellLabel(mobileDate,col)" :aria-pressed="selected(mobileDate,col)" :disabled="busy||tracker.archived||mobileDate>today" @pointerdown="down($event,mobileDate,col)" @pointermove="drag" @pointerup="up" @pointercancel="gesture=null" @keydown="mobileKey($event,col)" @click="activate($event,mobileDate,col)">{{((col+1)*step).toLocaleString('en-PH')}}</button></div>
+   </section>
+  </div>
+  <div v-else ref="viewport" class="grid-scroll" :class="{compact}" tabindex="0" :aria-label="tracker.name+' grid. Scroll horizontally for more boxes.'">
    <div class="value-grid" :class="{'sleep-grid':isSleep}" :style="{'--columns':columns,'--tracker-accent':tracker.design.accent}">
     <div class="plot-scale"><span>{{isSleep?'HOURS OF THE DAY':tracker.unit||'DAILY TOTAL'}}</span><span v-if="!isSleep">{{'0–'+maximum.toLocaleString()}}</span></div>
     <div v-if="isSleep" class="sleep-periods" aria-hidden="true"><span></span><strong>AM <small>midnight–noon</small></strong><strong>PM <small>noon–midnight</small></strong><span></span></div>
@@ -76,7 +102,7 @@ watch(()=>props.month,()=>{if(!dirty.value){if(props.selectedDate.startsWith(pro
     </div>
    </div>
   </div>
-  <p class="plot-caption">{{isSleep?'One box = one hour. Rows use the wake-up date; overnight evening blocks are kept with the following morning. Partial hours remain as recorded until you edit them.':'Blank = not logged. A saved zero is different from an empty day. Save your selection above the grid.'}}</p>
+  <p class="plot-caption">{{isSleep?mobile?'Each box is one hour. Choose the day you woke up.':'One box = one hour. Rows use the wake-up date; overnight evening blocks are kept with the following morning. Partial hours remain as recorded until you edit them.':'Blank = not logged. A saved zero is different from an empty day. Save your selection above the grid.'}}</p>
  </div>
 </template>
 <style scoped>
@@ -86,11 +112,36 @@ watch(()=>props.month,()=>{if(!dirty.value){if(props.selectedDate.startsWith(pro
 <style scoped>
 .value-grid-frame{container-type:inline-size;color:#514b40}
 .grid-scroll:not(.compact) .value-grid{--grid-cell:max(32px,calc((100cqi - var(--day-column) - var(--total-column)) / var(--columns)));--grid-row:max(44px,var(--grid-cell))}
-.nap-toggle{min-height:44px;cursor:pointer;white-space:nowrap}
+.nap-toggle{display:inline-flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;white-space:nowrap}
 .value-grid-frame .nap-toggle input{appearance:auto;width:18px;min-height:18px;height:18px;padding:0;accent-color:var(--tracker-accent)}
 .sleep-periods strong{color:#5f533e}
 .sleep-periods small{color:#716349}
 .grid-edit-bar{color:#514b40}
 .grid-box.nap.filled{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--tracker-accent) 70%,transparent) 0 5px,transparent 5px 8px)}
 @media(max-width:650px){.grid-scroll:not(.compact) .value-grid{--grid-cell:44px;--grid-row:44px}.sleep-periods small{font-size:11px}.grid-guide{align-items:flex-start}.grid-guide p{flex:1;min-width:160px}}
+</style>
+
+<style scoped>
+.mobile-tracker{display:grid;gap:24px;min-width:0;max-width:720px;width:100%;margin-inline:auto}.mobile-month{max-width:480px;width:100%;margin-inline:auto}
+.mobile-weekdays,.mobile-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.mobile-weekdays{margin-bottom:6px;text-align:center;font:13px/1.5 Inter,sans-serif;color:#817357}
+.mobile-calendar button{min-height:54px;padding:7px 2px;border:1px solid #c9c4aa;border-radius:5px;display:grid;align-content:center;gap:3px;justify-items:center;background:#fffdf3;color:#514b40;font:14px/1.2 Inter,sans-serif}
+.mobile-calendar small{font-size:10px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;color:#796b51}
+.mobile-calendar .recorded{background:color-mix(in srgb,var(--tracker-accent) 15%,#fffdf3)}
+.mobile-calendar .zero{border-style:dashed}
+.mobile-calendar .current-day{border:2px solid var(--tracker-accent);box-shadow:0 0 0 1px var(--tracker-accent);font-weight:600}
+.mobile-calendar .current-day small{font-weight:400}
+.mobile-day-editor{min-width:0;scroll-margin-top:210px;border-top:1px solid #c9c4aa;padding-top:18px}
+.mobile-day-editor>header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.mobile-day-editor header span{font:10px/1.5 Inter,sans-serif;letter-spacing:.12em;color:#837354}
+.mobile-day-editor h4{margin:5px 0 0;font:25px/1.2 Caveat,cursive;color:#514b40}
+.calendar-return{padding:8px;border:0;background:none;font:12px Inter,sans-serif;text-decoration:underline;text-underline-offset:3px}
+.mobile-period{margin-top:15px}.mobile-period h5{display:flex;align-items:center;gap:10px;margin:0 0 9px;font:600 14px/1.5 Inter,sans-serif;color:#5f533e}
+.mobile-period h5 small{font-weight:400;font-size:12px;color:#817357}
+.mobile-hour-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+.mobile-number-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.value-grid-frame .mobile-box{width:auto;height:auto;min-height:48px;padding:10px 2px;border:1px solid #b5b196;border-radius:5px;font:12px/1.4 Inter,sans-serif;color:#514b40}
+.mobile-frame .grid-guide p{font-size:13px;max-width:none}.mobile-frame .plot-caption{font-size:12px}
+@media(max-width:650px){.mobile-frame .grid-edit-bar{top:72px;z-index:5}.mobile-frame .grid-edit-bar strong{font-size:22px}.mobile-frame .grid-edit-bar label{flex-wrap:wrap}.mobile-frame .grid-edit-bar input{flex:1;min-width:75px}.mobile-frame .grid-edit-bar .keep-selection{margin-left:auto}}
+@media(max-width:359px){.mobile-hour-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.mobile-calendar button{min-height:52px}.mobile-number-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>

@@ -65,3 +65,5 @@
 
 .tracker-detail-toolbar>div:first-child{min-width:0;overflow-wrap:anywhere}
 @media(max-width:650px){.tracker-detail-page .tracker-detail-toolbar{flex-wrap:wrap}.tracker-detail-page .tracker-detail-toolbar>div:first-child{flex:1 1 140px}.tracker-detail-page .tracker-period{flex-wrap:wrap}}
+
+.calendar-notebook .detail-layout,.calendar-notebook .tracker-detail-toolbar,.calendar-notebook .tracker-period,.calendar-notebook .tracker-insights{max-width:1000px;margin-inline:auto}
