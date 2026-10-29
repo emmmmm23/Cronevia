@@ -5,6 +5,7 @@ import {useMediaQuery} from '@vueuse/core'
 import {dailyValue,displayValue,goalMet,monthDays,cloneTracker,type CreativeTracker,type TrackerLog} from '@/types/trackers'
 import {rangesForLogs,covers,modeCovers,paintSleep,sleepGridEntries,validateSleepSelection,type SleepRange,type GridEntry} from '@/types/tracker-grid'
 import {saveGridDay,trackerError} from '@/services/trackers.service'
+import TrackerCalendarMemory from './TrackerCalendarMemory.vue'
 const props=withDefaults(defineProps<{tracker:CreativeTracker;logs:TrackerLog[];month:string;today:string;compact?:boolean;timezone?:string;selectedDate?:string}>(),{compact:false,timezone:'UTC',selectedDate:''})
 const emit=defineEmits<{log:[string];saved:[string,TrackerLog[]]}>()
 const days=computed(()=>monthDays(props.month)),isSleep=computed(()=>props.tracker.kind==='sleep')
@@ -15,6 +16,7 @@ const mobileDate=computed(()=>activeDay.value||(days.value.includes(props.today)
 const monthOffset=computed(()=>new Date(props.month+'-01T12:00:00').getDay())
 const dayLabel=(date:string)=>new Date(date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',weekday:'short'})
 const dayLogs=(day:string)=>props.logs.filter(l=>l.tracker_id===props.tracker.id&&l.log_date===day)
+const dayHasMemory=(day:string)=>dayLogs(day).some(log=>log.values.note?.trim()||log.values.photo)
 const activeDay=ref(''),snapshot=ref<TrackerLog[]>([]),ranges=ref<SleepRange[]>([]),number=ref(0),dirty=ref(false),busy=ref(false),error=ref(''),status=ref(''),focusCol=ref(0)
 const sleepType=ref<'night'|'nap'>('night')
 const step=ref(props.tracker.kind==='steps'?500:props.tracker.kind==='duration'?5:props.tracker.kind==='quantity'?50:1)
@@ -83,7 +85,7 @@ watch(()=>props.month,()=>{if(!dirty.value){if(props.selectedDate.startsWith(pro
   <div v-if="mobile" ref="viewport" class="mobile-tracker">
    <section ref="calendar" class="mobile-month" aria-label="Choose a tracker day">
     <div class="mobile-weekdays" aria-hidden="true"><span v-for="(day,index) in ['S','M','T','W','T','F','S']" :key="index">{{day}}</span></div>
-    <div class="mobile-calendar"><span v-for="blank in monthOffset" :key="'blank'+blank"></span><button v-for="day in days" :key="day" type="button" :class="[state(day),{'current-day':day===mobileDate}]" :disabled="busy||day>today" :aria-label="'Choose '+day" :aria-pressed="day===mobileDate" @click="chooseMobileDay(day)"><span>{{Number(day.slice(-2))}}</span><small>{{dayLogs(day).length?displayValue(tracker,dayLogs(day)):'·'}}</small></button></div>
+    <div class="mobile-calendar"><span v-for="blank in monthOffset" :key="'blank'+blank"></span><button v-for="day in days" :key="day" type="button" :class="[state(day),{'current-day':day===mobileDate,'has-memory':dayHasMemory(day)}]" :disabled="busy||day>today" :aria-label="'Choose '+day" :aria-pressed="day===mobileDate" @click="chooseMobileDay(day)"><span>{{Number(day.slice(-2))}}</span><small>{{dayLogs(day).length?displayValue(tracker,dayLogs(day)):'·'}}</small><TrackerCalendarMemory v-if="dayHasMemory(day)" :date="day" :logs="dayLogs(day)" /></button></div>
    </section>
    <section ref="dayEditor" class="mobile-day-editor" :aria-label="dayLabel(mobileDate)+' · '+(isSleep?'Sleep hours':'Daily total')">
     <header><div><span>{{isSleep?'SLEEP HOURS':'DAILY TOTAL'}}</span><h4>{{dayLabel(mobileDate)}}</h4></div><button type="button" class="calendar-return" @click="calendar?.scrollIntoView({block:'start',behavior:'instant'})">Calendar ↑</button></header>
@@ -145,3 +147,5 @@ watch(()=>props.month,()=>{if(!dirty.value){if(props.selectedDate.startsWith(pro
 @media(max-width:650px){.mobile-frame .grid-edit-bar{top:72px;z-index:5}.mobile-frame .grid-edit-bar strong{font-size:22px}.mobile-frame .grid-edit-bar label{flex-wrap:wrap}.mobile-frame .grid-edit-bar input{flex:1;min-width:75px}.mobile-frame .grid-edit-bar .keep-selection{margin-left:auto}}
 @media(max-width:359px){.mobile-hour-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.mobile-calendar button{min-height:52px}.mobile-number-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>
+
+<style scoped>.mobile-calendar button.has-memory{align-content:start;gap:5px;padding:7px 3px}.mobile-calendar .calendar-cell-memory{width:100%;justify-self:stretch}</style>
