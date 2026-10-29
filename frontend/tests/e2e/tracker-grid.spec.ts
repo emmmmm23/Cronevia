@@ -19,8 +19,8 @@ for(const width of [390,1440])test(`walk totals are selected directly and surviv
 })
 for(const width of [390,1440])test(`sleep uses AM/PM boxes, overnight intervals and a notes/photo-only modal at ${width}px`,async({page})=>{
  const f=await setup(page);await page.setViewportSize({width,height:1000});await page.goto('/trackers/'+sleep+'?month=2024-01')
- await expect(page.locator('.sleep-periods strong').first()).toContainText('12 midnight–11:59 AM');await expect(page.locator('.sleep-periods strong').last()).toContainText('12 noon–11:59 PM')
- await page.getByRole('button',{name:'PM · noon–midnight'}).click();await cell(page,23).click();await page.getByRole('button',{name:'AM · midnight–noon'}).click()
+ await expect(page.locator('.sleep-periods strong').first()).toContainText('midnight–noon');await expect(page.locator('.sleep-periods strong').last()).toContainText('noon–midnight')
+ await cell(page,23).click();await cell(page,0).scrollIntoViewIfNeeded()
  const first=await cell(page,0).boundingBox(),last=await cell(page,3).boundingBox();await page.mouse.move(first!.x+first!.width/2,first!.y+first!.height/2);await page.mouse.down();await page.mouse.move(last!.x+last!.width/2,last!.y+last!.height/2,{steps:5});await page.mouse.up()
  for(const col of [4,5,6])await cell(page,col).click();await save(page)
  expect(f.logs).toHaveLength(1);expect(f.logs[0].started_at).toBe('2024-01-01T23:00:00.000Z');expect(f.logs[0].ended_at).toBe('2024-01-02T07:00:00.000Z')

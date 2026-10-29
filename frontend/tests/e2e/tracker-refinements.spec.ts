@@ -2,9 +2,37 @@ import {test,expect} from '@playwright/test'
 import {trackersFixture} from './tracker-fixture'
 import {defaultConfig,defaultDesign,fromStarter,starters} from '../../src/types/trackers'
 import {owner,noOverflow} from './planner-fixture'
+import {mkdir} from 'node:fs/promises'
 const habit='77777777-7777-4777-8777-777777777781',sleep='77777777-7777-4777-8777-777777777782'
 const definition=(id:string,kind:string,name:string)=>({id,user_id:owner,name,kind,unit:kind==='sleep'?'hours':'',config:defaultConfig(),design:defaultDesign('#6978ba'),archived:false,is_template:false,created_at:new Date().toISOString()})
 const box=(page:any,col:number)=>page.locator(`[data-grid-day="2024-01-02"][data-grid-col="${col}"]`)
+
+for(const [width,theme] of [[320,'vintage'],[390,'dark'],[768,'light'],[1440,'dark'],[1920,'vintage']] as const)test(`sleep notebook fills the workspace without redundant controls at ${width}px`,async({page})=>{
+ const f=await trackersFixture(page);f.trackers.push(definition(sleep,'sleep','Sleeping'))
+ await page.route('**/rest/v1/user_settings?**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({user_id:owner,theme})}))
+ await page.route('**/rest/v1/profiles?**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({id:owner,user_id:owner,full_name:'Fixture',role:'user',account_status:'active',timezone:'Asia/Manila'})}))
+ await page.setViewportSize({width,height:1000});await page.goto('/trackers/'+sleep+'?month=2024-01')
+ const paper=page.locator('.detail-layout>.tracker-paper'),bounds=(await paper.boundingBox())!
+ expect(bounds.width/width).toBeGreaterThan(.9)
+ await expect(page.locator('.trackers-hero')).toHaveCount(0);await expect(page.locator('.tracker-sidebar')).toHaveCount(0)
+ await expect(page.getByRole('button',{name:/Log a day/})).toHaveCount(0);await expect(paper.getByRole('combobox')).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'Sleep',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Nap',exact:true})).toHaveCount(0)
+ await expect(page.getByRole('checkbox',{name:'Mark as a nap'})).not.toBeChecked()
+ if(width>=1440){const fit=await page.locator('.grid-scroll').evaluate(el=>el.scrollWidth-el.clientWidth);expect(fit).toBeLessThan(2)}
+ await box(page,0).click();await page.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved')
+ expect(f.logs[0].timezone).toBe('Asia/Manila');expect(f.logs[0].started_at).toBe('2024-01-01T16:00:00.000Z');expect(f.logs[0].values.sleepType).toBe('night')
+ await page.getByRole('button',{name:'Customize',exact:true}).click();const modal=page.getByRole('dialog')
+ await expect(modal.getByLabel('How will you log it?',{exact:false})).toHaveCount(0);await expect(modal.getByLabel('Unit',{exact:true})).toHaveCount(0)
+ await expect(modal.locator('.design-controls')).toBeVisible();await modal.getByRole('button',{name:'Cancel',exact:true}).click()
+ await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0)});await noOverflow(page);await mkdir('test-results/trackers',{recursive:true});await page.screenshot({path:`test-results/trackers/open-sleep-${width}.png`})
+})
+
+test('sleep starter keeps its type and unit; a blank tracker still offers logging choices',async({page})=>{
+ const f=await trackersFixture(page);await page.goto('/trackers');await page.getByRole('region',{name:'Start Measured trackers',exact:true}).getByRole('button',{name:/Sleep/}).click()
+ const modal=page.getByRole('dialog');await expect(modal.getByLabel('How will you log it?',{exact:false})).toHaveCount(0);await expect(modal.getByLabel('Unit',{exact:true})).toHaveCount(0)
+ await modal.getByRole('button',{name:'Keep this tracker'}).click();await expect(modal).toHaveCount(0);expect(f.trackers[0].kind).toBe('sleep');expect(f.trackers[0].unit).toBe('hours')
+ await page.getByRole('button',{name:'Create tracker',exact:false}).click();await expect(modal.getByLabel('How will you log it?',{exact:false})).toBeVisible()
+})
 test('habits, measured trackers and their starter pages stay separate',async({page})=>{
  const f=await trackersFixture(page);f.trackers.push(definition(habit,'habit','Coffee habit'),definition(sleep,'sleep','Sleep'));await page.goto('/trackers')
  await expect(page.getByRole('region',{name:'Habits',exact:true}).locator('.notebook-card')).toHaveCount(1);await expect(page.getByRole('region',{name:'Measured trackers',exact:true}).locator('.notebook-card')).toHaveCount(1)
@@ -23,15 +51,15 @@ test('a combined habit calendar opens Yes/No for the clicked habit without chang
  await page.goto('/trackers/'+habit+'?month=2024-01');await page.getByRole('button',{name:'2024-01-02 · Coffee: Not logged',exact:true}).click();const modal=page.getByRole('dialog');await expect(modal.getByRole('combobox')).toHaveCount(0);await modal.getByRole('button',{name:'○ No',exact:true}).click();await modal.getByRole('button',{name:'Keep this day'}).click();await expect(modal).toHaveCount(0);expect(f.logs[0].values.fields).toEqual({coffee:false,gym:true,coke:false})
  await page.getByRole('button',{name:'2024-01-02 · Coffee: No',exact:true}).click();page.once('dialog',d=>d.accept());await modal.getByRole('button',{name:'Clear this habit',exact:true}).click();await expect(modal).toHaveCount(0);expect(f.logs[0].values.fields).toEqual({gym:true,coke:false})
 })
-test('sleep can extend an overnight record and a daytime nap is a different button and stored kind',async({page})=>{
+test('sleep defaults to nightly hours and the nap switch preserves a separate stored kind',async({page})=>{
  const f=await trackersFixture(page);f.trackers.push(definition(sleep,'sleep','Sleep'));const now=new Date().toISOString()
  f.logs.push({id:'77777777-7777-4777-8777-777777777789',tracker_id:sleep,user_id:owner,log_date:'2024-01-02',values:{sleepType:'night',awakeMinutes:0,note:'Keep my night'},started_at:'2024-01-01T23:00:00Z',ended_at:'2024-01-02T07:00:00Z',timezone:'UTC',config_snapshot:defaultConfig(),unit_snapshot:'hours',created_at:now,updated_at:now})
- await page.goto('/trackers/'+sleep+'?month=2024-01');await page.getByRole('button',{name:'Sleep',exact:true}).click();await box(page,22).click();await page.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved');expect(f.logs).toHaveLength(1);expect(f.logs[0].started_at).toBe('2024-01-01T22:00:00.000Z');expect(f.logs[0].values.note).toBe('Keep my night')
- await page.getByRole('button',{name:'Nap',exact:true}).click();await box(page,14).click();await box(page,15).click();await page.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved');expect(f.logs.find(l=>l.values.sleepType==='nap')?.started_at).toBe('2024-01-02T14:00:00.000Z');await page.reload();await expect(box(page,14)).toHaveClass(/nap/)
+ await page.goto('/trackers/'+sleep+'?month=2024-01');await box(page,22).click();await page.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved');expect(f.logs).toHaveLength(1);expect(f.logs[0].started_at).toBe('2024-01-01T22:00:00.000Z');expect(f.logs[0].values.note).toBe('Keep my night')
+ await page.getByRole('checkbox',{name:'Mark as a nap',exact:true}).check();await box(page,14).click();await box(page,15).click();await page.getByRole('button',{name:'Save selection'}).click();await expect(page.locator('.grid-status')).toContainText('Selection saved');expect(f.logs.find(l=>l.values.sleepType==='nap')?.started_at).toBe('2024-01-02T14:00:00.000Z');await page.reload();await expect(box(page,14)).toHaveClass(/nap/)
 })
 for(const width of [390,1440])test('a sticker can reach the lower calendar and persists across refresh at '+width,async({page})=>{
  const f=await trackersFixture(page);await page.setViewportSize({width,height:950});f.trackers.push({...definition(habit,'habit','A decorated page'),design:{...defaultDesign(),decorations:[{id:'star',x:.7,y:.5,width:.15,rotation:0,z:0,locked:false,asset:'',text:'✦'}]}})
- await page.goto('/trackers/'+habit+'?month=2024-01');await page.getByRole('button',{name:'Arrange stickers',exact:true}).click();const paper=page.locator('.detail-layout>.tracker-paper'),art=paper.getByRole('button',{name:'Move ✦',exact:true})
+ await page.goto('/trackers/'+habit+'?month=2024-01');await page.locator('.tracker-tools>summary').click();await page.getByRole('button',{name:'Arrange stickers',exact:true}).click();const paper=page.locator('.detail-layout>.tracker-paper'),art=paper.getByRole('button',{name:'Move ✦',exact:true})
  const dimensions=await paper.evaluate(el=>({surface:el.querySelector('.paper-decorations')!.clientHeight,paper:el.clientHeight,heading:el.querySelector('.paper-heading')!.clientHeight}));expect(Math.abs(dimensions.surface-dimensions.paper)).toBeLessThan(2);expect(dimensions.surface).toBeGreaterThan(dimensions.heading*3)
  await art.focus();for(let i=0;i<12;i++)await art.press('Shift+ArrowDown');const y=await paper.locator('.decoration-item').evaluate(el=>parseFloat((el as HTMLElement).style.top));expect(y).toBeGreaterThan(55)
  await page.getByRole('button',{name:'Save stickers',exact:true}).click();await expect(page.getByRole('region',{name:'Arrange stickers'})).toHaveCount(0);expect(f.trackers[0].design.decorations[0].space).toBe('page');await page.reload();expect(await paper.locator('.decoration-item').evaluate(el=>parseFloat((el as HTMLElement).style.top))).toBeCloseTo(y,1);await noOverflow(page)

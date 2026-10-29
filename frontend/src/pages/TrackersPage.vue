@@ -2,6 +2,7 @@
 import { cloneTracker } from '@/types/trackers'
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { onClickOutside } from '@vueuse/core'
 import { useAuthStore } from '@/stores/auth'
 import { useEditingViewport } from '@/composables/useEditingViewport'
 import AppSheet from '@/components/shared/AppSheet.vue'
@@ -18,8 +19,11 @@ import { defaultDesign, displayValue, fromStarter, kindLabels, localDate, monthD
 import './trackers.css'
 useEditingViewport()
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
-const timezoneOverride=ref('')
-const timezone=computed(()=>timezoneOverride.value||auth.profile?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC')
+const timezone=computed(()=>auth.profile?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC')
+const toolsMenu=ref<HTMLDetailsElement>()
+const chooseTrackerKind=ref(false)
+function closeTools(){if(toolsMenu.value)toolsMenu.value.open=false}
+onClickOutside(toolsMenu,closeTools)
 const today=computed(()=>localDate(new Date(),timezone.value))
 const month=ref(/^\d{4}-(0[1-9]|1[0-2])$/.test(String(route.query.month))?String(route.query.month):today.value.slice(0,7))
 const selectedDay=ref(today.value),tab=ref<'today'|'notebooks'|'board'>(route.query.view==='board'?'board':'notebooks'),showArchived=ref(false),yearly=ref(false)
@@ -78,9 +82,9 @@ watch(selectedDay,value=>{if(/^\d{4}-\d{2}-\d{2}$/.test(value)&&value.slice(0,4)
 onMounted(()=>void load())
 function moveMonth(delta:number){month.value=shiftMonth(month.value,delta)}
 function changeMonth(event:Event){const value=(event.target as HTMLInputElement).value;if(/^\d{4}-(0[1-9]|1[0-2])$/.test(value))month.value=value}
-function start(starter:TrackerStarter){draft.value=fromStarter(starter)}
-function editTracker(tracker:CreativeTracker){draft.value=cloneTracker(tracker)}
-function useTemplate(template:CreativeTracker){draft.value={...cloneTracker(template),id:crypto.randomUUID(),is_template:false,name:template.name.replace(/ design$/,'')}}
+function start(starter:TrackerStarter){chooseTrackerKind.value=starter.key==='custom';draft.value=fromStarter(starter)}
+function editTracker(tracker:CreativeTracker){chooseTrackerKind.value=false;draft.value=cloneTracker(tracker)}
+function useTemplate(template:CreativeTracker){chooseTrackerKind.value=false;draft.value={...cloneTracker(template),id:crypto.randomUUID(),is_template:false,name:template.name.replace(/ design$/,'')}}
 function setTab(value:string){if(value==='today'||value==='notebooks'||value==='board')tab.value=value}
 function trackerSaved(tracker:CreativeTracker){
  const index=trackers.value.findIndex(t=>t.id===tracker.id)
@@ -92,7 +96,7 @@ function logSaved(log:TrackerLog){
  if(log.log_date.slice(0,7)!==month.value)month.value=log.log_date.slice(0,7)
 }
 function logRemoved(id:string){logs.value=logs.value.filter(l=>l.id!==id);logging.value=null;notice.value='Entry removed. This day is now unlogged.'}
-function gridSaved(date:string,rows:TrackerLog[]){if(!selected.value)return;logs.value=logs.value.filter(l=>l.tracker_id!==selected.value!.id||l.log_date!==date).concat(rows);notice.value='Your boxes are saved.'}
+function gridSaved(date:string,rows:TrackerLog[]){if(!selected.value)return;logs.value=logs.value.filter(l=>l.tracker_id!==selected.value!.id||l.log_date!==date).concat(rows)}
 function notesSaved(rows:TrackerLog[]){const context=logging.value;if(!context)return;const day=rows[0]?.log_date||context.date;logs.value=logs.value.filter(l=>l.tracker_id!==context.tracker.id||l.log_date!==day).concat(rows);gridDate.value=day;month.value=day.slice(0,7);logging.value=null;notice.value='Your note and photo are saved.'}
 function chooseNoteDate(date:string){month.value=date.slice(0,7);gridDate.value=date;logging.value=null}
 function openLog(tracker:CreativeTracker,date?:string,fieldId?:string){
@@ -102,8 +106,8 @@ function openLog(tracker:CreativeTracker,date?:string,fieldId?:string){
  if(directGridKinds.includes(tracker.kind)){gridDate.value=day;if(route.params.id!==tracker.id)openTracker(tracker);return}
  logging.value={tracker,date:day,fieldId}
 }
-function openTracker(tracker:CreativeTracker){yearly.value=false;void router.push({path:'/trackers/'+tracker.id,query:{month:month.value}})}
-function duplicate(tracker:CreativeTracker,template=false){draft.value={...cloneTracker(tracker),id:crypto.randomUUID(),name:tracker.name+(template?' design':' copy'),is_template:template,archived:false}}
+function openTracker(tracker:CreativeTracker){notice.value='';yearly.value=false;void router.push({path:'/trackers/'+tracker.id,query:{month:month.value}})}
+function duplicate(tracker:CreativeTracker,template=false){chooseTrackerKind.value=false;draft.value={...cloneTracker(tracker),id:crypto.randomUUID(),name:tracker.name+(template?' design':' copy'),is_template:template,archived:false}}
 async function archive(tracker:CreativeTracker){
  if(actionBusy.value)return
  actionBusy.value=true;error.value=''
@@ -164,9 +168,9 @@ const weeklySteps=computed(()=>{
 })
 </script>
 <template>
- <section class="trackers-page">
+ <section class="trackers-page" :class="{'tracker-detail-page':!!route.params.id}">
   <div class="trackers-wrap">
-   <header class="trackers-hero"><div><p class="tracker-eyebrow"><span>✦</span> YOUR EVERYDAY NOTEBOOK</p><h1>Your days, <em>in color.</em></h1><p class="tracker-intro">Little rituals. Restful nights. The things that make a life.<br />Keep them in a notebook that feels like you.</p><span class="hero-handnote">a little more noticing, a little less measuring.</span></div><div class="hero-swatches" aria-hidden="true"><span class="tape"></span><p>little things<br /><em>add up.</em></p><div><i></i><i></i><i></i><i></i><i></i></div><small>YOUR DAYS, IN YOUR OWN RHYTHM</small></div></header>
+   <header v-if="!route.params.id" class="trackers-hero"><div><p class="tracker-eyebrow"><span>✦</span> YOUR EVERYDAY NOTEBOOK</p><h1>Your days, <em>in color.</em></h1><p class="tracker-intro">Little rituals. Restful nights. The things that make a life.<br />Keep them in a notebook that feels like you.</p><span class="hero-handnote">a little more noticing, a little less measuring.</span></div><div class="hero-swatches" aria-hidden="true"><span class="tape"></span><p>little things<br /><em>add up.</em></p><div><i></i><i></i><i></i><i></i><i></i></div><small>YOUR DAYS, IN YOUR OWN RHYTHM</small></div></header>
    <div v-if="notice" role="status" class="tracker-notice"><span>✓</span>{{notice}}<button aria-label="Dismiss confirmation" @click="notice=''">×</button></div>
    <nav v-if="!selected" class="tracker-navigation" aria-label="Tracker workspace"><div><button v-for="item in [{id:'today',label:'Today'},{id:'notebooks',label:'My trackers'},{id:'board',label:'Monthly board'}]" :key="item.id" :aria-pressed="tab===item.id" @click="setTab(item.id)">{{item.label}}</button></div><button class="tracker-primary" @click="start(starters.at(-1)!)">＋ Create tracker</button></nav>
    <div class="tracker-period"><div><RouterLink v-if="route.params.id" to="/trackers" class="back-to-trackers">← My trackers</RouterLink><span v-else class="period-note">{{tab==='today'?'A small check-in with yourself.':tab==='board'?'Your month, on one lovely spread.':'Pages for the things you care about.'}}</span></div><div class="month-switcher"><button aria-label="Previous month" @click="moveMonth(-1)">‹</button><label><span class="sr-only">View month</span><input :value="month" type="month" min="1900-01" max="2100-12" @change="changeMonth" /></label><button aria-label="Next month" @click="moveMonth(1)">›</button></div></div>
@@ -174,9 +178,30 @@ const weeklySteps=computed(()=>{
    <div v-if="loading" role="status" class="tracker-loading"><span>✧</span> Gathering your pages…</div>
    <template v-else>
     <template v-if="selected">
-     <div class="tracker-detail-toolbar"><div><span class="tracker-type">{{kindLabels[selected.kind]}}{{selected.archived?' · Archived':''}}</span><h2>{{selected.name}}</h2><p>{{summary(selected)}} · {{monthLabel(month)}}</p></div><div><button v-if="selected.kind==='category'" class="tracker-secondary" :aria-pressed="yearly" @click="yearly=!yearly">{{yearly?'Monthly page':'A year in pixels'}}</button><button v-if="!selected.archived&&trackerSection(selected)!=='habits'" class="tracker-primary" @click="openLog(selected)">＋ Log a day</button><button v-if="!stickerDraft && selected.design.decorations.length" class="tracker-secondary" @click="arrangeStickers">Arrange stickers</button><button class="tracker-secondary" :disabled="!!stickerDraft" @click="editTracker(selected)">✎ Design &amp; settings</button></div></div>
+     <div class="tracker-detail-toolbar">
+      <div><h1>{{selected.name}}</h1><p>{{summary(selected)}}{{selected.archived?' · Archived':''}}</p></div>
+      <div>
+       <button v-if="!selected.archived&&trackerSection(selected)!=='habits'&&!directGridKinds.includes(selected.kind)" class="tracker-primary" @click="openLog(selected)">＋ Log a day</button>
+       <button class="tracker-secondary" :disabled="!!stickerDraft" @click="editTracker(selected)">Customize</button>
+       <details ref="toolsMenu" class="tracker-tools" @keydown.esc="closeTools"><summary aria-label="More tracker options">More <span aria-hidden="true">⋯</span></summary><div class="tracker-tools-menu" @click="closeTools">
+        <button v-if="selected.kind==='category'" @click="yearly=!yearly">{{yearly?'Monthly page':'A year in pixels'}}</button>
+        <button v-if="!stickerDraft && selected.design.decorations.length" @click="arrangeStickers">Arrange stickers</button>
+        <RouterLink :to="journalLink(selected)">Connect to a journal page</RouterLink>
+        <button @click="duplicate(selected)">Duplicate design</button>
+        <button @click="duplicate(selected,true)">Save as a personal template</button>
+        <button :disabled="actionBusy" @click="archive(selected)">{{selected.archived?'Restore tracker':'Archive tracker'}}</button>
+        <button class="danger" :disabled="actionBusy" @click="destroy(selected)">Delete tracker &amp; entries</button>
+       </div></details>
+      </div>
+     </div>
      <section v-if="stickerDraft" class="sticker-arrangement" aria-label="Arrange stickers"><div><strong>A little rearranging.</strong><p>Drag a sticker to move it. Use ↗ to resize and ↻ to rotate. Arrow keys work too.</p></div><div class="sticker-arrangement-actions"><button class="tracker-secondary" :disabled="!stickerCursor || actionBusy" @click="undoStickers(-1)">↶ Undo</button><button class="tracker-secondary" :disabled="stickerCursor===stickerHistory.length-1 || actionBusy" @click="undoStickers(1)">↷ Redo</button><button v-if="selectedSticker" class="tracker-secondary" :disabled="actionBusy" @click="selectedSticker.locked=!selectedSticker.locked;rememberStickers()">{{selectedSticker.locked?'Unlock sticker':'Lock sticker'}}</button><button class="tracker-secondary" :disabled="actionBusy" @click="stickerDraft=null">Cancel</button><button class="tracker-primary" :disabled="actionBusy" @click="keepStickers">{{actionBusy?'Saving…':'Save stickers'}}</button></div><p v-if="stickerError" role="alert">{{stickerError}}</p></section>
-     <div class="detail-layout"><TrackerPaper :design="stickerDraft||selected.design" :title="selected.name" :editable="!!stickerDraft && !actionBusy" v-model:selected-id="stickerSelection" @update:decorations="stickerDraft && (stickerDraft.decorations=$event)" @commit="rememberStickers"><div class="paper-month"><span>{{yearly?month.slice(0,4):monthLabel(month)}}</span><span>{{selected.kind==='sleep'?'☾':'✧'}}</span></div><TrackerChart :tracker="selected" :logs="selectedLogs" :month="month" :today="today" :yearly="yearly" :timezone="timezone" :selected-date="gridDate" @log="(date,fieldId)=>openLog(selected!,date,fieldId)" @notes="logging={tracker:selected!,date:$event}" @saved="gridSaved" @timezone="timezoneOverride=$event" /></TrackerPaper><aside class="tracker-sidebar"><p class="tracker-eyebrow">A LITTLE PERSPECTIVE</p><h3>A page of your life.</h3><p>{{summary(selected)}}</p><p v-if="selectedSummary" class="coverage">{{selectedSummary.days}} logged days · {{selectedSummary.missing}} scheduled days unlogged.<br />Future dates are left out.</p><p v-if="selected.kind==='steps'" class="fine">Steps are entered manually. Saving a daily total replaces that date’s number.</p><p v-if="selected.kind==='sleep'" class="fine">The dates shown are wake-up dates. Sleep hours use actual elapsed time, including clock changes. These are your notes, not a medical assessment.</p><div v-if="weeklySteps.length" class="weekly-steps"><h4>Weekly totals</h4><div v-for="week in weeklySteps" :key="week.label"><span>Days {{week.label}}</span><strong>{{week.total.toLocaleString()}}</strong><small>{{week.coverage}} logged days</small></div></div><RouterLink :to="journalLink(selected)" class="tracker-secondary">＋ Connect to a journal page</RouterLink><button class="text-action" @click="duplicate(selected)">Duplicate design</button><button class="text-action" @click="duplicate(selected,true)">Save as a personal template</button><button class="text-action" :disabled="actionBusy" @click="archive(selected)">{{selected.archived?'Restore tracker':'Archive tracker'}}</button><button class="text-action danger" :disabled="actionBusy" @click="destroy(selected)">Delete tracker &amp; entries</button></aside></div>
+     <div class="detail-layout"><TrackerPaper :design="stickerDraft||selected.design" :title="selected.name" :editable="!!stickerDraft && !actionBusy" v-model:selected-id="stickerSelection" @update:decorations="stickerDraft && (stickerDraft.decorations=$event)" @commit="rememberStickers"><div class="paper-month"><span>{{yearly?month.slice(0,4):monthLabel(month)}}</span><span>{{selected.kind==='sleep'?'☾':'✧'}}</span></div><TrackerChart :tracker="selected" :logs="selectedLogs" :month="month" :today="today" :yearly="yearly" :timezone="timezone" :selected-date="gridDate" @log="(date,fieldId)=>openLog(selected!,date,fieldId)" @notes="logging={tracker:selected!,date:$event}" @saved="gridSaved" /></TrackerPaper></div>
+     <details class="tracker-insights"><summary>Monthly summary</summary><div class="tracker-summary-content">
+      <p v-if="selectedSummary">{{selectedSummary.days}} logged days · {{selectedSummary.missing}} scheduled days unlogged. Future dates are left out.</p>
+      <p v-if="selected.kind==='steps'">Saving a daily total replaces that date’s number.</p>
+      <p v-if="selected.kind==='sleep'">Rows use the wake-up date. Hours include naps and use actual elapsed time, including clock changes.</p>
+      <div v-if="weeklySteps.length" class="weekly-steps"><h3>Weekly totals</h3><div v-for="week in weeklySteps" :key="week.label"><span>Days {{week.label}}</span><strong>{{week.total.toLocaleString()}}</strong><small>{{week.coverage}} logged days</small></div></div>
+     </div></details>
     </template>
     <div v-else-if="route.params.id" class="tracker-empty"><h2>This tracker isn’t in your notebook.</h2><RouterLink to="/trackers">Return to my trackers</RouterLink></div>
     <template v-else-if="tab==='today'">
@@ -200,7 +225,7 @@ const weeklySteps=computed(()=>{
    </template>
    <footer class="trackers-footer">✧ KEEP THE LITTLE THINGS. THEY MAKE A LIFE. ✧</footer>
   </div>
-  <TrackerEditor v-if="draft" :initial="draft" @saved="trackerSaved" @close="draft=null" />
+  <TrackerEditor v-if="draft" :initial="draft" :allow-kind-choice="chooseTrackerKind" :customize="draft.id===selected?.id" @saved="trackerSaved" @close="draft=null" />
   <TrackerDayNotes v-if="logging&&directGridKinds.includes(logging.tracker.kind)" :tracker="logging.tracker" :date="logging.date" :logs="logs" :timezone="timezone" @saved="notesSaved" @choose="chooseNoteDate" @close="logging=null" />
   <TrackerLogEditor v-else-if="logging" :tracker="logging.tracker" :date="logging.date" :logs="logs" :timezone="timezone" :field-id="logging.fieldId" @saved="logSaved" @removed="logRemoved" @close="logging=null" />
   <AppSheet :model-value="!!boardDraft" title="Make room for your little rhythms" @update:model-value="boardDraft=null"><form v-if="boardDraft" id="board-form" class="board-form" @submit.prevent="keepBoard"><label>Board name<input v-model="boardDraft.name" required maxlength="100" /></label><fieldset><legend>Pages on this spread</legend><label v-for="tracker in active" :key="tracker.id" class="board-choice"><input type="checkbox" :checked="boardDraft.tracker_ids.includes(tracker.id)" @change="toggleBoard(tracker.id)" />{{tracker.name}}</label><p v-if="!active.length">Create a tracker first, then add it to your board.</p></fieldset><TrackerDesignEditor v-model="boardDraft.design" @busy="uploading=$event" /><p v-if="boardError" class="tracker-load-error" role="alert">{{boardError}}</p></form><template #footer><div class="sheet-actions"><button class="tracker-secondary" :disabled="actionBusy||uploading" @click="boardDraft=null">Cancel</button><button class="tracker-primary" form="board-form" type="submit" :disabled="actionBusy||uploading">{{actionBusy?'Saving…':'Keep this spread'}}</button></div></template></AppSheet>
