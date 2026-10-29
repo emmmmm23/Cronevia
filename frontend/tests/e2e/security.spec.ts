@@ -6,17 +6,18 @@ async function securityFixture(page:Page,enabled=false){
  // All requests are intercepted locally. No hosted account or real OTP is used.
  const factors:any[]=enabled?[{id:'factor-one',factor_type:'totp',status:'verified',friendly_name:'My authenticator',created_at:new Date().toISOString()}]:[]
  let prefs:any={user_id:owner,theme:'vintage',timezone:'Asia/Manila',email_notifications:true}
- const calls={profile:0,password:0,passwordOwners:[] as string[],unenroll:0,enroll:0,signouts:[] as string[]}
+ const calls={profile:0,password:0,restrictions:0,passwordOwners:[] as string[],unenroll:0,enroll:0,signouts:[] as string[]}
  const json=(route:any,value:any,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)})
  const user=()=>({...core.user,factors})
- function session(aal='aal1',recovery=false){
-  const payload={sub:owner,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated',aal,amr:[{method:recovery?'recovery':'password',timestamp:Math.floor(Date.now()/1000)}]}
+ function session(aal='aal1',recovery:boolean|'otp'|'otp-string'=false){
+  const payload={sub:owner,session_id:'99999999-9999-4999-8999-999999999999',exp:Math.floor(Date.now()/1000)+3600,role:'authenticated',aud:'authenticated',aal,amr:recovery==='otp-string'?['otp']:[{method:recovery==='otp'?'otp':recovery?'recovery':'password',timestamp:Math.floor(Date.now()/1000)}]}
   return {...core.session,user:user(),access_token:Buffer.from('{"alg":"HS256"}').toString('base64url')+'.'+Buffer.from(JSON.stringify(payload)).toString('base64url')+'.fixture'}
  }
  await page.route('**/auth/v1/user',route=>{
-  if(route.request().method()==='PUT'){calls.password++;const body=route.request().postDataJSON();const token=route.request().headers().authorization?.split(' ')[1];const claims=token&&JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());const recovery=claims?.amr?.some((a:any)=>a.method==='recovery');calls.passwordOwners.push(claims?.sub);if(body.password&&!recovery&&(!body.current_password||body.current_password!=='fixture-current-password'))return json(route,{code:'reauthentication_needed',message:'private diagnostic must not reach UI'},400)}
+  if(route.request().method()==='PUT'){calls.password++;const body=route.request().postDataJSON();const token=route.request().headers().authorization?.split(' ')[1];const claims=token&&JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());const recovery=claims?.amr?.some((a:any)=>['otp','recovery'].includes(typeof a==='string'?a:a.method));calls.passwordOwners.push(claims?.sub);if(body.password&&!recovery&&(!body.current_password||body.current_password!=='fixture-current-password'))return json(route,{code:'reauthentication_needed',message:'private diagnostic must not reach UI'},400)}
   return json(route,user())
  })
+ await page.route('**/rest/v1/rpc/restrict_password_recovery_session',route=>{calls.restrictions++;return json(route,true)})
  await page.route('**/auth/v1/token?**',route=>{
   if(route.request().postDataJSON().password==='wrong-password')return json(route,{code:'invalid_credentials',message:'private auth detail'},400)
   return json(route,session())
@@ -32,8 +33,8 @@ async function securityFixture(page:Page,enabled=false){
   if(data.code!=='123456')return json(route,{code:data.code==='999999'?'mfa_challenge_expired':'mfa_verification_failed',message:'private verification diagnostic'},400)
   const id=new URL(route.request().url()).pathname.split('/').at(-2),factor=factors.find(f=>f.id===id)
   if(factor)factor.status='verified'
-  const token=route.request().headers().authorization?.split(' ')[1],recovery=token&&JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString()).amr?.some((a:any)=>a.method==='recovery')
-  return json(route,session('aal2',!!recovery))
+  const token=route.request().headers().authorization?.split(' ')[1],methods=token?JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString()).amr?.map((a:any)=>typeof a==='string'?a:a.method):[]
+  return json(route,session('aal2',methods?.includes('otp')?'otp':!!methods?.includes('recovery')))
  })
  await page.route('**/auth/v1/factors/*',route=>{
   if(route.request().method()!=='DELETE')return route.fallback()
@@ -175,7 +176,7 @@ test('recovery stays tied to its email account when a different account was prev
 })
 
 test('recovery keeps authenticator protection and never opens the private app after MFA',async({page})=>{
- const f=await securityFixture(page,true),recovery=f.session('aal1',true)
+ const f=await securityFixture(page,true),recovery=f.session('aal1','otp')
  await page.goto('/#'+new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',type:'recovery'}))
  await page.getByLabel('New Password',{exact:true}).fill('fixture-mfa-recovered-password')
  await page.getByLabel('Confirm New Password',{exact:true}).fill('fixture-mfa-recovered-password')
@@ -186,6 +187,31 @@ test('recovery keeps authenticator protection and never opens the private app af
  await page.getByRole('button',{name:'Reset Password',exact:true}).click()
  await expect(page.getByRole('status')).toContainText('successfully')
  expect(f.calls.password).toBe(1);expect(f.calls.profile).toBe(0)
+})
+
+for(const method of ['otp','otp-string'] as const)test('fresh implicit email reset is accepted with the real Supabase '+method+' method',async({page})=>{
+ const f=await securityFixture(page),recovery=f.session('aal1',method)
+ await page.goto('/#'+new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',expires_in:'3600',type:'recovery'}))
+ await expect(page).toHaveURL(/\/reset-password$/)
+ await page.getByLabel('New Password',{exact:true}).fill('fixture-implicit-email-password')
+ await page.getByLabel('Confirm New Password',{exact:true}).fill('fixture-implicit-email-password')
+ await page.getByRole('button',{name:'Reset Password',exact:true}).click()
+ await expect(page.getByRole('status')).toContainText('successfully')
+ expect(f.calls.restrictions).toBe(1);expect(f.calls.profile).toBe(0);expect(f.calls.passwordOwners).toEqual([owner])
+})
+
+test('a temporary restriction failure offers retry instead of calling a new email link expired',async({page})=>{
+ const f=await securityFixture(page),recovery=f.session('aal1','otp')
+ let available=false
+ await page.route('**/rest/v1/rpc/restrict_password_recovery_session',route=>route.fulfill({status:available?200:503,contentType:'application/json',body:available?'true':'{"message":"Fixture service unavailable"}'}))
+ await page.goto('/reset-password#'+new URLSearchParams({access_token:recovery.access_token,refresh_token:'fixture',type:'recovery'}))
+ await expect(page.getByRole('alert')).toContainText('could not verify this reset link right now')
+ await expect(page.getByRole('alert')).not.toContainText('expired')
+ await expect(page.getByLabel('New Password',{exact:true})).toHaveCount(0)
+ available=true
+ await page.getByRole('button',{name:'Try again',exact:true}).click()
+ await expect(page.getByLabel('New Password',{exact:true})).toBeVisible()
+ expect(f.calls.profile).toBe(0)
 })
 
 test('expired, wrongly marked and reloaded recovery links cannot become an account login',async({page})=>{

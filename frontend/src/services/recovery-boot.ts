@@ -18,11 +18,14 @@ export function readRecoveryCallback(url: URL): RecoveryCallback | null {
   return { invalid: true }
 }
 
-export function isRecoveryAccessToken(token: string): boolean {
+export function isRecoveryAccessToken(token: string, allowEmailOtp = false): boolean {
   try {
     const part = token.split('.')[1]!
     const claims = JSON.parse(atob(part.replace(/-/g,'+').replace(/_/g,'/')))
-    return Array.isArray(claims.amr) && claims.amr.some((method: { method?: string }) => method?.method === 'recovery')
+    return Array.isArray(claims.amr) && claims.amr.some((entry: unknown) => {
+      const method = typeof entry === 'string' ? entry : (entry as {method?:string}|null)?.method
+      return method === 'recovery' || (allowEmailOtp && method === 'otp')
+    })
   } catch { return false }
 }
 

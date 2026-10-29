@@ -17,6 +17,10 @@ describe('password recovery callback boundaries',()=>{
  it('classifies recovery from the authentication method, never user-editable metadata',()=>{
   const token=(claims:unknown)=>'header.'+btoa(JSON.stringify(claims))+'.signature'
   expect(isRecoveryAccessToken(token({amr:[{method:'recovery'},{method:'totp'}]}))).toBe(true)
+  expect(isRecoveryAccessToken(token({amr:['recovery','totp']}))).toBe(true)
+  expect(isRecoveryAccessToken(token({amr:[{method:'otp'}]}))).toBe(false)
+  expect(isRecoveryAccessToken(token({amr:[{method:'otp'}]}),true)).toBe(true)
+  expect(isRecoveryAccessToken(token({amr:['otp']}),true)).toBe(true)
   expect(isRecoveryAccessToken(token({amr:[{method:'password'}],user_metadata:{recovery:true}}))).toBe(false)
   for(const value of ['bad','a.b.c',token({amr:null})])expect(isRecoveryAccessToken(value)).toBe(false)
  })

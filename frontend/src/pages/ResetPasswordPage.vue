@@ -2,7 +2,7 @@
 import {computed,ref} from 'vue'
 import {useRouter} from 'vue-router'
 import {useAuthStore} from '@/stores/auth'
-import {recoveryState} from '@/services/password-recovery'
+import {recoveryState,openPasswordRecovery} from '@/services/password-recovery'
 const auth=useAuthStore(),router=useRouter()
 const password=ref(''),confirmation=ref(''),code=ref(''),factorId=ref(recoveryState.factors[0]?.id||''),busy=ref(false),error=ref(''),complete=ref(false)
 const ready=computed(()=>auth.recoverySession&&recoveryState.status==='ready')
@@ -20,6 +20,7 @@ async function leave(path:string){await auth.cancelRecovery();await router.repla
   <p class="brand">Cronevia</p><p class="eyebrow">A fresh start</p>
   <h1 id="reset-heading">{{complete?'Password updated':'Reset Password'}}</h1>
   <template v-if="complete"><p role="status">Your password has been reset successfully! Sign in with your new password to open your account.</p><button class="primary" @click="leave('/login')">Sign In</button></template>
+  <p v-else-if="recoveryState.status==='checking'" role="status">Checking your reset link…</p>
   <template v-else-if="ready">
    <p>Choose a new password for the account linked to this email. You’ll sign in after saving it.</p>
    <p class="recovery-note">Password recovery only · Your journal stays closed.</p>
@@ -33,7 +34,7 @@ async function leave(path:string){await auth.cancelRecovery();await router.repla
    </form>
    <button class="text-link" :disabled="busy" @click="leave('/login')">Cancel and return to sign in</button>
   </template>
-  <template v-else><p role="alert">{{recoveryState.error||'Open a fresh password reset link from your email to continue. This page cannot reset a password using a normal account login.'}}</p><button class="primary" @click="leave('/forgot-password')">Request a new reset link</button><button class="text-link" @click="leave('/login')">Back to sign in</button></template>
+  <template v-else><p role="alert">{{recoveryState.error||'Open a fresh password reset link from your email to continue. This page cannot reset a password using a normal account login.'}}</p><button v-if="recoveryState.canRetry" class="primary" @click="openPasswordRecovery()">Try again</button><button :class="recoveryState.canRetry?'text-link':'primary'" @click="leave('/forgot-password')">Request a new reset link</button><button class="text-link" @click="leave('/login')">Back to sign in</button></template>
  </section></main>
 </template>
 <style scoped>
