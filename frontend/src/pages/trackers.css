@@ -40,3 +40,5 @@
 @media(prefers-reduced-motion:reduce){.mini-paper,.starter-grid>button{transition:none}}
 
 .sticker-arrangement{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;padding:18px;margin-bottom:20px;border:1px dashed #baa589;background:#fffaf0;border-radius:5px}.sticker-arrangement strong{font:24px 'Caveat',cursive;color:#79283e}.sticker-arrangement p{font-size:12px;line-height:1.65;color:#887259;margin:5px 0}.sticker-arrangement-actions{display:flex;flex-wrap:wrap;gap:7px}.editing-stickers .paper-heading{outline:1px dashed #a48b6b;outline-offset:-7px}.editing-stickers .paper-corner{visibility:hidden}
+
+.tracker-group{margin:25px 0}.tracker-group>header{padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:16px}.tracker-group>header h3{font:27px Georgia,serif;color:var(--wine);margin:0 0 6px}.tracker-group>header p{font-size:12px;line-height:1.6;color:var(--soft);margin:0}.starter-section .tracker-group .starter-grid{margin-top:16px}

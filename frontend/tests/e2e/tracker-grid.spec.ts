@@ -24,7 +24,7 @@ for(const width of [390,1440])test(`sleep uses AM/PM boxes, overnight intervals 
  const first=await cell(page,0).boundingBox(),last=await cell(page,3).boundingBox();await page.mouse.move(first!.x+first!.width/2,first!.y+first!.height/2);await page.mouse.down();await page.mouse.move(last!.x+last!.width/2,last!.y+last!.height/2,{steps:5});await page.mouse.up()
  for(const col of [4,5,6])await cell(page,col).click();await save(page)
  expect(f.logs).toHaveLength(1);expect(f.logs[0].started_at).toBe('2024-01-01T23:00:00.000Z');expect(f.logs[0].ended_at).toBe('2024-01-02T07:00:00.000Z')
- await page.getByRole('button',{name:'Note / photo',exact:true}).click();const modal=page.getByRole('dialog',{name:'Sleep · Notes & photo',exact:true});await expect(modal.locator('input:not([type=file]),select')).toHaveCount(0)
+ await page.getByRole('button',{name:'Note / photo',exact:true}).click();const modal=page.getByRole('dialog',{name:'Sleep · Notes & photo',exact:true});await expect(modal.locator('input:not([type=file]),select')).toHaveCount(1)
  await modal.getByLabel('A little note',{exact:true}).fill('A quiet night.');const image=await landscape(page);f.image(image);await modal.locator('input[type=file]').setInputFiles({name:'morning.png',mimeType:'image/png',buffer:image});await expect(modal.locator('.note-photo img')).toBeVisible();await modal.getByRole('button',{name:'Save note & photo'}).click();await expect(modal).toHaveCount(0)
  expect(f.logs[0].values.note).toBe('A quiet night.');expect(f.logs[0].values.photo).toContain('/trackers/');await page.reload();await expect(cell(page,6)).toHaveAttribute('aria-pressed','true')
  await cell(page,2).click();await page.locator('.grid-edit-bar').getByRole('button',{name:'Cancel',exact:true}).click();expect(f.logs).toHaveLength(1);expect(f.logs[0].values.note).toBe('A quiet night.')
@@ -38,7 +38,7 @@ test('notes stay compact and readable in dark mode on a narrow screen',async({pa
  const f=await setup(page);await page.route('**/rest/v1/user_settings?**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({user_id:owner,theme:'dark'})}))
  const now=new Date().toISOString();f.logs.push({id:'77777777-7777-4777-8777-777777777779',tracker_id:sleep,user_id:owner,log_date:day,values:{awakeMinutes:0,sleepType:'night'},started_at:'2024-01-02T00:00:00Z',ended_at:'2024-01-02T08:00:00Z',timezone:'UTC',config_snapshot:defaultConfig(),unit_snapshot:'hours',created_at:now,updated_at:now})
  await page.setViewportSize({width:390,height:850});await page.goto('/trackers/'+sleep+'?month=2024-01');await page.getByRole('button',{name:'Choose '+day,exact:true}).click();await page.getByRole('button',{name:'Note / photo',exact:true}).click()
- const modal=page.getByRole('dialog');await expect(modal.locator('textarea')).toHaveCount(1);await expect(modal.locator('input')).toHaveCount(1);await expect(modal.getByRole('button',{name:'Save note & photo'})).toBeVisible();await noOverflow(page)
+ const modal=page.getByRole('dialog');await expect(modal.locator('textarea')).toHaveCount(1);await expect(modal.locator('input')).toHaveCount(2);await expect(modal.getByRole('button',{name:'Save note & photo'})).toBeVisible();await noOverflow(page)
  expect(await modal.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await mkdir('test-results/trackers',{recursive:true});await page.screenshot({path:'test-results/trackers/notes-dark-390.png'})
 })
 test('a stale notes modal cannot overwrite newer sleep times from another tab',async({page})=>{

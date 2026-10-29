@@ -12,7 +12,7 @@ export interface TrackerConfig {
   aggregation: 'sum' | 'latest' | 'average' | 'max'
   history?: { from: string; schedule: number[]; goal: TrackerConfig['goal'] }[]
 }
-export interface TrackerDecoration { id: string; x: number; y: number; width: number; rotation: number; z: number; locked: boolean; asset: string; text: string }
+export interface TrackerDecoration { id: string; x: number; y: number; width: number; rotation: number; z: number; locked: boolean; asset: string; text: string;space?:'page' }
 export interface TrackerDesign {
   paper: 'grid' | 'dot' | 'lined' | 'blank'; color: string; accent: string
   font: 'hand' | 'serif' | 'sans'; heading: string; background: string | null
@@ -125,6 +125,9 @@ export function sleepSegments(log: TrackerLog): { start: number; width: number }
 }
 export interface TrackerStarter { key: string; name: string; kind: TrackerKind; unit: string; color: string; icon: string; description: string; categories?: TrackerCategory[]; fields?: TrackerField[] }
 export const starters: TrackerStarter[] = [
+  {key:'coffee-habit',name:'Coffee habit',kind:'habit',unit:'',color:'#9a704b',icon:'☕',description:'Did you have coffee? A simple Yes or No.'},
+  {key:'gym-habit',name:'Gym',kind:'habit',unit:'',color:'#4c916a',icon:'✿',description:'Mark the days you went to the gym.'},
+  {key:'coke-habit',name:'Coke habit',kind:'habit',unit:'',color:'#a34e62',icon:'◒',description:'Did you drink Coke? Keep it as a Yes or No.'},
   {key:'habits',name:'Habit tracker',kind:'custom',unit:'',color:'#4c916a',icon:'☘',description:'Four little calendars for your daily rituals.',fields:['Coffee','Gym','Walk','Coke'].map(label=>({id:label.toLowerCase(),label,type:'checkbox' as const,unit:'',options:[],max:5}))},
   {key:'walk-days',name:'Daily walk',kind:'habit',unit:'',color:'#6c9861',icon:'✿',description:'A little green mark for every walk.'},
   {key:'coffee',name:'Coffee',kind:'count',unit:'cups',color:'#9a704b',icon:'☕',description:'Count your cups, without a good or bad score.'},

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref,nextTick,onBeforeUnmount } from 'vue'
 import type { TrackerDecoration } from '@/types/trackers'
 
 const props = withDefaults(defineProps<{
@@ -13,8 +13,10 @@ type Gesture = {
   pointer: number; id: string; mode: 'move' | 'resize' | 'rotate'; start: TrackerDecoration
   x: number; y: number; width: number; height: number; cx: number; cy: number
   angle: number; distance: number; boxWidth: number; boxHeight: number
+  scrollX:number;scrollY:number
 }
 let gesture: Gesture | null = null
+let scrollFrame=0,pointer={x:0,y:0}
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 function update(id: string, values: Partial<TrackerDecoration>) {
   emit('update:decorations', props.decorations.map(d => d.id === id ? { ...d, ...values } : d))
@@ -31,19 +33,22 @@ function begin(event: PointerEvent, d: TrackerDecoration, mode: Gesture['mode'])
     x: event.clientX, y: event.clientY, width: area.width, height: area.height, cx, cy,
     angle: Math.atan2(event.clientY - cy, event.clientX - cx),
     distance: Math.max(1, Math.hypot(event.clientX - cx, event.clientY - cy)),
-    boxWidth: box.offsetWidth, boxHeight: box.offsetHeight }
+    boxWidth: box.offsetWidth, boxHeight: box.offsetHeight,scrollX:window.scrollX,scrollY:window.scrollY }
+  pointer={x:event.clientX,y:event.clientY}
+  if(mode==='move')scrollFrame=requestAnimationFrame(autoScroll)
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
 function move(event: PointerEvent) {
   const g = gesture
   if (!g || event.pointerId !== g.pointer) return
   event.preventDefault()
+  pointer={x:event.clientX,y:event.clientY}
   if (g.mode === 'move') {
     const radians = g.start.rotation * Math.PI / 180
     const halfX = Math.min(.5, (Math.abs(Math.cos(radians)) * g.boxWidth + Math.abs(Math.sin(radians)) * g.boxHeight) / (2 * g.width))
     const halfY = Math.min(.5, (Math.abs(Math.sin(radians)) * g.boxWidth + Math.abs(Math.cos(radians)) * g.boxHeight) / (2 * g.height))
-    update(g.id, { x: clamp(g.start.x + (event.clientX - g.x) / g.width, halfX, 1 - halfX),
-      y: clamp(g.start.y + (event.clientY - g.y) / g.height, halfY, 1 - halfY) })
+    update(g.id, { x: clamp(g.start.x + (event.clientX - g.x+window.scrollX-g.scrollX) / g.width, halfX, 1 - halfX),
+      y: clamp(g.start.y + (event.clientY - g.y+window.scrollY-g.scrollY) / g.height, halfY, 1 - halfY) })
   } else if (g.mode === 'resize') {
     const ratio = Math.hypot(event.clientX - g.cx, event.clientY - g.cy) / g.distance
     const radians = g.start.rotation * Math.PI / 180
@@ -57,10 +62,17 @@ function move(event: PointerEvent) {
     update(g.id, { rotation: Math.round(((degrees + 540) % 360) - 180) })
   }
 }
+function autoScroll(){
+ const g=gesture;if(!g||g.mode!=='move')return
+ const delta=pointer.y>innerHeight-64?18:pointer.y<88?-18:0
+ if(delta){window.scrollBy({top:delta,behavior:'instant'});move({pointerId:g.pointer,clientX:pointer.x,clientY:pointer.y,preventDefault(){}} as PointerEvent)}
+ scrollFrame=requestAnimationFrame(autoScroll)
+}
 function finish(event: PointerEvent, cancelled = false) {
   if (!gesture || event.pointerId !== gesture.pointer) return
   const g = gesture
   gesture = null
+  cancelAnimationFrame(scrollFrame)
   if (cancelled) update(g.id, g.start)
   else emit('commit')
 }
@@ -72,11 +84,15 @@ function key(event: KeyboardEvent, d: TrackerDecoration, mode: Gesture['mode']) 
   else if (mode === 'rotate') update(d.id, { rotation: clamp(d.rotation + direction * (event.shiftKey ? 15 : 1), -180, 180) })
   else {
     const step = event.shiftKey ? .05 : .01
+    const area=surface.value!.getBoundingClientRect(),box=(event.currentTarget as HTMLElement).closest<HTMLElement>('.decoration-item')!,rad=d.rotation*Math.PI/180
+    const halfX=Math.min(.5,(Math.abs(Math.cos(rad))*box.offsetWidth+Math.abs(Math.sin(rad))*box.offsetHeight)/(2*area.width)),halfY=Math.min(.5,(Math.abs(Math.sin(rad))*box.offsetWidth+Math.abs(Math.cos(rad))*box.offsetHeight)/(2*area.height))
     update(d.id, event.key === 'ArrowLeft' || event.key === 'ArrowRight'
-      ? { x: clamp(d.x + direction * step, .05, .95) } : { y: clamp(d.y + direction * step, .05, .95) })
+      ? { x: clamp(d.x + direction * step, halfX,1-halfX) } : { y: clamp(d.y + direction * step,halfY,1-halfY) })
+    nextTick(()=>surface.value?.querySelector<HTMLElement>('[data-decoration-id="'+d.id+'"]')?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'}))
   }
   emit('commit')
 }
+onBeforeUnmount(()=>{gesture=null;cancelAnimationFrame(scrollFrame)})
 </script>
 
 <template>

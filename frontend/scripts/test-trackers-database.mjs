@@ -68,5 +68,7 @@ export async function testTrackers(db,asUser,alice,bob){
  await db.query('SELECT remove_tracker_log($1)',[first.id])
  assert.equal((await db.query('SELECT * FROM tracker_logs WHERE id=$1',[first.id])).rows.length,0)
  await assert.rejects(()=>db.query('INSERT INTO creative_trackers(id,user_id,name,kind,unit,config,design) VALUES($1,$2,$3,$4,$5,$6,$7)',[id(50),alice,'Bypass','habit','',JSON.stringify(cfg),JSON.stringify(design)]))
+ const fullPage=await save(60,definition('habit',{design:{...design,decorations:[{id:'page-star',space:'page',x:.4,y:.8,width:.15,rotation:12,z:0,locked:false,asset:'',text:'✦'}]}}))
+ assert.equal(fullPage.design.decorations[0].space,'page');assert.equal(fullPage.design.decorations[0].y,.8)
  console.log('PASS: trackers replace daily totals, preserve zero/No, validate sleep/naps/overlaps/custom fields, reject unit changes, retain goal history, save private boards, isolate assets/links/owners, and duplicate designs without entries.')
 }
